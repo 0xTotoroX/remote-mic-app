@@ -495,6 +495,11 @@ struct RemoteButtonsTests {
                 layer: 0,
                 bounds: CGRect(x: 0, y: 0, width: 1_600, height: 1_200)
             ),
+            entry(
+                processIdentifier: 501,
+                layer: 0,
+                bounds: CGRect(x: 0, y: 0, width: 0, height: 800)
+            ),
         ]
 
         #expect(KeyboardInjector.frontmostWindowFrame(
@@ -509,6 +514,78 @@ struct RemoteButtonsTests {
             windowInfo: [],
             processIdentifier: 501
         ) == nil)
+        #expect(KeyboardInjector.ordinaryWindowCount(
+            windowInfo: windowInfo,
+            processIdentifier: 501
+        ) == 2)
+        #expect(KeyboardInjector.ordinaryWindowCount(
+            windowInfo: windowInfo,
+            processIdentifier: 999
+        ) == 0)
+    }
+
+    @Test func appVisibilityRequiresActiveNonhiddenProcessAndOnscreenWindow() {
+        let visible = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.visible",
+            processActive: true,
+            processHidden: false,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 2,
+            onscreenWindowCount: 1
+        )
+        #expect(visible.hasVisibleWindow == true)
+        #expect(visible.isUserVisible == true)
+
+        let hidden = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.hidden",
+            processActive: true,
+            processHidden: true,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 1,
+            onscreenWindowCount: 1
+        )
+        #expect(hidden.hasVisibleWindow == true)
+        #expect(hidden.isUserVisible == false)
+
+        let noWindow = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.no-window",
+            processActive: true,
+            processHidden: false,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 1,
+            onscreenWindowCount: 0
+        )
+        #expect(noWindow.hasVisibleWindow == false)
+        #expect(noWindow.isUserVisible == false)
+    }
+
+    @Test func siriAppSwitcherDiagnosticsAreCorrelatedAndPrivacySafe() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let modelSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/BridgeAppModel.swift"),
+            encoding: .utf8
+        )
+        let injectorSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/KeyboardInjector.swift"),
+            encoding: .utf8
+        )
+
+        #expect(HIDRemoteTiming.appSwitcherVisibilityProbeMilliseconds == [0, 150, 500, 1_000])
+        #expect(modelSource.contains("beginAppleRemoteAppSwitcherDiagnostics()"))
+        #expect(modelSource.contains("operation_id=\\(appleRemoteAppSwitcherOperationLabel)"))
+        #expect(modelSource.contains("touch_navigation_steps="))
+        #expect(modelSource.contains("button_confirmation_count="))
+        #expect(modelSource.contains("phase=visibility_probe"))
+        #expect(modelSource.contains("phase=terminal terminal_result="))
+        #expect(modelSource.contains("diagnostic_boundary=window_content_unavailable"))
+        #expect(injectorSource.contains("applicationVisibilitySnapshot("))
+        #expect(!injectorSource.contains("kCGWindowName"))
     }
 
     @Test func hidReportsRouteOnlyToTheirActivePhysicalRemote() {
@@ -802,6 +879,42 @@ struct RemoteButtonsTests {
         ) == shortcut)
     }
 
+    @Test func customShortcutUsesIconDisplayAndFullTooltipNames() {
+        let localization = LocalizationStore(settings: AppSettings(defaults: .standard))
+        localization.select(.english)
+
+        let shortcut = CustomKeyboardShortcut(
+            keyCode: 123,
+            modifierFlags: [.control, .option, .shift, .command],
+            keyLabel: "←"
+        )
+
+        #expect(shortcut.visualDisplayName(using: localization) == "⌃⌥⇧⌘←")
+        #expect(shortcut.detailedDisplayName(using: localization) == [
+            localization.text("shortcut.modifier.control"),
+            localization.text("shortcut.modifier.option"),
+            localization.text("shortcut.modifier.shift"),
+            localization.text("shortcut.modifier.command"),
+            localization.text("keyboard.key.left"),
+        ].joined(separator: " + "))
+
+        let specialKeys: [(UInt16, String, String, String)] = [
+            (36, "Return", "⏎", "keyboard.key.return"),
+            (48, "Tab", "⇥", "keyboard.key.tab"),
+            (51, "⌫", "⌫", "keyboard.key.delete"),
+            (123, "←", "←", "keyboard.key.left"),
+        ]
+        for (keyCode, keyLabel, visual, detailedKey) in specialKeys {
+            let value = CustomKeyboardShortcut(
+                keyCode: keyCode,
+                modifierFlags: [],
+                keyLabel: keyLabel
+            )
+            #expect(value.visualDisplayName(using: localization) == visual)
+            #expect(value.detailedDisplayName(using: localization) == localization.text(detailedKey))
+        }
+    }
+
     @Test func arrowShortcutIgnoresSystemFunctionMarkerWhenRecordedOrLoaded() throws {
         let event = try #require(CGEvent(
             keyboardEventSource: CGEventSource(stateID: .hidSystemState),
@@ -935,6 +1048,39 @@ struct RemoteButtonsTests {
         #expect(posted[9].0 == KeyboardInjector.leftCommandKeyCode)
         #expect(!posted[9].1)
         #expect(posted[9].2.isEmpty)
+    }
+
+    @Test func appleRemoteCircularNavigationAccumulatesNoiseAndPreservesDirection() {
+        var accumulator = AppleRemoteCircularNavigationAccumulator()
+
+        #expect(accumulator.consume(8) == 0)
+        #expect(accumulator.consume(9) == 0)
+        #expect(accumulator.consume(1) == 1)
+        #expect(accumulator.pendingPixels == 0)
+        #expect(accumulator.consume(-18) == -1)
+    }
+
+    @Test func appleRemoteCircularNavigationDropsOppositeDirectionRemainder() {
+        var accumulator = AppleRemoteCircularNavigationAccumulator()
+
+        #expect(accumulator.consume(12) == 0)
+        #expect(accumulator.consume(-7) == 0)
+        #expect(accumulator.pendingPixels == -7)
+        #expect(accumulator.consume(-11) == -1)
+    }
+
+    @Test func appleRemoteCircularNavigationCapsBurstAndCanReset() {
+        var accumulator = AppleRemoteCircularNavigationAccumulator()
+
+        #expect(accumulator.consume(AppleRemoteCircularNavigationAccumulator.stepThreshold * 5) == 3)
+        #expect(accumulator.pendingPixels == AppleRemoteCircularNavigationAccumulator.stepThreshold * 2)
+        accumulator.reset()
+        #expect(accumulator.pendingPixels == 0)
+    }
+
+    @Test func appleRemoteCircularNavigationMapsClickWheelDirectionToAppSwitcher() {
+        #expect(!AppleRemoteCircularNavigationAccumulator.movesLeft(for: -1))
+        #expect(AppleRemoteCircularNavigationAccumulator.movesLeft(for: 1))
     }
 
     @Test func appSwitcherRemoteControlsNavigateConfirmAndReportFinalFrontmostApp() throws {
