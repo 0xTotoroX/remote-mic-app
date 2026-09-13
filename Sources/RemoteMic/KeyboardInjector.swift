@@ -22,6 +22,29 @@ enum KeyboardInjector {
     typealias KeyStatePoster = (CGKeyCode, Bool, CGEventFlags) -> Bool
     typealias ScrollPoster = (Int32) -> Void
 
+    struct ApplicationVisibilitySnapshot: Equatable {
+        let bundleIdentifier: String
+        let processActive: Bool?
+        let processHidden: Bool?
+        let processTerminated: Bool?
+        let activationPolicy: String
+        let ordinaryWindowCount: Int?
+        let onscreenWindowCount: Int?
+
+        var hasVisibleWindow: Bool? {
+            onscreenWindowCount.map { $0 > 0 }
+        }
+
+        var isUserVisible: Bool? {
+            guard let processActive,
+                  let processHidden,
+                  let processTerminated,
+                  let onscreenWindowCount
+            else { return nil }
+            return processActive && !processHidden && !processTerminated && onscreenWindowCount > 0
+        }
+    }
+
     final class AppSwitcherSession {
         private let keyStatePoster: KeyStatePoster
         private var diagnosticLogger: ((String) -> Void)?
@@ -1842,6 +1865,79 @@ enum KeyboardInjector {
             }
             .filter { $0.width > 0 && $0.height > 0 }
             .max { $0.width * $0.height < $1.width * $1.height }
+    }
+
+    static func ordinaryWindowCount(
+        windowInfo: [[String: Any]],
+        processIdentifier: pid_t
+    ) -> Int {
+        windowInfo.reduce(into: 0) { count, entry in
+            guard let owner = entry[kCGWindowOwnerPID as String] as? NSNumber,
+                  owner.int32Value == processIdentifier,
+                  let layer = entry[kCGWindowLayer as String] as? NSNumber,
+                  layer.intValue == 0,
+                  let bounds = entry[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+                  frame.width > 0,
+                  frame.height > 0
+            else { return }
+            count += 1
+        }
+    }
+
+    static func applicationVisibilitySnapshot(
+        bundleIdentifier: String
+    ) -> ApplicationVisibilitySnapshot {
+        let applications = NSRunningApplication.runningApplications(
+            withBundleIdentifier: bundleIdentifier
+        )
+        guard let application = applications.first(where: { $0.isActive && !$0.isTerminated })
+            ?? applications.first(where: { !$0.isTerminated })
+        else {
+            return ApplicationVisibilitySnapshot(
+                bundleIdentifier: bundleIdentifier,
+                processActive: false,
+                processHidden: false,
+                processTerminated: true,
+                activationPolicy: "unknown",
+                ordinaryWindowCount: 0,
+                onscreenWindowCount: 0
+            )
+        }
+
+        let allWindows = CGWindowListCopyWindowInfo(
+            [.optionAll, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]]
+        let onscreenWindows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]]
+        let activationPolicy: String = switch application.activationPolicy {
+        case .regular: "regular"
+        case .accessory: "accessory"
+        case .prohibited: "prohibited"
+        @unknown default: "unknown"
+        }
+        return ApplicationVisibilitySnapshot(
+            bundleIdentifier: bundleIdentifier,
+            processActive: application.isActive,
+            processHidden: application.isHidden,
+            processTerminated: application.isTerminated,
+            activationPolicy: activationPolicy,
+            ordinaryWindowCount: allWindows.map {
+                ordinaryWindowCount(
+                    windowInfo: $0,
+                    processIdentifier: application.processIdentifier
+                )
+            },
+            onscreenWindowCount: onscreenWindows.map {
+                ordinaryWindowCount(
+                    windowInfo: $0,
+                    processIdentifier: application.processIdentifier
+                )
+            }
+        )
     }
 
     private static func frontmostWindowFrame() -> CGRect? {

@@ -1,3 +1,57 @@
+# Siri Remote AppSwitcher 后续失效与目标窗口未显示诊断
+
+## Observations
+
+- 用户在当前 Mac 的真实苹果遥控器上复现：圆周导航开始时可用，多轮使用后不再切换；微信无论使用圆周触摸导航还是实体方向/确定键导航，都没有真正显示窗口。
+- 正确现场进程为 `1.9.21 (174)`、PID `15341`，相关时段约为 2026-09-13 08:03 UTC。日志多轮出现 `phase=start`、`TOUCH_CONTEXT phase=navigate`、`phase=ended command_release=true`，以及 `phase=selection_observed selected=com.tencent.xinWeChat`。
+- 现有 `success=true` 只证明 CGEvent 构造并提交，`selected=com.tencent.xinWeChat` 只证明 `NSWorkspace.frontmostApplication` 当时返回微信 Bundle ID；两者都不能证明微信存在用户可见窗口。
+- 本机微信进程自更早时间已存在，因此“进程存在”不能证明本轮 AppSwitcher 操作让微信窗口显示。
+- 现有日志缺少同一轮操作的关联 ID、累计导航输入、进程 active/hidden 状态、普通窗口计数、屏幕上窗口计数和唯一用户可见终态，暂时不能从现场证据区分事件丢失、系统未接受、无可见窗口或被其他 App 抢回前台。
+
+## Hypotheses
+
+### H1：后续轮次的 AppSwitcher 会话状态未正确重置
+
+- 支持：用户观察到开始几次正常、随后失效，符合跨轮状态残留或超时清理不完整的表象。
+- 冲突：现有日志多轮都有 `phase=start` 和 `command_release=true`，没有直接证明 `isActive` 卡住。
+- Test：为每轮生成 `operation_id`，记录开始、每种导航输入、结束前后 `is_active`、Command 释放和唯一终态，检查失效轮次是否完整进入新会话。
+
+### H2：CGEvent 已提交，但 macOS AppSwitcher 没有接受后续导航或确认
+
+- 支持：现有 `success=true` 是本地提交结果，不是 WindowServer 或 AppSwitcher 接受确认。
+- 冲突：部分轮次随后观察到前台 Bundle ID 变化，说明至少某些提交产生了系统状态变化。
+- Test：关联每轮 Tab、左右、触摸步数与确认方式，并在确认后分阶段观察前台变化和目标可见性。
+
+### H3：微信成为 frontmost，但没有用户可见的普通窗口
+
+- 支持：现场明确“微信 App 没有打开”，而日志只记录 `selected=com.tencent.xinWeChat`；微信进程此前已长期存在。
+- 冲突：`frontmostApplication` 通常意味着应用被激活，但不能保证有 on-screen 普通窗口。
+- Test：确认后只用公开 API 记录目标进程 `isActive/isHidden/isTerminated/activationPolicy`，并按 PID、layer 0、正面积统计全部普通窗口与屏幕上普通窗口，不读取窗口标题或内容。
+
+### H4：目标短暂成为 frontmost，随后被其他 App 抢回
+
+- 支持：当前只有一次延迟探针，可能错过快速切换过程。
+- 冲突：现场缺少分阶段时间序列，尚无直接证据。
+- Test：在确认后的 0/150/500/1000 ms 做有限探针，记录每阶段 frontmost Bundle ID 和目标窗口可见性，避免高频常驻轮询。
+
+## Experiment
+
+- 使用独立 Swift 单次实验读取当前前台 App 的公开 `NSRunningApplication` 状态，并用 `CGWindowListCopyWindowInfo` 按 PID、layer 0 统计普通窗口与屏幕上窗口；不读取或输出窗口标题、路径和内容。
+- 当前 Codex 前台样本成功得到 `active=true hidden=false terminated=false activation_policy=0 ordinary_window_count=7 onscreen_window_count=1`，证明所需字段在当前 macOS/会话环境可采集。
+- 该实验只确认日志可观测性，不复现苹果遥控器问题，也不支持任何根因结论。
+
+## Conclusion
+
+- 当前证据不足以确认 H1–H4 中哪一个是根因。本轮只补充可关联、低频、脱敏的诊断日志，不修改 AppSwitcher 导航、确认或 App 激活行为。
+
+## Validation
+
+- 社区构建执行 `swift test --disable-keychain`：506 项、40 个 suite 全部通过。
+- 指定私有 Siri Remote Package 执行完整集成 `swift test --disable-keychain`：543 项、44 个 suite 全部通过，包括 Siri Remote 宿主接线测试。
+- 自动化覆盖公开窗口过滤、用户可见判定、四阶段探针配置、关联字段和禁止读取 `kCGWindowName`；没有执行真实遥控器与系统 Cmd-Tab 用户旅程，因此不能把根因标记为已确认。
+
+---
+
 # Onboarding iPhone / Web 分支门禁调查
 
 ## Observations

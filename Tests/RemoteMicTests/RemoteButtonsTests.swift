@@ -495,6 +495,11 @@ struct RemoteButtonsTests {
                 layer: 0,
                 bounds: CGRect(x: 0, y: 0, width: 1_600, height: 1_200)
             ),
+            entry(
+                processIdentifier: 501,
+                layer: 0,
+                bounds: CGRect(x: 0, y: 0, width: 0, height: 800)
+            ),
         ]
 
         #expect(KeyboardInjector.frontmostWindowFrame(
@@ -509,6 +514,78 @@ struct RemoteButtonsTests {
             windowInfo: [],
             processIdentifier: 501
         ) == nil)
+        #expect(KeyboardInjector.ordinaryWindowCount(
+            windowInfo: windowInfo,
+            processIdentifier: 501
+        ) == 2)
+        #expect(KeyboardInjector.ordinaryWindowCount(
+            windowInfo: windowInfo,
+            processIdentifier: 999
+        ) == 0)
+    }
+
+    @Test func appVisibilityRequiresActiveNonhiddenProcessAndOnscreenWindow() {
+        let visible = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.visible",
+            processActive: true,
+            processHidden: false,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 2,
+            onscreenWindowCount: 1
+        )
+        #expect(visible.hasVisibleWindow == true)
+        #expect(visible.isUserVisible == true)
+
+        let hidden = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.hidden",
+            processActive: true,
+            processHidden: true,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 1,
+            onscreenWindowCount: 1
+        )
+        #expect(hidden.hasVisibleWindow == true)
+        #expect(hidden.isUserVisible == false)
+
+        let noWindow = KeyboardInjector.ApplicationVisibilitySnapshot(
+            bundleIdentifier: "com.example.no-window",
+            processActive: true,
+            processHidden: false,
+            processTerminated: false,
+            activationPolicy: "regular",
+            ordinaryWindowCount: 1,
+            onscreenWindowCount: 0
+        )
+        #expect(noWindow.hasVisibleWindow == false)
+        #expect(noWindow.isUserVisible == false)
+    }
+
+    @Test func siriAppSwitcherDiagnosticsAreCorrelatedAndPrivacySafe() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let modelSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/BridgeAppModel.swift"),
+            encoding: .utf8
+        )
+        let injectorSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/KeyboardInjector.swift"),
+            encoding: .utf8
+        )
+
+        #expect(HIDRemoteTiming.appSwitcherVisibilityProbeMilliseconds == [0, 150, 500, 1_000])
+        #expect(modelSource.contains("beginAppleRemoteAppSwitcherDiagnostics()"))
+        #expect(modelSource.contains("operation_id=\\(appleRemoteAppSwitcherOperationLabel)"))
+        #expect(modelSource.contains("touch_navigation_steps="))
+        #expect(modelSource.contains("button_confirmation_count="))
+        #expect(modelSource.contains("phase=visibility_probe"))
+        #expect(modelSource.contains("phase=terminal terminal_result="))
+        #expect(modelSource.contains("diagnostic_boundary=window_content_unavailable"))
+        #expect(injectorSource.contains("applicationVisibilitySnapshot("))
+        #expect(!injectorSource.contains("kCGWindowName"))
     }
 
     @Test func hidReportsRouteOnlyToTheirActivePhysicalRemote() {
