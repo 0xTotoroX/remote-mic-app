@@ -717,10 +717,10 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
     }
 
     @objc private func showSettings() {
-        showSettingsWindow(initialSection: .connection)
+        showSettingsWindow()
     }
 
-    private func showSettingsWindow(initialSection: SettingsSection) {
+    private func showSettingsWindow(initialSection: SettingsSection? = nil) {
         if settingsWindowController == nil {
             settingsWindowController = makeSettingsWindowController(
                 initialSettingsSection: initialSection
@@ -736,7 +736,7 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
     }
 
     private func makeSettingsWindowController(
-        initialSettingsSection: SettingsSection = .connection
+        initialSettingsSection: SettingsSection? = nil
     ) -> NSWindowController {
         let hostingController = NSHostingController(
             rootView: RemoteMicRootView(
