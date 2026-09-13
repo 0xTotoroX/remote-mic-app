@@ -12,14 +12,14 @@
 `packages/macos-button-profiles`。下方历史 PR 链接仅供审计，不得从旧仓库取代码。宿主验证固定使用当前平台仓库的完整 commit：
 
 ```text
-2074e28a733bfd3eef1be4016454b3d1881f7f20
+999c39c5a47f0b1ab370c3940f3aca6750c24c8e
 ```
 
 本地开发或验证时，将私有包 checkout 到该 commit（不得使用浮动的 `main`）：
 
 ```bash
 git -C /path/to/sayall-private-platform fetch origin main
-git -C /path/to/sayall-private-platform checkout --detach 2074e28a733bfd3eef1be4016454b3d1881f7f20
+git -C /path/to/sayall-private-platform checkout --detach 999c39c5a47f0b1ab370c3940f3aca6750c24c8e
 ```
 
 宿主通过 `Package.swift` 的 `SAYALL_COMBINATION_ACTIONS_PATH` 注入免费 Package；最小测试命令为：
