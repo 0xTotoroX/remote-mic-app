@@ -123,3 +123,9 @@ publication 失败时先查询远端状态。若 Tag、Release、资产和摘要
 ## 发布后报告
 
 报告 source Commit、版本、Build、两个架构、Run/attempt/artifact ID 与摘要、测试结果、签名/公证/下载字节验证、Sparkle UI 证明、Release 状态和 stable latest。分别报告从 request_started_at 到结果的总耗时，以及从 T_ready 起的 Preview/Stable 纯发布耗时；说明任何未执行的真实硬件、第三方 App 或可见 UI 验收。不得在日志、提交、Release Notes 或聊天中输出证书、私钥、密码、P8、Match 凭据或 Token。
+
+## Release Notes
+
+- 只记录普通用户能够看到或受益的功能、体验、兼容性和可靠性变化。
+- 不写提交标题、哈希、CI、文档维护、测试数量、签名、公证、分支规范或发布流程。
+- 已撤回、删除或从未公开的版本不进入 App 内版本历史。
