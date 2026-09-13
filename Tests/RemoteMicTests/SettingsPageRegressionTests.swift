@@ -267,9 +267,9 @@ struct SettingsPageRegressionTests {
         #expect(model.contains("webRemoteClient.onCommand"))
         #expect(model.contains("webRemoteClient.onButtonEvent"))
         #expect(model.contains("JSONDecoder().decode(ConfiguredButtonAction.self, from: payload)"))
-        #expect(settings.contains("case .macros: macroFeature.isFeatureVisible"))
-        #expect(settings.contains("case .buttonProfiles: macroFeature.isButtonProfilesVisible"))
-        #expect(settings.contains("case .membership: membershipFeature.isFeatureVisible"))
+        #expect(settings.contains("case .macros: macroFeatureVisible"))
+        #expect(settings.contains("case .buttonProfiles: buttonProfilesVisible"))
+        #expect(settings.contains("case .membership: membershipVisible"))
 
         #if !canImport(SayAllMacroRemoteMic) && !canImport(SayAllButtonProfiles)
         let macroFeature = MacroFeatureIntegration(localeIdentifier: "zh-Hans")
@@ -1135,45 +1135,70 @@ struct SettingsPageRegressionTests {
         #expect(!settings.contains("EarlyAccessController"))
     }
 
-    @Test func sidebarKeepsTheProductPriorityOrder() throws {
+    @Test func sidebarKeepsTheProductPriorityOrder() {
+        #expect(SettingsPageBehavior.sidebarSections(
+            privateFeatureVisible: true,
+            macroFeatureVisible: true,
+            buttonProfilesVisible: true,
+            membershipVisible: true
+        ) == [
+            .mapping,
+            .macros,
+            .buttonProfiles,
+            .membership,
+            .transcripts,
+            .connection,
+            .privateFeature,
+            .about,
+            .statistics,
+        ])
+    }
+
+    @Test func defaultSettingsPageTracksTheFirstVisibleSidebarSection() throws {
+        let visibleSections = SettingsPageBehavior.sidebarSections(
+            privateFeatureVisible: false,
+            macroFeatureVisible: false,
+            buttonProfilesVisible: false,
+            membershipVisible: false
+        )
+        #expect(SettingsPageBehavior.initialSection(
+            requestedSection: nil,
+            privateFeatureVisible: false,
+            macroFeatureVisible: false,
+            buttonProfilesVisible: false,
+            membershipVisible: false
+        ) == visibleSections.first)
+        #expect(SettingsPageBehavior.initialSection(
+            requestedSection: .about,
+            privateFeatureVisible: false,
+            macroFeatureVisible: false,
+            buttonProfilesVisible: false,
+            membershipVisible: false
+        ) == .about)
+
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let source = try String(
+        let settingsSource = try String(
             contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
             encoding: .utf8
         )
-        let orderStart = try #require(source.range(of: "private static let sidebarSectionOrder"))
-        let listStart = try #require(source.range(
-            of: "= [",
-            range: orderStart.upperBound..<source.endIndex
-        ))
-        let orderEnd = try #require(source.range(
-            of: "]",
-            range: listStart.upperBound..<source.endIndex
-        ))
-        let orderSource = source[listStart.lowerBound...orderEnd.lowerBound]
-        var cursor = orderSource.startIndex
+        let rootViewSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/RemoteMicRootView.swift"),
+            encoding: .utf8
+        )
+        let appSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/RemoteMicApp.swift"),
+            encoding: .utf8
+        )
 
-        for section in [
-            ".mapping",
-            ".macros",
-            ".buttonProfiles",
-            ".membership",
-            ".transcripts",
-            ".connection",
-            ".about",
-            ".statistics",
-        ] {
-            let range = try #require(orderSource.range(
-                of: section,
-                range: cursor..<orderSource.endIndex
-            ))
-            cursor = range.upperBound
-        }
-
-        #expect(source.contains("Self.sidebarSectionOrder.filter"))
+        #expect(settingsSource.contains("initialSection: SettingsSection? = nil"))
+        #expect(settingsSource.contains("SettingsPageBehavior.initialSection("))
+        #expect(settingsSource.contains("SettingsPageBehavior.sidebarSections("))
+        #expect(rootViewSource.contains("initialSettingsSection: SettingsSection? = nil"))
+        #expect(appSource.contains("showSettingsWindow()"))
+        #expect(!appSource.contains("showSettingsWindow(initialSection: .connection)"))
     }
 
     @Test func settingsScreenshotGateCoversEveryReleaseVisiblePage() throws {

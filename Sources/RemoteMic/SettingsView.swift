@@ -118,6 +118,50 @@ enum RemoteBatteryPresentationPolicy {
 }
 
 enum SettingsPageBehavior {
+    static let sidebarSectionOrder: [SettingsSection] = [
+        .mapping,
+        .macros,
+        .buttonProfiles,
+        .membership,
+        .transcripts,
+        .connection,
+        .privateFeature,
+        .about,
+        .statistics,
+    ]
+
+    static func sidebarSections(
+        privateFeatureVisible: Bool,
+        macroFeatureVisible: Bool,
+        buttonProfilesVisible: Bool,
+        membershipVisible: Bool
+    ) -> [SettingsSection] {
+        sidebarSectionOrder.filter {
+            switch $0 {
+            case .privateFeature: privateFeatureVisible
+            case .macros: macroFeatureVisible
+            case .buttonProfiles: buttonProfilesVisible
+            case .membership: membershipVisible
+            default: true
+            }
+        }
+    }
+
+    static func initialSection(
+        requestedSection: SettingsSection?,
+        privateFeatureVisible: Bool,
+        macroFeatureVisible: Bool,
+        buttonProfilesVisible: Bool,
+        membershipVisible: Bool
+    ) -> SettingsSection {
+        requestedSection ?? sidebarSections(
+            privateFeatureVisible: privateFeatureVisible,
+            macroFeatureVisible: macroFeatureVisible,
+            buttonProfilesVisible: buttonProfilesVisible,
+            membershipVisible: membershipVisible
+        ).first ?? .about
+    }
+
     static func visibleSection(for requestedSection: SettingsSection) -> SettingsSection {
         requestedSection == .permissions ? .about : requestedSection
     }
@@ -338,17 +382,6 @@ struct SettingsView: View {
     private let setDockIconVisible: (Bool) -> Void
     private let minimumContentSize: CGSize
     private let initialShortcutPickerShowsKeyboard: Bool
-    private static let sidebarSectionOrder: [SettingsSection] = [
-        .mapping,
-        .macros,
-        .buttonProfiles,
-        .membership,
-        .transcripts,
-        .connection,
-        .privateFeature,
-        .about,
-        .statistics,
-    ]
 
     @State private var selectedSection: SettingsSection
     @State private var selectedRemoteButton: RemoteButton = .ok
@@ -386,7 +419,7 @@ struct SettingsView: View {
         checkForUpdates: @escaping () -> Void = {},
         refreshUpdateInformation: @escaping () -> Void = {},
         setDockIconVisible: @escaping (Bool) -> Void = { _ in },
-        initialSection: SettingsSection = .connection,
+        initialSection: SettingsSection? = nil,
         initialShareSection: SettingsSection? = nil,
         initialMappingEditingButton: RemoteButton? = nil,
         initialMappingEditingTrigger: ButtonTrigger = .singleClick,
@@ -406,7 +439,13 @@ struct SettingsView: View {
         self.setDockIconVisible = setDockIconVisible
         self.minimumContentSize = minimumContentSize
         self.initialShortcutPickerShowsKeyboard = initialShortcutPickerShowsKeyboard
-        _selectedSection = State(initialValue: initialSection)
+        _selectedSection = State(initialValue: SettingsPageBehavior.initialSection(
+            requestedSection: initialSection,
+            privateFeatureVisible: model.privateFeature.isFeatureVisible,
+            macroFeatureVisible: model.macroFeature.isFeatureVisible,
+            buttonProfilesVisible: model.macroFeature.isButtonProfilesVisible,
+            membershipVisible: model.membershipFeature.isFeatureVisible
+        ))
         _expandedShareSection = State(initialValue: initialShareSection)
         _selectedRemoteButton = State(initialValue: initialMappingEditingButton ?? .ok)
         _mappingEditingTarget = State(
@@ -653,15 +692,12 @@ struct SettingsView: View {
     }
 
     private var visibleSections: [SettingsSection] {
-        Self.sidebarSectionOrder.filter {
-            switch $0 {
-            case .privateFeature: privateFeature.isFeatureVisible
-            case .macros: macroFeature.isFeatureVisible
-            case .buttonProfiles: macroFeature.isButtonProfilesVisible
-            case .membership: membershipFeature.isFeatureVisible
-            default: true
-            }
-        }
+        SettingsPageBehavior.sidebarSections(
+            privateFeatureVisible: privateFeature.isFeatureVisible,
+            macroFeatureVisible: macroFeature.isFeatureVisible,
+            buttonProfilesVisible: macroFeature.isButtonProfilesVisible,
+            membershipVisible: membershipFeature.isFeatureVisible
+        )
     }
 
     private func sidebarButton(_ section: SettingsSection) -> some View {
