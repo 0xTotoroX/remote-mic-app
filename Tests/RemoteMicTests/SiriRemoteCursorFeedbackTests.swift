@@ -216,7 +216,7 @@ struct SiriRemoteCursorFeedbackTests {
         )
 
         #expect(integration.contains("feature.onTouchFeedback ="))
-        #expect(!integration.contains("feature.onCenterTapConfirmation ="))
+        #expect(integration.contains("feature.onCenterTapConfirmation ="))
         #expect(model.contains("siriRemoteFeature.onTouchFeedback ="))
         #expect(model.contains("siriRemoteFeature.onCenterTapConfirmation ="))
         #expect(model.contains("scrollArrowReversed: settings.siriRemoteScrollArrowReversed"))

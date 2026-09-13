@@ -24,10 +24,29 @@ enum KeyboardInjector {
 
     final class AppSwitcherSession {
         private let keyStatePoster: KeyStatePoster
+        private var diagnosticLogger: ((String) -> Void)?
         private(set) var isActive = false
 
         init(keyStatePoster: @escaping KeyStatePoster = KeyboardInjector.postKeyState) {
             self.keyStatePoster = keyStatePoster
+        }
+
+        func setDiagnosticLogger(_ logger: @escaping (String) -> Void) {
+            diagnosticLogger = logger
+        }
+
+        private func post(
+            _ keyCode: CGKeyCode,
+            isDown: Bool,
+            flags: CGEventFlags,
+            role: String
+        ) -> Bool {
+            let result = keyStatePoster(keyCode, isDown, flags)
+            diagnosticLogger?(
+                "role=\(role) key_code=\(keyCode) edge=\(isDown ? "down" : "up") " +
+                    "command=\(flags.contains(.maskCommand)) success=\(result)"
+            )
+            return result
         }
 
         @discardableResult
@@ -36,11 +55,11 @@ enum KeyboardInjector {
                 return postTab()
             }
 
-            guard keyStatePoster(leftCommandKeyCode, true, .maskCommand) else {
+            guard post(leftCommandKeyCode, isDown: true, flags: .maskCommand, role: "command") else {
                 return false
             }
             guard postTab() else {
-                _ = keyStatePoster(leftCommandKeyCode, false, [])
+                _ = post(leftCommandKeyCode, isDown: false, flags: [], role: "command")
                 return false
             }
             isActive = true
@@ -50,7 +69,7 @@ enum KeyboardInjector {
         @discardableResult
         func cancel() -> Bool {
             guard isActive else { return true }
-            let released = keyStatePoster(leftCommandKeyCode, false, [])
+            let released = post(leftCommandKeyCode, isDown: false, flags: [], role: "command")
             isActive = false
             return released
         }
@@ -64,14 +83,14 @@ enum KeyboardInjector {
         func moveSelection(left: Bool) -> Bool {
             guard isActive else { return false }
             let keyCode: CGKeyCode = left ? 123 : 124
-            let pressed = keyStatePoster(keyCode, true, .maskCommand)
-            let released = keyStatePoster(keyCode, false, .maskCommand)
+            let pressed = post(keyCode, isDown: true, flags: .maskCommand, role: "selection")
+            let released = post(keyCode, isDown: false, flags: .maskCommand, role: "selection")
             return pressed && released
         }
 
         private func postTab() -> Bool {
-            let pressed = keyStatePoster(48, true, .maskCommand)
-            let released = keyStatePoster(48, false, .maskCommand)
+            let pressed = post(48, isDown: true, flags: .maskCommand, role: "tab")
+            let released = post(48, isDown: false, flags: .maskCommand, role: "tab")
             return pressed && released
         }
     }

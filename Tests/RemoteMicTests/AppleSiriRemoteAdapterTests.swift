@@ -136,6 +136,10 @@ struct AppleSiriRemoteAdapterTests {
         #expect(source.contains("siriRemoteFeature.setTouchRoutingMode(.circularNavigation)"))
         #expect(source.contains("siriRemoteFeature.setTouchRoutingMode(.standard)"))
         #expect(source.contains("handleAppleRemoteContextualScroll(pixels)"))
+        #expect(source.contains("siriRemoteFeature.onCenterTapConfirmation ="))
+        #expect(source.contains("reason: confirmed ? \"touch_confirmed\" : \"touch_confirm_failed\""))
+        #expect(source.contains("startAppleRemoteAppSwitcherLifecycle()"))
+        #expect(source.contains("phase=selection_observed"))
         #expect(source.contains("reason: \"voice_started\""))
         #expect(source.contains("phase=release_ignored"))
     }

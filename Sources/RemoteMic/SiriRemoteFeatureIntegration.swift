@@ -163,6 +163,9 @@ final class SiriRemoteFeatureIntegration {
         feature.onContextualScroll = { [weak self] pixels in
             self?.onContextualScroll?(pixels) ?? false
         }
+        feature.onCenterTapConfirmation = { [weak self] device in
+            self?.onCenterTapConfirmation?(Self.hostDevice(device)) ?? false
+        }
         feature.onPowerSnapshot = { [weak self] snapshot in
             guard let model = Self.hostModel(snapshot.model),
                   let availability = SiriRemotePowerSnapshot.Availability(

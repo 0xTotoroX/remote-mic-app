@@ -565,6 +565,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private var appleRemoteRepeatOperationCounter: UInt64 = 0
     private let appleRemoteAppSwitcherSession = KeyboardInjector.AppSwitcherSession()
     private var appleRemoteAppSwitcherTimeout: DispatchSourceTimer?
+    private var appleRemoteAppSwitcherFrontmostMonitor: DispatchSourceTimer?
+    private var appleRemoteAppSwitcherConfirmationProbe: DispatchSourceTimer?
+    private var appleRemoteAppSwitcherOriginBundleIdentifier: String?
     private var appleRemoteCircularNavigation = AppleRemoteCircularNavigationAccumulator()
     private var appleRemoteVoiceDevices = Set<SiriRemoteDeviceIdentity>()
     private var appleRemoteVoiceStopping = false
@@ -632,6 +635,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         self.rc003VoiceExtensionTestEnabled = rc003VoiceExtensionTestEnabled
         self.recordingAssetStore = recordingAssetStore
         audioDevices = initialAudioDevices
+        appleRemoteAppSwitcherSession.setDiagnosticLogger { message in
+            AppLogger.shared.write("APPLE REMOTE APP SWITCHER EVENT \(message)")
+        }
         membershipAccessCancellable = membershipFeature.$buttonProfilesAccessDecision
             .removeDuplicates()
             .sink { [weak macroFeature] decision in
@@ -665,7 +671,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             self?.handleAppleRemoteContextualScroll(pixels) ?? false
         }
         siriRemoteFeature.onCenterTapConfirmation = { [weak self] _ in
-            self?.siriRemoteCursorFeedback.activateHoveredElementIfAvailable() ?? false
+            guard let self else { return false }
+            if self.appleRemoteAppSwitcherSession.isActive {
+                let confirmed = self.appleRemoteAppSwitcherSession.confirm()
+                self.finishAppleRemoteAppSwitcher(
+                    reason: confirmed ? "touch_confirmed" : "touch_confirm_failed",
+                    confirmed: confirmed
+                )
+                return confirmed
+            }
+            return self.siriRemoteCursorFeedback.activateHoveredElementIfAvailable()
         }
         siriRemoteFeature.onPowerSnapshot = { [weak self] snapshot in
             self?.handleAppleRemotePowerSnapshot(snapshot)
@@ -3105,6 +3120,10 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         trigger: ButtonTrigger
     ) -> Bool {
         let wasActive = appleRemoteAppSwitcherSession.isActive
+        if !wasActive {
+            appleRemoteAppSwitcherOriginBundleIdentifier =
+                NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        }
         let phase = wasActive ? "tab" : "start"
         let submitted = appleRemoteAppSwitcherSession.trigger()
         AppLogger.shared.write(
@@ -3115,6 +3134,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             if !wasActive {
                 appleRemoteCircularNavigation.reset()
                 siriRemoteFeature.setTouchRoutingMode(.circularNavigation)
+                startAppleRemoteAppSwitcherLifecycle()
                 AppLogger.shared.write(
                     "APPLE REMOTE TOUCH_CONTEXT phase=started result=active " +
                         "context=app_switcher direction=clockwise_next"
@@ -3123,6 +3143,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             scheduleAppleRemoteAppSwitcherTimeout()
         } else if wasActive {
             finishAppleRemoteAppSwitcher(reason: "tab_failed", confirmed: false)
+        } else {
+            appleRemoteAppSwitcherOriginBundleIdentifier = nil
         }
         return submitted
     }
@@ -3222,17 +3244,66 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         timer.resume()
     }
 
+    private func startAppleRemoteAppSwitcherLifecycle() {
+        scheduleAppleRemoteAppSwitcherTimeout()
+        appleRemoteAppSwitcherFrontmostMonitor?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(
+            deadline: .now() + .milliseconds(Int(HIDRemoteTiming.appSwitcherFrontmostPollMilliseconds)),
+            repeating: .milliseconds(Int(HIDRemoteTiming.appSwitcherFrontmostPollMilliseconds))
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self,
+                  self.appleRemoteAppSwitcherSession.isActive,
+                  let origin = self.appleRemoteAppSwitcherOriginBundleIdentifier,
+                  let current = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                  current != origin
+            else { return }
+            self.finishAppleRemoteAppSwitcher(reason: "frontmost_changed", confirmed: false)
+        }
+        appleRemoteAppSwitcherFrontmostMonitor = timer
+        timer.resume()
+    }
+
     private func finishAppleRemoteAppSwitcher(reason: String, confirmed: Bool) {
         appleRemoteAppSwitcherTimeout?.cancel()
         appleRemoteAppSwitcherTimeout = nil
+        appleRemoteAppSwitcherFrontmostMonitor?.cancel()
+        appleRemoteAppSwitcherFrontmostMonitor = nil
+        appleRemoteAppSwitcherConfirmationProbe?.cancel()
+        appleRemoteAppSwitcherConfirmationProbe = nil
         appleRemoteCircularNavigation.reset()
         siriRemoteFeature.setTouchRoutingMode(.standard)
+        let releaseSubmitted: Bool
         if appleRemoteAppSwitcherSession.isActive {
-            _ = appleRemoteAppSwitcherSession.cancel()
+            releaseSubmitted = appleRemoteAppSwitcherSession.cancel()
+        } else {
+            releaseSubmitted = true
         }
+        let current = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         AppLogger.shared.write(
-            "APPLE REMOTE APP SWITCHER phase=ended reason=\(reason) confirmed=\(confirmed)"
+            "APPLE REMOTE APP SWITCHER phase=ended reason=\(reason) confirmed=\(confirmed) " +
+                "origin=\(appleRemoteAppSwitcherOriginBundleIdentifier ?? "unknown") " +
+                "current=\(current) command_release=\(releaseSubmitted)"
         )
+        if confirmed {
+            let origin = appleRemoteAppSwitcherOriginBundleIdentifier ?? "unknown"
+            let probe = DispatchSource.makeTimerSource(queue: .main)
+            probe.schedule(deadline: .now() + .milliseconds(Int(HIDRemoteTiming.appSwitcherConfirmationProbeMilliseconds)))
+            probe.setEventHandler { [weak self] in
+                guard let self else { return }
+                self.appleRemoteAppSwitcherConfirmationProbe = nil
+                let selected = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
+                AppLogger.shared.write(
+                    "APPLE REMOTE APP SWITCHER phase=selection_observed " +
+                        "origin=\(origin) selected=\(selected) " +
+                        "result=\(selected != origin ? "changed" : "unchanged")"
+                )
+            }
+            appleRemoteAppSwitcherConfirmationProbe = probe
+            probe.resume()
+        }
+        appleRemoteAppSwitcherOriginBundleIdentifier = nil
     }
 
     private func beginAppleRemoteVoice(for device: SiriRemoteDeviceIdentity) {
