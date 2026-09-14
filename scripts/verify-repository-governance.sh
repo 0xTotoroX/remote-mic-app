@@ -36,17 +36,22 @@ for heading in \
 done
 
 require_text BRANCH_MANAGEMENT.md '所有 TODO-only 记录统一使用长期分支 `codex/todo_list`'
+require_text BRANCH_MANAGEMENT.md '立即 Push 并创建只包含该 TODO commit、目标为 `main` 的 PR'
 require_text BRANCH_MANAGEMENT.md '每个 PR 必须且只能对应一项独立、可审查的功能'
 require_text BRANCH_MANAGEMENT.md '发现 `ahead/behind`、未跟踪文件、未提交改动或已合入但仍保留的旧 worktree 时'
 require_text BRANCH_MANAGEMENT.md '任何单个待提交文件超过 5 MB 时'
 require_text BRANCH_MANAGEMENT.md '相关提交信息中包含 `[governance-change]`'
 require_text BRANCH_MANAGEMENT.md '`Repository governance` 必须配置为 `main` 的 Required status check'
+require_text BRANCH_MANAGEMENT.md 'PR 默认使用 GitHub 的普通 Merge（保留合并提交）'
+require_text BRANCH_MANAGEMENT.md '自动化 Agent 不得自行将其标记 Ready、批准或合入'
+require_heading AGENTS.md '## 规范层级与文档边界'
 require_heading AGENTS.md '## 任务范围与等待治理'
 require_text AGENTS.md '分析、审查、诊断或状态查询默认只做只读检查并给出证据和结论'
 require_text AGENTS.md '当前任务之外的优化、重构、规范调整或历史清理必须拆成独立工作项'
 require_text AGENTS.md '禁止使用无法可靠收回控制权的交互式 CI 等待命令'
 require_text RELEASING.md '只记录普通用户能够看到或受益的功能、体验、兼容性和可靠性变化。'
 require_text RELEASING.md '已撤回、删除或从未公开的版本不进入 App 内版本历史。'
+require_heading README.md '## 规范文件索引'
 
 base_ref="${1:-}"
 if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 ]]; then
@@ -67,10 +72,38 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
     git log --format=%B "$base_ref..HEAD" | grep -Fq -- '[governance-change]' || \
       fail 'governance files changed without [governance-change]'
 
+    if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
+      pr_body="${GOVERNANCE_PR_BODY:-}"
+      [[ -n "$pr_body" ]] || fail 'governance PR body is empty'
+      [[ "${GOVERNANCE_PR_IS_DRAFT:-}" == true ]] || \
+        fail 'governance PR must remain Draft until explicit maintainer or user review'
+      for required_pr_text in \
+        '## 规范变更对照' \
+        '变更前规则：' \
+        '变更后规则：' \
+        '保留或迁移到的规范文件：' \
+        '影响范围：' \
+        '迁移方式：' \
+        '明确不做事项：' \
+        '功能源码、可执行功能测试代码、产品配置或依赖是否变化：' \
+        'README 规范索引是否同步：' \
+        '核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：'; do
+        grep -Fq -- "$required_pr_text" <<< "$pr_body" || \
+          fail "governance PR body is missing: $required_pr_text"
+      done
+
+      grep -Eq -- '^功能源码、可执行功能测试代码、产品配置或依赖是否变化：否[[:space:]]*$' <<< "$pr_body" || \
+        fail 'governance PR must explicitly confirm that product files do not change'
+      grep -Eq -- '^README 规范索引是否同步：是[[:space:]]*$' <<< "$pr_body" || \
+        fail 'governance PR must explicitly confirm the README specification index is synchronized'
+      grep -Eq -- '^核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：是[[:space:]]*$' <<< "$pr_body" || \
+        fail 'governance PR must remain Draft for explicit maintainer or user review'
+    fi
+
     while IFS= read -r path; do
       [[ -n "$path" ]] || continue
       case "$path" in
-        AGENTS.md|BRANCH_MANAGEMENT.md|FEATURE_DEVELOPMENT.md|RELEASING.md|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/repository-governance.yml|scripts/verify-repository-governance.sh)
+        AGENTS.md|BRANCH_MANAGEMENT.md|FEATURE_DEVELOPMENT.md|FILE_NAMING.md|LOGGING.md|RELEASING.md|README.md|design-qa.md|design-qa.en.md|Bugs/README.md|Testing/*.md|feature/*/PRODUCT_SPEC.md|feature/*/platform-*.md|feature/*/testing.md|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/repository-governance.yml|scripts/verify-repository-governance.sh)
           ;;
         *)
           scope_violation=true

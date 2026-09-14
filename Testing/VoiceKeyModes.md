@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-- 适用分支：`codex/voice-key-command-modes` 及包含该功能的 macOS 版本。
+- 适用版本：当前待验证 PR 或已合入 `main` 的精确 Commit；原功能分支 `codex/voice-key-command-modes` 只作为历史审计来源。
 - 适用系统：Apple Silicon 使用 macOS 14 或更高版本；Intel 使用 macOS 13 或更高版本。
 - 功能范围：Fn/地球键（默认）、左 Command 长按、右 Command 长按，以及既有 Fn 点按兼容模式。
 - 本手册不把模拟 HID、单元测试、构建、签名或截图视为 RC003、iPhone、Apple Watch、网页版、系统权限或第三方语音应用的真实环境验收。

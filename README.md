@@ -253,3 +253,96 @@ Typeless 等点按 Fn 开始、再次点按结束的语音工具，与小米蓝�
 - [Vibe PPT Web Template](https://github.com/GetSayAll/vibe-ppt-web-template)
 - [Claude Code Config](https://github.com/HD838A/claude-code-config)
 - [DJI 4G Mac](https://github.com/HD838A/dji-4g-mac)
+
+## 规范文件索引
+
+以下索引按规范层级排列。仓库级硬门禁优先确定文档边界，专项规范只约束自己的领域；产品规范定义具体功能行为，两份跨平台硬件合同定义跨设备共同语义，其余测试手册只定义验证方法和证据，不能反向覆盖产品规则或硬件合同。中文规范是权威文本，英文文件只作为同步翻译。
+
+### 仓库治理与开发流程
+
+- [仓库开发规则](AGENTS.md)
+- [分支与提交管理策略](BRANCH_MANAGEMENT.md)
+- [新功能开发规范](FEATURE_DEVELOPMENT.md)
+- [仓库文件命名规范](FILE_NAMING.md)
+- [项目日志规范](LOGGING.md)
+- [macOS Preview 与 Stable 发布流程](RELEASING.md)
+- [macOS 设计与界面验收规范](design-qa.md)
+- [Design QA 英文同步翻译](design-qa.en.md)
+- [Pull Request 提交模板](.github/PULL_REQUEST_TEMPLATE.md)
+
+### 产品规范与跨平台合同
+
+- [按键映射与快捷键显示产品规范](feature/button-mapping/PRODUCT_SPEC.md)
+- [Onboarding 跨平台产品规范](feature/first-run-onboarding/PRODUCT_SPEC.md)
+- [Onboarding macOS 平台适配规范](feature/first-run-onboarding/platform-macos.md)
+- [Onboarding Windows 平台适配规范](feature/first-run-onboarding/platform-windows.md)
+- [跨平台硬件功能兼容合同](Testing/HardwareCompatibilityContract.md)
+- [通用硬件语音音频合同](Testing/HardwareVoiceAudioContract.md)
+
+### 记录格式与目录约定
+
+- [功能档案格式与索引](feature/README.md)
+- [Bug 记录格式与索引](Bugs/README.md)
+
+<details>
+<summary>测试与验收手册（点击展开）</summary>
+
+以下文件定义当前功能的测试步骤、通过条件、失败判定和真实环境边界；其中明确标注版本、日期、候选分支或“报告”的内容属于历史证据，不是现行产品规范。
+
+- [设置页版本中心与跨版本更新测试手册](Testing/AboutUpdateCenter.md)
+- [SayAll Workshop Agent 自动化测试手册](Testing/AgentAutomation.md)
+- [遥控器操作 macOS Command-Tab 切换器测试手册](Testing/AppSwitcherRemoteControl.md)
+- [苹果遥控器通用硬件接口与 Type-C/Lightning 实机测试手册](Testing/AppleRemoteHardwareInterface.md)
+- [Apple Watch 直连遥控与收音测试手册](Testing/AppleWatchDirectRemote.md)
+- [蓝牙断连后的虚拟麦克风释放测试](Testing/BluetoothDisconnectAudioRelease.md)
+- [Cloudflare Mac 下载 CDN 测试手册](Testing/CloudflareDownloadCDN.md)
+- [导入配置校验测试手册](Testing/ConfigurationImportValidation.md)
+- [已连接遥控器设备卡测试手册](Testing/ConnectedRemoteCards.md)
+- [自定义 APP 打开与输入框聚焦测试手册](Testing/CustomApplicationFocus.md)
+- [延长语音录音与 iOS 点按录音测试手册](Testing/ExtendedVoiceRecording.md)
+- [首次使用设置向导测试手册](Testing/FirstRunOnboarding.md)
+- [首次使用成功率优化测试手册](Testing/FirstUseSuccess.md)
+- [实体遥控器按键偶发无响应诊断手册](Testing/HIDIntermittentButtonDiagnostics.md)
+- [Intel Mac / macOS Ventura 兼容性验收](Testing/IntelVenturaCompatibility.md)
+- [问题反馈入口测试手册](Testing/IssueFeedbackLink.md)
+- [自定义快捷键预设与标准键盘选择测试手册](Testing/KeyboardShortcutPicker.md)
+- [Mac 本地原始录音测试手册](Testing/LocalRecordingAssets.md)
+- [本地语音转写记录测试手册](Testing/LocalTranscriptHistory.md)
+- [登录时自动启动测试手册](Testing/LoginAtLogin.md)
+- [Mac 官网分享入口测试手册](Testing/MacAppSharing.md)
+- [Mac 自动休眠时释放虚拟音频测试](Testing/MacIdleSleepAudioRelease.md)
+- [macOS 安装与卸载行为测试手册](Testing/MacInstallerUninstaller.md)
+- [Mac 预览版权限身份连续性测试](Testing/MacPreviewPermissionContinuity.md)
+- [macOS 公开资产矩阵测试手册](Testing/MacReleaseAssetMatrix.md)
+- [macOS 发布引用与生命周期测试手册](Testing/MacReleaseBranchLifecycle.md)
+- [macOS 发布 30 分钟目标测试手册](Testing/MacReleaseSLO.md)
+- [macOS 受保护 staging 超时与并发测试手册](Testing/MacSignedReleaseTimeout.md)
+- [会员与 Plus 按键方案宿主集成测试手册](Testing/MembershipAndButtonProfiles.md)
+- [MiRemoteV 音频通道自动恢复测试](Testing/MiRemoteVAudioStaleRecovery.md)
+- [Mac 附近移动设备等待与取消测试手册](Testing/NearbyMobileWaitingCancellation.md)
+- [Onboarding 语音测试页配置核对卡截图证据](Testing/OnboardingConfigSummaryScreenshots.md)
+- [实体方向键抑制修复测试手册](Testing/PhysicalArrowKeySuppression.md)
+- [私有功能公开宿主边界测试手册](Testing/PrivateFeatureHostBoundary.md)
+- [个人中心统计页测试手册](Testing/ProfileStatistics.md)
+- [免费组合动作 Package 集成测试手册](Testing/QuickCommandsPrivateIntegration.md)
+- [RC003 长语音续流测试包](Testing/RC003VoiceExtensionPreview.md)
+- [允许连续快速按测试手册](Testing/RapidRepeatedButtonPresses.md)
+- [遥控器滚动动作测试手册](Testing/RemoteScrollActions.md)
+- [运行日志运维验收](Testing/RuntimeLogging.md)
+- [本地 Agent 访问集成测试手册](Testing/SayAllMCPIntegration.md)
+- [设置窗口失焦行为测试手册](Testing/SettingsWindowFocus.md)
+- [社区版与私有版 Siri Remote 构建边界](Testing/SiriRemoteCommunityBuild.md)
+- [Siri Remote 组合动作与键位方案本地测试包手册](Testing/SiriRemoteMacroButtonProfilesLocalPackage.md)
+- [Siri Remote 可选 PKG E2E 测试计划](Testing/SiriRemoteOptionalPKGE2EPlan.md)
+- [唤起目标后的首次语音输入测试手册](Testing/VoiceInputDestinationReadiness.md)
+- [语音键模式测试手册](Testing/VoiceKeyModes.md)
+- [设置窗口拖动与增益滑块测试手册](Testing/WindowDragAndGainSlider.md)
+- [iPhone 二维码局域网直连测试手册](Testing/iPhoneQRDirectConnection.md)
+
+历史发布准备与结果记录：
+
+- [Mac v1.8.13 预览候选准备](Testing/MacPreviewV1.8.13Preparation.md)
+- [Mac v1.8.14 预览候选准备](Testing/MacPreviewV1.8.14Preparation.md)
+- [Siri Remote 可选 PKG E2E 测试报告（2026-09-06）](Testing/SiriRemoteOptionalPKGE2EReport-2026-09-06.md)
+
+</details>
