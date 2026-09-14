@@ -14,13 +14,13 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 01:18（CST） |
+| 构建时间 | 2026-09-15 01:28（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（174） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase` @ `c30fb78`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `0d2d83d`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
-| 主程序 SHA-256 | `8a35cbb8bc37185fc7a47646420eabc370d6ec1be3e4f1d284d91992c504f544` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase` @ `42558cb`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`、`c30fb78`；基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `2f9e70c`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
+| 主程序 SHA-256 | `249c0c1c7ae8f168b1b1489b9e28e4dfe13f5548c293a854e1f9c3b15005b2cd` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
@@ -29,26 +29,61 @@
 > 它的构建号比本测试包更大，但没有 `SayAllChromecaseIncluded` 标记，从启动台或 Spotlight
 > 打开它**不会出现遥控器面板**。测试必须显式打开本表的 `dist/SayAll.app`。
 >
-> 版本历史：
+> 版本历史（每一步都对应一次真实缺陷）：
 > - `bc0dac56…`（00:25）：缺少「取回系统已连接设备」的发现路径，遥控器一旦在系统蓝牙里配对上就连不上。
 > - `b9f31c0e…`（01:01）：补上该路径，但设置页两项控件只写偏好、不推运行时；模式选项仍叫「点按开关」。
-> - 本版（01:18）：纳入设置同步修复与「按住说话 / 按一次说话」用语。旧包已由构建脚本移入废纸篓。
+> - `8a35cbb8…`（01:18）：纳入设置同步修复与「按住说话 / 按一次说话」用语。
+> - `4865dbe7…`（01:25）：只加了诊断日志。
+> - 本版（01:28）：修掉**连错设备**——准入规则曾把「同一 ATVV 服务」当成型号身份，会连上
+>   小米语音遥控器并在界面上显示「已连接」。旧包均已由构建脚本移入废纸篓。
+>
+> ⚠️ 因此 01:18 那一版记录在案的真机证据（`frame=120`）**实际是小米语音遥控器的协商结果**，
+> 不能当作 Chromecase 已验证。本型号的协商结果是 `frame=247`。
 
-### 已确认（2026-09-15 01:18:36，本机真机）
+### 连错设备的教训（2026-09-15）
 
-遥控器已配对至系统蓝牙的前提下启动本包，链路在 **0.4 秒内**自动打通，**不需要先断开系统蓝牙**：
+`AB5E0001-5A21-4F05-BC7D-AF01F617B664` 是**通用 ATVV 服务**，不是本品专有：同一仓库的
+小米语音遥控器用的就是它。因此 `retrieveConnectedPeripherals(withServices:)` 会一次取回
+**两台**遥控器；若把「服务存在」当成型号身份，就会连上错误的设备——面板显示「已连接」，
+而真遥控器按语音键毫无反应。
+
+区分设备只看 `name=` 与 `frame=`：
+
+| 设备 | 名字 | 协商 frame |
+| --- | --- | --- |
+| Chromecase 语音遥控器（本型号） | `Chromecast Remote` | `247` |
+| 小米蓝牙语音遥控器 | `小米蓝牙语音遥控器` | `120` |
+
+正确的准入规则是**名字匹配优先**，名字存在但对不上就忽略（即使服务存在）；只有在完全没有名字
+可用时才退回按服务采纳。冻结来源 vRemoter 1.1.1 正是这么做的（它的发现谓词把服务判断显式
+丢弃，注释写明「多款语音遥控器会广播同一个 ATVV 服务 UUID」）。
+
+### 已确认（2026-09-15 01:29:01，本机真机）
+
+遥控器已配对至系统蓝牙的前提下启动本包，链路在 **0.2 秒内**自动打通，**不需要先断开系统蓝牙**：
 
 ```
+BLE SYSTEM CONNECTED CANDIDATES count=2 names=Chromecast Remote | 小米蓝牙语音遥控器
 BLE SYSTEM CONNECTED ADOPTED model=chromecast-voice-remote
 CHROMECASE CONNECTION state=connecting model=chromecast-voice-remote sequence=1
 BLE CONNECTING source=connected_peripheral model=chromecast-voice-remote
 BLE CONNECTED model=chromecast-voice-remote
-ATVV CAPABILITIES version=0x0100 codec=2 frame=120
-ATVV READY version=0x0100 codec=2 frame=120 fallback=false
+BLE CHARACTERISTIC uuid=AB5E0002 props=write,writeNoResp
+BLE CHARACTERISTIC uuid=AB5E0003 props=read,notify
+BLE CHARACTERISTIC uuid=AB5E0004 props=read,notify
+ATVV CAPABILITIES requested attempt=1
+ATVV CONTROL source=control opcode=0x0b bytes=9
+ATVV CAPABILITIES version=0x0100 codec=2 frame=247
+ATVV READY version=0x0100 codec=2 frame=247 fallback=false
 CHROMECASE CONNECTION state=available model=chromecast-voice-remote sequence=3
 CHROMECASE LINK state=connected(displayName: "Chromecase 语音遥控器")
 CHROMECASE STATUS Chromecase 语音遥控器 已连接
 ```
+
+两条关键事实：
+1. **ATVV 服务是通用的**：本机同时命中两台遥控器（`count=2`），身份只能由名字决定。
+2. 该服务真实暴露**三个特征**，没有额外的按键通道——`…0002` write、`…0003` notify、
+   `…0004` notify。语音键事件只可能从 `…0004` 来。
 
 这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 120 字节帧）
 在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、尾字与异常路径仍待执行。
@@ -97,14 +132,21 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
    | 情况 | 遥控器状态 | App 应走的发现路径 |
    | --- | --- | --- |
    | A | 未与 Mac 建立连接，正在广播 | `BLE SCANNING` → `BLE CONNECTING source=scan` |
-   | B | **已在「系统设置 → 蓝牙」里配对/连接**（或已被系统当作 HID 设备占用） | `BLE SYSTEM CONNECTED ADOPTED` → `BLE CONNECTING source=connected_peripheral` |
+   | B | **已在「系统设置 → 蓝牙」里配对/连接**（或已被系统当作 HID 设备占用） | `BLE SYSTEM CONNECTED CANDIDATES` → `BLE SYSTEM CONNECTED ADOPTED` → `BLE CONNECTING source=connected_peripheral` |
 
    情况 B 是被动出现的：BLE 设备一旦与主机建立连接就**停止广播**，只靠扫描的链路会永远停在
    「正在搜索遥控器」。App 必须能取回系统已连接的设备并主动连上它。
-7. 状态应从「正在搜索遥控器」变为「已连接」。**没有 `state=available` 就不要往下测。**
+
+   ⚠️ 情况 B 有一个必须核对的点：**ATVV 服务是通用的**，本机若同时接着小米语音遥控器，
+   `BLE SYSTEM CONNECTED CANDIDATES count=` 会是 `2`。此时必须确认紧接着那句
+   `ATVV CAPABILITIES … frame=` 是 **`247`**；如果是 `120`，说明连上的是小米遥控器，
+   本遥控器的语音键不会产生任何事件（见上文「连错设备的教训」）。
+7. 状态应从「正在搜索遥控器」变为「已连接」。**没有 `state=available`、或 `frame=` 不是 `247`，
+   就不要往下测。**
 8. 若长时间停在「正在搜索遥控器」，先看日志：
-   - 完全没有 `BLE DISCOVERED UNMATCHED` 也没有 `BLE SYSTEM CONNECTED ADOPTED`：遥控器既没广播、也没被系统连接，多半是没唤醒或不在配对模式。
+   - 完全没有 `BLE DISCOVERED UNMATCHED`、也没有 `BLE SYSTEM CONNECTED CANDIDATES`：遥控器既没广播、也没被系统连接，多半是没唤醒或不在配对模式。
    - 有 `BLE DISCOVERED UNMATCHED name=...`：设备在广播但名字对不上，记下该名字（匹配规则冻结自 vRemoter，不得擅自放宽）。
+   - 有 `BLE SYSTEM CONNECTED CANDIDATES count=1 names=小米蓝牙语音遥控器`：只有小米那台被系统连接，本遥控器需要先唤醒或重新配对。
 
 ## 隔离组合
 
@@ -127,7 +169,9 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 第 4 步的发现路径必须是 `connected_peripheral`，不是 `scan`：遥控器被系统连上后**不再广播**，扫描不可能发现它。若这里只有 `BLE SCANNING` 而没有 `BLE SYSTEM CONNECTED ADOPTED`，说明该发现路径失效——这正是本用例要盯的回归点。
 
-失败判定：状态长期停在「正在搜索」；或断连后仍显示已连接；或第 4 步只能靠先断开系统蓝牙才能连上。
+**同时必须核对连上的是本型号**：`ATVV CAPABILITIES … frame=` 应为 `247`。若为 `120`，说明采纳了同协议的小米语音遥控器，本用例不通过。
+
+失败判定：状态长期停在「正在搜索」；或断连后仍显示已连接；或第 4 步只能靠先断开系统蓝牙才能连上；或 `frame=` 是 `120`。
 
 ### 用例 2：toggle 模式——按一下开始、再按一下结束（默认模式）
 
@@ -140,7 +184,13 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 预期：
 - 第 1 次按下即开始收音，且**不结束**；用户可见"正在收音"状态保持。
 - 第 2 次按下才结束。
-- 日志出现 `CHROMECASE VOICE phase=started` → `CHROMECASE VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECASE VOICE playback_stop phase=waiting_for_drain` → `CHROMECASE AUDIO playback_stop phase=completed result=drained`。
+- 日志出现 `ATVV CONTROL source=control opcode=0x08`（远端请求开麦）或 `opcode=0x04`（远端直接起流），
+  随后才是 `CHROMECASE VOICE phase=started`。
+- 完整序列：`CHROMECASE VOICE phase=started` → `CHROMECASE VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECASE VOICE playback_stop phase=waiting_for_drain` → `CHROMECASE AUDIO playback_stop phase=completed result=drained`。
+
+**若按了键却连一条 `ATVV CONTROL` 都没有**，说明远端压根没发出控制帧——此时不要继续测语音，
+把该次日志（含 `BLE CHARACTERISTIC` 与 `BLE SYSTEM CONNECTED CANDIDATES` 两行）整段留证。
+反过来，有 `ATVV CONTROL` 但没有 `CHROMECASE VOICE`，是宿主接线问题，两者必须分清。
 
 失败判定：第 1 次点按后立刻结束收音；或持续收音期间输入法识别被反复关闭（说明换流被当成了新的用户动作）。
 
