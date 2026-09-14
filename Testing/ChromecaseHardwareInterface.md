@@ -108,7 +108,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 2：toggle 模式——按一下开始、再按一下结束（默认模式）
 
-确认面板（侧边栏「连接」→「连接与语音」页 →「Chromecase 遥控器」）语音键模式为「点按开关」。
+确认面板（侧边栏「连接」→「连接与语音」页 →「Chromecase 遥控器」）语音键模式为「按一次说话」。
 
 1. 按一下遥控器语音键，说一句话后停顿几秒（**先不要**再按）。
 2. 观察录音/识别是否持续进行（这正是与 Siri Remote 的核心差异）。

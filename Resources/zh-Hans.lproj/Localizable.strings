@@ -118,9 +118,9 @@
 "chromecase.enabled.title" = "启用 Chromecase 遥控器";
 "chromecase.enabled.detail" = "打开后会搜索并连接该遥控器，用它的语音键直接说话；与 Siri Remote 互不影响。";
 "chromecase.mode.title" = "语音键模式";
-"chromecase.mode.toggle" = "点按开关";
+"chromecase.mode.toggle" = "按一次说话";
 "chromecase.mode.hold" = "按住说话";
-"chromecase.mode.toggle.detail" = "按一下开始收音，再按一下结束。这是该遥控器的默认用法。";
+"chromecase.mode.toggle.detail" = "按一下开始收音，再按一下结束。只有这款遥控器支持这种方式，其他遥控器都只能按住说话。";
 "chromecase.mode.hold.detail" = "按住语音键时收音，松开结束。与 Siri Remote 的手感一致。";
 "chromecase.action.reconnect" = "重新连接";
 "chromecase.help.plain" = "声音经遥控器麦克风传输，输出到 MiRemoteV 2ch；不使用电脑内置麦克风。";

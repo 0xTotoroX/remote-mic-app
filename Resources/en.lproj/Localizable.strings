@@ -118,9 +118,9 @@
 "chromecase.enabled.title" = "Enable Chromecase remote";
 "chromecase.enabled.detail" = "Searches for and connects to this remote so you can dictate with its voice key. Independent from Siri Remote.";
 "chromecase.mode.title" = "Voice key mode";
-"chromecase.mode.toggle" = "Tap to toggle";
+"chromecase.mode.toggle" = "Tap once to talk";
 "chromecase.mode.hold" = "Hold to talk";
-"chromecase.mode.toggle.detail" = "Tap once to start listening and tap again to stop. This is the remote's default behavior.";
+"chromecase.mode.toggle.detail" = "Tap once to start listening, tap once more to stop. Only this remote supports it; every other remote is hold-to-talk only.";
 "chromecase.mode.hold.detail" = "Listen while the voice key is held, stop on release. Matches the Siri Remote feel.";
 "chromecase.action.reconnect" = "Reconnect";
 "chromecase.help.plain" = "Audio is captured by the remote microphone and routed to MiRemoteV 2ch; the computer microphone is not used.";
