@@ -14,16 +14,37 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 00:25（CST） |
+| 构建时间 | 2026-09-15 01:01（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（174） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware` @ `3dd3779`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `9af7633`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
-| 主程序 SHA-256 | `bc0dac5691ff6e759686cfbe175277f20362369673a1e83ebed4de5a758181cf` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，含提交 `3dd3779`、`1ea5061` 与本次自检清单修复；基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `c3699e8`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
+| 主程序 SHA-256 | `b9f31c0e2f65c708c6b2c0c1bde6e672e0cbbedc48a91afdc9cd27aeb6f2d130` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
+
+> 上一版（SHA-256 `bc0dac56…`，2026-09-15 00:25）缺少「取回系统已连接设备」的发现路径：
+> 遥控器一旦在系统蓝牙里配对就连不上，面板永远停在「正在搜索遥控器」。该版已被本版替换，
+> 构建脚本已把旧包移入废纸篓。
+
+### 已确认（2026-09-15 01:01，本机真机）
+
+遥控器已配对至系统蓝牙的前提下启动本包，链路自动打通，**不需要先断开系统蓝牙**：
+
+```
+FEATURE start model=chromecast-voice-remote
+BLE SYSTEM CONNECTED ADOPTED model=chromecast-voice-remote
+BLE CONNECTING source=connected_peripheral model=chromecast-voice-remote
+BLE CONNECTED model=chromecast-voice-remote
+ATVV CAPABILITIES version=0x0100 codec=2 frame=120
+ATVV READY version=0x0100 codec=2 frame=120 fallback=false
+CHROMECASE CONNECTION state=available
+```
+
+这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 120 字节帧）
+在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、尾字与异常路径仍待执行。
 
 此包只用于本机候选功能测试，不可作为正式发布包分发。
 
@@ -46,8 +67,21 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 2. 确认已安装 `MiRemoteV 2ch` 音频设备（设置页「音频兼容」面板应显示已就绪）。本次不安装任何 helper。
 3. 在设置页「权限」页授予蓝牙、输入监控和辅助功能权限，然后完全退出并重新打开 App。
 4. 打开 `~/Library/Logs/RemoteMic/runtime.log`，保留现有文件，不清空、不覆盖。
-5. 进入设置页 →「连接」，确认出现「Chromecase 遥控器」面板，状态为「正在搜索遥控器」。
-6. 让遥控器进入配对/唤醒状态（按键唤醒），确认状态变为「已连接」。
+   - 建议直接双击 `Testing/启动Chromecase真机测试.command`，它会实时过滤出本手册用到的日志行，并在桌面留一份会话记录。
+5. 进入设置页 →「连接」，确认出现「Chromecase 遥控器」面板。
+6. 确认遥控器可被 App 发现。**这里有两种情况，都必须能连上**：
+
+   | 情况 | 遥控器状态 | App 应走的发现路径 |
+   | --- | --- | --- |
+   | A | 未与 Mac 建立连接，正在广播 | `BLE SCANNING` → `BLE CONNECTING source=scan` |
+   | B | **已在「系统设置 → 蓝牙」里配对/连接**（或已被系统当作 HID 设备占用） | `BLE SYSTEM CONNECTED ADOPTED` → `BLE CONNECTING source=connected_peripheral` |
+
+   情况 B 是被动出现的：BLE 设备一旦与主机建立连接就**停止广播**，只靠扫描的链路会永远停在
+   「正在搜索遥控器」。App 必须能取回系统已连接的设备并主动连上它。
+7. 状态应从「正在搜索遥控器」变为「已连接」。**没有 `state=available` 就不要往下测。**
+8. 若长时间停在「正在搜索遥控器」，先看日志：
+   - 完全没有 `BLE DISCOVERED UNMATCHED` 也没有 `BLE SYSTEM CONNECTED ADOPTED`：遥控器既没广播、也没被系统连接，多半是没唤醒或不在配对模式。
+   - 有 `BLE DISCOVERED UNMATCHED name=...`：设备在广播但名字对不上，记下该名字（匹配规则冻结自 vRemoter，不得擅自放宽）。
 
 ## 隔离组合
 
@@ -64,10 +98,13 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 1. 启动 App，等待状态从「正在搜索遥控器」变为「已连接」。
 2. 在面板点「重新连接」。
 3. 关闭再打开遥控器，观察是否自动恢复。
+4. **系统已连接场景**：在「系统设置 → 蓝牙」里把遥控器连上（或先移除再重新配对），回到 App 点「重新连接」。
 
 预期：状态依次经过 `discovering → connecting → available`；重连期间活动收音必须先被结束。日志出现 `CHROMECASE LINK state=` 与 `CHROMECASE CONNECTION state=available`。
 
-失败判定：状态长期停在「正在搜索」；或断连后仍显示已连接。
+第 4 步的发现路径必须是 `connected_peripheral`，不是 `scan`：遥控器被系统连上后**不再广播**，扫描不可能发现它。若这里只有 `BLE SCANNING` 而没有 `BLE SYSTEM CONNECTED ADOPTED`，说明该发现路径失效——这正是本用例要盯的回归点。
+
+失败判定：状态长期停在「正在搜索」；或断连后仍显示已连接；或第 4 步只能靠先断开系统蓝牙才能连上。
 
 ### 用例 2：toggle 模式——按一下开始、再按一下结束（默认模式）
 
@@ -180,6 +217,9 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 | 阶段 | 关键字 |
 | --- | --- |
 | 链路 | `CHROMECASE LINK state=`、`CHROMECASE CONNECTION state=` |
+| 发现（扫描） | `BLE SCANNING`、`BLE CONNECTING source=scan` |
+| 发现（系统已连接） | `BLE SYSTEM CONNECTED ADOPTED model=`、`BLE CONNECTING source=connected_peripheral` |
+| 发现（扫描未匹配，诊断用） | `BLE DISCOVERED UNMATCHED name=` |
 | 开始收音 | `CHROMECASE VOICE phase=started` |
 | 持续收音（不得有用户可见动作） | `CHROMECASE VOICE phase=sustain result=no_visible_change` |
 | 音频路由 | `CHROMECASE AUDIO routed source=chromecase_microphone route=virtual_audio device=MiRemoteV_2ch` |
@@ -193,15 +233,16 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 
 | 用例 | 结果 | 证据（日志时间戳 / 录音 / 备注） |
 | --- | --- | --- |
-| 1 连接与重连 | 未执行 | |
+| 1 连接与重连 | 部分通过 | 2026-09-15 01:01 本机真机：配对状态下启动即走到 `state=available`（见上文「已确认」）。步 2「重新连接」、步 3 遥控器关开恢复、步 4 系统蓝牙断开/重配对后重连**未执行**。 |
 | 2 toggle 开始/结束 | 未执行 | |
 | 3 hold | 未执行 | |
 | 4 首字完整性（10 次） | 未执行 | |
 | 5 尾字完整性 | 未执行 | |
 | 6 断连/蓝牙关闭/休眠 | 未执行 | |
-| 7 8 kHz 样机拒绝 | 未执行 | |
+| 7 8 kHz 样机拒绝 | 未执行 | 无样机；准入判定已由包内单元测试覆盖（`.rejectUnsupported`），但**不替代真机**。 |
 | 8 快速连续点按 | 未执行 | |
-| 9 与 Siri Remote 并存 | 未执行 | |
-| 10 打包可选性回归 | 未执行 | |
+| 9 与 Siri Remote 并存 | 未执行 | 本包不含 Siri Remote（`SayAllSiriRemoteIncluded=false`）。 |
+| 10 打包可选性回归 | 部分通过 | 不带私有包：`swift build` 通过、项目自检 44/44 通过。**未执行**的是完整 `build-app.sh` 无包出包与 `plutil` 读取 `SayAllChromecaseIncluded=false`，以及无私有仓库权限账号的验证。 |
 
 **结论必须分开记录**：自动化测试结论、真机结论、安装包验收结论不能互相替代。本手册只覆盖真机部分。
+本轮自动化结论：包内 69 项 XCTest 全绿；宿主项目自检 44 项、SwiftPM 567 项全绿（带包与不带包两种配置）。
