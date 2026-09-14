@@ -14,37 +14,55 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 01:01（CST） |
+| 构建时间 | 2026-09-15 01:18（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（174） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，含提交 `3dd3779`、`1ea5061` 与本次自检清单修复；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `c3699e8`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
-| 主程序 SHA-256 | `b9f31c0e2f65c708c6b2c0c1bde6e672e0cbbedc48a91afdc9cd27aeb6f2d130` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase` @ `c30fb78`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`；基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `0d2d83d`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
+| 主程序 SHA-256 | `8a35cbb8bc37185fc7a47646420eabc370d6ec1be3e4f1d284d91992c504f544` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
 
-> 上一版（SHA-256 `bc0dac56…`，2026-09-15 00:25）缺少「取回系统已连接设备」的发现路径：
-> 遥控器一旦在系统蓝牙里配对就连不上，面板永远停在「正在搜索遥控器」。该版已被本版替换，
-> 构建脚本已把旧包移入废纸篓。
+> **同一台机器上还有一份 `/Applications/SayAll.app`（1.9.21 build 181，无 Chromecase）。**
+> 它的构建号比本测试包更大，但没有 `SayAllChromecaseIncluded` 标记，从启动台或 Spotlight
+> 打开它**不会出现遥控器面板**。测试必须显式打开本表的 `dist/SayAll.app`。
+>
+> 版本历史：
+> - `bc0dac56…`（00:25）：缺少「取回系统已连接设备」的发现路径，遥控器一旦在系统蓝牙里配对上就连不上。
+> - `b9f31c0e…`（01:01）：补上该路径，但设置页两项控件只写偏好、不推运行时；模式选项仍叫「点按开关」。
+> - 本版（01:18）：纳入设置同步修复与「按住说话 / 按一次说话」用语。旧包已由构建脚本移入废纸篓。
 
-### 已确认（2026-09-15 01:01，本机真机）
+### 已确认（2026-09-15 01:18:36，本机真机）
 
-遥控器已配对至系统蓝牙的前提下启动本包，链路自动打通，**不需要先断开系统蓝牙**：
+遥控器已配对至系统蓝牙的前提下启动本包，链路在 **0.4 秒内**自动打通，**不需要先断开系统蓝牙**：
 
 ```
-FEATURE start model=chromecast-voice-remote
 BLE SYSTEM CONNECTED ADOPTED model=chromecast-voice-remote
+CHROMECASE CONNECTION state=connecting model=chromecast-voice-remote sequence=1
 BLE CONNECTING source=connected_peripheral model=chromecast-voice-remote
 BLE CONNECTED model=chromecast-voice-remote
 ATVV CAPABILITIES version=0x0100 codec=2 frame=120
 ATVV READY version=0x0100 codec=2 frame=120 fallback=false
-CHROMECASE CONNECTION state=available
+CHROMECASE CONNECTION state=available model=chromecast-voice-remote sequence=3
+CHROMECASE LINK state=connected(displayName: "Chromecase 语音遥控器")
+CHROMECASE STATUS Chromecase 语音遥控器 已连接
 ```
 
 这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 120 字节帧）
 在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、尾字与异常路径仍待执行。
+
+> 日志前缀分工：包内只写 `BLE …` 与 `ATVV …`；`CHROMECASE …` 全部由宿主写出。
+> 因此排查协议问题看 `BLE`/`ATVV`，排查宿主接线与语音会话看 `CHROMECASE`。
+
+**当前生效的语音键模式可以在日志里直接读到**，每次开始收音都会带上：
+
+```
+CHROMECASE VOICE phase=started result=triggered audio_source=chromecase_microphone route=MiRemoteV_2ch mode=toggle
+```
+
+末段 `mode=` 就是运行时实际采用的模式（`toggle` / `hold`），与界面选择应当一致；不一致即为接线缺陷。
 
 此包只用于本机候选功能测试，不可作为正式发布包分发。
 
@@ -64,11 +82,16 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 ## 测试前准备
 
 1. 退出其他无线麦SayAll.app 实例，只保留待测包。
+   - 特别注意别打开 `/Applications/SayAll.app`（构建号更大但**不含 Chromecase**）。用
+     `open /Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` 显式打开本表那份。
 2. 确认已安装 `MiRemoteV 2ch` 音频设备（侧边栏「连接」→「连接与语音」页的「音频输入与兼容」面板应显示已就绪）。本次不安装任何 helper。
 3. 在侧边栏「设置」页的「权限与隐私」区授予蓝牙、输入监控和辅助功能权限，然后完全退出并重新打开 App。
 4. 打开 `~/Library/Logs/RemoteMic/runtime.log`，保留现有文件，不清空、不覆盖。
    - 建议直接双击 `Testing/启动Chromecase真机测试.command`，它会实时过滤出本手册用到的日志行，并在桌面留一份会话记录。
 5. 进入侧边栏**「连接」**（链接图标，页面标题「连接与语音」），在右列第三块找到「Chromecase 遥控器」面板——总开关在**这一页**，不在「设置」页（「设置」页只有权限、通用、诊断与日志）。
+   - 面板长相见 `Testing/artifacts/chromecase-layout/`（由 App 自带离屏渲染导出，非截图拼贴）：
+     `connection-zh-Hans-light-1400x2000.png` 是「连接与语音」页，`settings-zh-Hans-light-1400x2000.png`
+     是「设置」页——后者没有该面板，正是本条要说明的对照。
 6. 确认遥控器可被 App 发现。**这里有两种情况，都必须能连上**：
 
    | 情况 | 遥控器状态 | App 应走的发现路径 |
@@ -128,6 +151,8 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 1. 按住语音键说话，中途松开。
 
 预期：按住期间收音，松开即结束；`completion=normal reason=hold_release`。
+
+切换后先核对运行时是否真的换了模式：开始收音那行日志的末段应为 `mode=hold`。若界面已切而日志仍是 `mode=toggle`，即为接线缺陷，本用例结论无效。
 
 失败判定：松开后仍在收音；或按住期间没有开始。
 
