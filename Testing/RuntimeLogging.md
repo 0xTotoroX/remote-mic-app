@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-- 分支：`codex/improve-runtime-log-quality-20260824`；合入版本以目标 `main` 为准
+- 版本：当前待验证 PR 或已合入 `main` 的精确 Commit；历史功能分支 `codex/improve-runtime-log-quality-20260824` 只作为对应 Bug 记录中的审计证据
 - 功能：`runtime.log` 实例元数据、单行格式、可恢复轮转、错误字段、音频日志降噪与验收日志收集
 
 ## 测试前准备
@@ -11,13 +11,13 @@
 2. 打开 `~/Library/Logs/RemoteMic/`，保留现有文件，不清空、不覆盖，也不永久删除用户日志。
 3. 准备 MiRemoteV 2ch 或 BlackHole 2ch；真实 BLE 项准备 RC001 / RC003。
 4. 小阈值轮转由 `AppLoggerTests` 在独立临时目录执行，不为测试而扩大或破坏用户的正式日志。
-5. 执行 `swift test` 前后检查用户日志没有来自测试 runner 的新增行；测试中的显式 logger 只使用临时路径。
+5. 执行 `swift test --disable-keychain` 前后检查用户日志没有来自测试 runner 的新增行；测试中的显式 logger 只使用临时路径。
 
 ## 用例 1：逐行实例元数据与单行格式
 
 1. 启动 App，触发设置切换、测试音和一次遥控器状态变化。
 2. 检查新写入的每一行。
-3. 运行 `swift test --filter AppLoggerTests` 的控制字符用例。
+3. 运行 `swift test --disable-keychain --filter AppLoggerTests` 的控制字符用例。
 
 预期：每行以 UTC 毫秒时间开头，随后为 `pid=<SayAll PID> ver=<短版本> build=<Build>`；同一进程三项值稳定。单个事件不跨行，不包含 NUL、Tab 或其他控制字符，文件可作为 UTF-8 读取。
 
@@ -44,7 +44,7 @@
 
 ## 用例 2：大小轮转与可恢复退休
 
-1. 运行 `swift test --filter AppLoggerTests`，使用 1-byte 阈值连续写入 5 条事件。
+1. 运行 `swift test --disable-keychain --filter AppLoggerTests`，使用 1-byte 阈值连续写入 5 条事件。
 2. 同一临时路径使用两个 logger 并发追加 1,000 条带中文的事件。
 3. 检查临时目录中的当前文件、`.1`～`.3`、隐藏 lock 文件和 retirement handler 保存的旧归档。
 4. 在 Finder 废纸篓中确认生产默认 retirement 使用可恢复移动；不得出现永久删除命令或直接截断旧文件。

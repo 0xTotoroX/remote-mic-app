@@ -253,3 +253,7 @@ Typeless 等点按 Fn 开始、再次点按结束的语音工具，与小米蓝�
 - [Vibe PPT Web Template](https://github.com/GetSayAll/vibe-ppt-web-template)
 - [Claude Code Config](https://github.com/HD838A/claude-code-config)
 - [DJI 4G Mac](https://github.com/HD838A/dji-4g-mac)
+
+## 开发者文档
+
+开发者、贡献者和自动化 Agent 请从 [项目文档导航](DOCUMENTATION.md) 开始。

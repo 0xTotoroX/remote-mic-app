@@ -6,7 +6,7 @@
 
 - 开始任何操作前执行 git fetch origin main，并记录 origin/main 的完整 SHA。
 - main 工作区只用于同步已合入的远端主线，不直接开发、保存临时改动或准备版本元数据。
-- 功能、Bug、发布流程和文档改动都在独立分支和 worktree 中完成；分支创建点必须是当时最新的 origin/main。
+- 功能、Bug、发布流程和文档改动都在独立分支和持久化 worktree 中完成；分支创建点必须是当时最新的 origin/main。唯一例外是下方 TODO-only 流程使用长期共享分支 `codex/todo_list`，但仍必须通过 PR 合入 `main`。
 - 除 Hotfix 的临时审核 PR 外，PR 的目标分支只能是远端 main。合入后再次 fetch，确认本地 main 与 origin/main 精确一致。
 - `main` 必须始终处于可发布状态；未完成必要验收的功能不得先合入再等待发布分支筛选。
 - 普通 Preview 和 Stable 的发布控制面与源码都只能使用精确 `origin/main`；GitHub Actions 必须从 `main` 触发并验证它仍是远端 HEAD。
@@ -42,7 +42,7 @@
 
 - 本流程只适用于新增或更新 `TODO.md`（以及同一次记录所需的简短公开文档引用），且不修改业务代码、测试、配置、依赖、发布资产或用户可观察行为。
 - 所有 TODO-only 记录统一使用长期分支 `codex/todo_list`，不为每一条 TODO 新建分支或 worktree。每次记录仍创建独立 commit，commit 只能包含当前 TODO 记录及其必要的文档改动。
-- 开始记录前先 fetch `origin/main`，确认 `codex/todo_list` 已同步到最新主线；记录完成并通过 `git diff --check`、文件范围、敏感信息和文件大小检查后，立即将该 commit 合入 `main`。该路径不触发产品构建、测试、签名、发布等 CI；仅保留必要的文档级检查。
+- 开始记录前先 fetch `origin/main`，确认 `codex/todo_list` 已同步到最新主线；记录完成并通过 `git diff --check`、文件范围、敏感信息和文件大小检查后，立即 Push 并创建只包含该 TODO commit、目标为 `main` 的 PR。PR 仍受 `main` 的 Pull Request 和 Required status checks 保护；macOS CI 对 docs-only 变更只运行文档级步骤并返回既有 required contexts，不执行产品构建、测试、签名或发布。
 - 合入后 fetch 远端并确认本地 `main == origin/main`，再把 `codex/todo_list` 同步到最新主线，继续承载下一条 TODO。该长期分支不因单条 TODO 删除；任何清理仍需单独确认。
 - 如果一次 TODO 记录实际需要修改代码、测试、配置、依赖或发布行为，立即退出本流程，改按标准功能或 Bug 流程创建独立分支和 worktree，并执行相应 CI 与验收。
 
@@ -55,10 +55,11 @@
 
 ## 规范变更隔离与防护
 
-- `AGENTS.md`、`BRANCH_MANAGEMENT.md`、`FEATURE_DEVELOPMENT.md` 和 `.github/PULL_REQUEST_TEMPLATE.md` 属于核心治理文件。除恢复缺失规则或修复明确的治理缺陷外，产品功能、Bug、发布流程和测试手册 PR 不得修改这些文件。
+- `AGENTS.md`、`BRANCH_MANAGEMENT.md`、`FEATURE_DEVELOPMENT.md` 和 `.github/PULL_REQUEST_TEMPLATE.md` 属于核心治理规范；`scripts/verify-repository-governance.sh` 与 `.github/workflows/repository-governance.yml` 属于治理守护实现。除恢复缺失规则、修复明确治理缺陷或同步专项规范边界外，产品功能、Bug、发布流程和普通测试手册 PR 不得修改这些文件。
 - 核心治理文件确需修改时，必须使用独立 PR；PR 描述必须列出变更前后规则、影响范围、迁移方式和明确不做事项，并在相关提交信息中包含 `[governance-change]`。
+- 核心治理 PR 必须保持 Draft，直到仓库维护者或用户逐项确认规范覆盖对照、无功能文件改动和静态检查结果；确认后必须在 PR 正文记录明确的批准来源，才能转为 Ready 并按正常门禁合入。自动化 Agent 不得在缺少该确认时自行将其标记 Ready、批准或合入。该人工确认不能由 required check、零审批 ruleset 或机器人 bypass 替代。
 - 发布流程可以更新 `RELEASING.md` 及其直接测试手册，但不得借发布流程重构删除或弱化核心治理规则；发布 PR 若同时修改核心治理文件，必须通过治理变更门禁并单独说明原因。
-- `scripts/verify-repository-governance.sh` 和 `.github/workflows/repository-governance.yml` 是本文件关键规则的静态守护检查。`Repository governance` 必须配置为 `main` 的 Required status check；规则增删必须与该检查、PR 模板和迁移说明在同一个独立治理 PR 中同步更新，不得只改规范文本而不更新守护检查。
+- `scripts/verify-repository-governance.sh` 和 `.github/workflows/repository-governance.yml` 是本文件关键规则的静态守护检查。`Repository governance` 必须配置为 `main` 的 Required status check；规则增删必须与该检查、PR 模板和迁移说明在同一个独立治理 PR 中同步更新，不得只改规范文本而不更新守护检查。治理 PR 可以同时修改 `DOCUMENTATION.md`、README 的稳定文档入口和与本次规则直接冲突的专项规范、产品合同或测试合同，但必须使用静态 allowlist，且不得包含 `Sources/`、`Tests/` 下的可执行功能测试代码、产品配置、依赖或发布资产。
 
 ## PR 合并策略
 

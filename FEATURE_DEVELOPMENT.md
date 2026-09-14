@@ -4,7 +4,7 @@
 
 本规范适用于无线麦SayAll.app 仓库中的所有新功能开发，包括仓库作者、维护者、外部贡献者、自动化 Agent 和受委托的开发者。任何人都不能因为是功能提出者、仓库所有者或维护者而跳过本规范。
 
-本文件是新功能从立项到 PR 的统一入口。分支、提交和发布边界以 [`BRANCH_MANAGEMENT.md`](BRANCH_MANAGEMENT.md) 为准；仓库级开发与 PR 门禁以 [`AGENTS.md`](AGENTS.md) 为准；提交 PR 时还必须完成 [PR 提交模板](.github/PULL_REQUEST_TEMPLATE.md) 中的新功能检查项。规则冲突时执行更严格的一项。
+本文件是新功能从立项到 PR 的统一流程入口。它只拥有新功能的查重、范围、实现和验证流程；分支、提交与合并以 [`BRANCH_MANAGEMENT.md`](BRANCH_MANAGEMENT.md) 为准，仓库级硬门禁以 [`AGENTS.md`](AGENTS.md) 为准，具体产品行为以对应功能的 `PRODUCT_SPEC.md` 和适用的跨平台专项合同为准，提交 PR 时还必须完成 [PR 提交模板](.github/PULL_REQUEST_TEMPLATE.md) 中的新功能检查项。发现互斥规则时不得简单叠加“更严格的一项”，必须按 `AGENTS.md` 的规范层级在独立治理 PR 中消除冲突。
 
 ## 开发前检查
 

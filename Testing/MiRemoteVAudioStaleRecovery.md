@@ -2,7 +2,7 @@
 
 ## 适用版本或分支
 
-- 分支：`codex/fix-miremotev-audio-stale`
+- 适用版本：当前待验证 PR 或已合入 `main` 的精确 Commit；原功能分支 `codex/fix-miremotev-audio-stale` 只作为历史审计来源
 - 平台：macOS 13 Intel 与 macOS 14+ Apple Silicon
 - 音频设备：`MiRemoteV 2ch`
 - 语音来源：RC001/RC003、iPhone、Apple Watch、Web

@@ -16,7 +16,7 @@
 
 ## 安装
 
-1. 双击 [Install SayAll.pkg](../dist/Install%20SayAll.pkg)。
+1. 从本次交付的持久化测试包目录双击 `Install SayAll.pkg`。该安装包属于候选制品，不提交到源码仓库；测试交付说明必须提供实际可访问路径和 SHA-256，不能使用仓库内失效链接代替。
 2. 在安装器的“自定安装”页面确认 `Siri Remote 支持` 初始未勾选，然后主动勾选它再继续。
 3. 完成系统管理员授权，等待安装结束。
 4. 从 `/Applications/SayAll.app` 启动 App。
