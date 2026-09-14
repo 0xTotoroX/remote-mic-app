@@ -5738,6 +5738,14 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         chromecaseFeature.reconnect()
     }
 
+    /// 设置页 Chromecase 面板的改动立即作用于运行时。
+    ///
+    /// 开关决定链路启停、模式决定语音键语义，二者都不能等下次启动才生效：
+    /// 否则界面显示「按住说话」而运行时仍按「点按开关」处理，真机验收会得出错误结论。
+    func applyChromecaseSettings() {
+        syncChromecaseRuntimeState()
+    }
+
     /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
     private func syncChromecaseRuntimeState() {
         guard started else { return }

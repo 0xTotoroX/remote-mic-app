@@ -898,7 +898,7 @@ struct SettingsView: View {
                     get: { settings.chromecaseEnabled },
                     set: { newValue in
                         settings.chromecaseEnabled = newValue
-                        model.applyHIDSettings()
+                        model.applyChromecaseSettings()
                     }
                 )) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -921,7 +921,7 @@ struct SettingsView: View {
                     get: { settings.chromecaseVoiceMode },
                     set: { newValue in
                         settings.chromecaseVoiceMode = newValue
-                        model.applyHIDSettings()
+                        model.applyChromecaseSettings()
                     }
                 )) {
                     ForEach(ChromecaseVoiceMode.allCases) { mode in
