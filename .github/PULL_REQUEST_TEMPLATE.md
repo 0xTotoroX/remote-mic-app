@@ -54,6 +54,11 @@ Open PR 查重日期、查询结果及相关链接：
 - [ ] 已检查旧版本、默认配置、Feature Flag、共享协议、持久化、硬件和平台兼容性。
 - [ ] PR 只包含本功能和直接必要的修改，没有无关重构或其他功能。
 
+## 核心治理文件变更
+
+- [ ] 本 PR 未修改 `AGENTS.md`、`BRANCH_MANAGEMENT.md`、`FEATURE_DEVELOPMENT.md` 或 `.github/PULL_REQUEST_TEMPLATE.md`。
+- [ ] 本 PR 确需修改核心治理文件，已在提交信息中加入 `[governance-change]`，并在变更摘要中列出变更前后规则、影响范围、迁移方式和明确不做事项；该变更不与无关产品或发布工作混合。
+
 兼容性、迁移、回滚和已知风险：
 
 ## PR 状态
