@@ -41,6 +41,10 @@
 >   01:50 已启动该版并确认连接阶段能产出新增证据行（`ATVV CAPABILITIES DETAIL … raw=…`、
 >   `BLE LINK maxWriteNoResp=…`）；`ATVV AUDIO notify` 与 `ATVV MIC_OPEN skipped` 两行**需要按一次语音键**
 >   才会出现，属用例 2 的待验项。
+> - 02:03 复测（同一版，4 次**按住**）：`ATVV MIC_OPEN skipped reason=remote_initiated_stream` 已按
+>   预期出现，但 `ATVV AUDIO notify` 仍为 0（`audio_batches=0`）。据此定位出**根因 #2：
+>   本型号的 HTT 流本身不带音频，音频只走宿主 `MIC_OPEN` 发起的持续流**，且 `MIC_OPEN` 必须在
+>   松键之后发才有效——详见「根因 #2」。
 >
 > ⚠️ 因此 01:18 那一版记录在案的真机证据（`frame=120`）**实际是小米语音遥控器的协商结果**，
 > 不能当作 Chromecase 已验证。本型号的协商结果是 `frame=247`。
@@ -111,6 +115,44 @@ CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0
 
 > ⚠️ 修复前记录的 `audio_batches=0` 不能用来判断「远端没有推流」——当时 AB5E0003 上的通知
 > 既没有计数也没有日志。修复后的日志会直接给出 `ATVV AUDIO notify count=` 与 `total=`。
+
+### 根因 #2：本型号的 HTT 流本身不带音频（2026-09-15 02:03 真机）
+
+修掉 #1 之后复测，用户按了 4 次仍是「有电平图、无波动」。日志（pid=87091）显示 #1 的修复
+已生效——4 次按下（每次约 1.3 秒）都有 `ATVV MIC_OPEN skipped reason=remote_initiated_stream`，
+stream id 正常自增（`16→17→18→19`，`origin=remoteInitiated`，不再塌成 `stream=0`）——
+但 `ATVV AUDIO notify` 依然是 **0**，`CHROMECASE VOICE phase=completed … audio_batches=0`。
+
+**判据来自冻结来源自己的真机日志**（`~/Library/Logs/vRemote/vRemote.log`，2026-09-14，
+同一台 `remote=chromecast`）。按流来源分类后事实很清楚：
+
+| 流 | 发起方 | 真机结果 |
+| --- | --- | --- |
+| `AUDIO_START reason=0x00 streamID=0` | 宿主 `MIC_OPEN` | `AUDIO_FRAMES count=1→1600`，`recentPeak` **7919~10533**（真实人声） |
+| 同上（另一轮） | 宿主 `MIC_OPEN` | `AUDIO_SUMMARY frames=45 samples=11520 peak=1514 rms=733` |
+| `AUDIO_START reason=0x03 streamID=40/41/42/43` | 远端物理按住（HTT） | `frames=11 peak=104` / `frames=6 peak=658` / `frames=0` / `frames=0` |
+
+即：**物理 HTT 流在这台遥控器上几乎是死流（帧极少、峰值≈静音）；可持续音频只出现在宿主
+`MIC_OPEN` 发起的 `streamID=0` 流上**。vRemoter 手册里那一次「已验证通过」的会话，音频也全部
+来自这一类流。
+
+反证同样在案：`17:32` 那次（修复前）宿主在**按住期间**补发 `MIC_OPEN`，远端 35 ms 后回了
+`AUDIO_START reason=0x00 stream=0`，那条宿主流整整开了 **1.29 秒、零音频帧**，松键才 `MIC_CLOSE`。
+所以这不是「发得太早/窗口太短」——**按住期间开麦在这台样机上拿不到音频**。
+
+由此得到的可用路径（与 vRemoter 成功样本的时序一致：`AUDIO_STOP reason=0x2` → 立即
+`TX micOpen` → `AUDIO_FRAMES count=1` 同秒开始增长）：
+
+1. **快速点按**（< 0.55 秒）语音键 → 会话开始（此时静音是正常的，远端 HTT 流没有音频）；
+2. **松键** → 宿主写 `MIC_OPEN`（`bytes=0c00`）→ 远端回 `AUDIO_START reason=0x00 stream=0`；
+3. **此后才开始有音频**，`ATVV AUDIO notify count=` 持续增长、电平图波动；
+4. 会话期间靠 `MIC_EXTEND stream=0` 续流，再次点按才 `MIC_CLOSE`。
+
+> ⚠️ **`按住说话`（hold）在本型号上先天没有音频**：按住期间远端那条 HTT 流实测零帧，
+> 松键又立刻结束收音，因此该模式只能作为对照，不能作为本型号的验收判据。
+> 「按一次说话」必须快速点按、**松键之后再说**。
+
+> 待验证：本包「点按 → 松键 → `MIC_OPEN`」这条路径要等真机复测确认（上面第 1~3 步）。
 
 ### 已确认（2026-09-15 01:29:01，本机真机）
 
@@ -247,9 +289,10 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 确认面板（侧边栏「连接」→「连接与语音」页 →「Chromecase 遥控器」）语音键模式为「按一次说话」。
 
-1. 按一下遥控器语音键，说一句话后停顿几秒（**先不要**再按）。
+1. **快速点按**遥控器语音键（按下后立刻松开，全程 **< 0.55 秒**），**松键之后**再说一句话，说完停顿几秒
+   （**先不要**再按）。
 2. 观察录音/识别是否持续进行（这正是与 Siri Remote 的核心差异）。
-3. 再按一下语音键。
+3. 再快速点按一下语音键结束。
 
 预期：
 - 第 1 次按下即开始收音，且**不结束**；用户可见"正在收音"状态保持。
@@ -258,21 +301,27 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   随后才是 `CHROMECASE VOICE phase=started`。
 - **按下期间不得出现 `ATVV MIC_OPEN written`**：本型号远端自己开麦，宿主补发会被样机当成新请求、
   拆掉正在推送的流（规范 4.7.5 明令禁止，详见上文「语音流根因」）。
-- **必须有 `ATVV AUDIO notify count=` 持续增长**，这是「远端真的在推音频」的唯一直接证据。
-  只有它非零，才谈得上电平图波动。
-- 一次性点按（松键）后应看到 `ATVV MIC_OPEN written … bytes=0c00`（这一步才是宿主主动请求持续流），
-  以及后续的 `ATVV MIC_EXTEND stream=0`（每 4 秒一次，把远端的「音频传输超时」顶回去）。
+- **按下期间 `ATVV AUDIO notify count=` 不会增长，这是本型号的正常现象**——远端那条 HTT 流实测
+  零帧（详见「根因 #2」），此时电平图不波动**不算缺陷**。
+- 松键后应看到 `ATVV MIC_OPEN written … bytes=0c00`（这一步才是宿主主动请求持续流），紧随
+  `ATVV STREAM START reason=0x00 stream=0 origin=hostRequested`；**从这一刻起**
+  `ATVV AUDIO notify count=` 才应持续增长，电平图才应波动。这就是本用例真正的通过判据。
+- 后续每 4 秒一条 `ATVV MIC_EXTEND stream=0`（把远端的「音频传输超时」顶回去）。
 - 完整序列：`CHROMECASE VOICE phase=started` → `CHROMECASE VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECASE VOICE playback_stop phase=waiting_for_drain` → `CHROMECASE AUDIO playback_stop phase=completed result=drained`。
 
 ⚠️ **点按必须短于 0.55 秒**：超过 0.55 秒按合同即为「按住（HOLD）」，无论当前是哪种模式都会在松键时结束收音
-（`completion=normal reason=hold_release`），那不是缺陷。要验证「按一次说话」的持续收音，请**快速点按**。
+（`completion=normal reason=hold_release`）。本型号的 HOLD 因此**必然静音**（HTT 流零帧 + 松键即停，
+详见「根因 #2」）。要听清说话内容，请**快速点按，松键之后再说话**。
 
 **若按了键却连一条 `ATVV CONTROL` 都没有**，说明远端压根没发出控制帧——此时不要继续测语音，
 把该次日志（含 `BLE CHARACTERISTIC` 与 `BLE SYSTEM CONNECTED CANDIDATES` 两行）整段留证。
 反过来，有 `ATVV CONTROL` 但没有 `CHROMECASE VOICE`，是宿主接线问题；有 `CHROMECASE VOICE` 但
-`ATVV AUDIO notify` 从不出现，是远端没有推流（协议层问题）。三者必须分清。
+`ATVV AUDIO notify` 从不出现，要先看**当时是按下还是已松键**：按下期为零属正常，松键后仍为零
+才是远端没有推流（协议层问题）。三者必须分清。
 
-失败判定：第 1 次点按后立刻结束收音；或持续收音期间输入法识别被反复关闭（说明换流被当成了新的用户动作）。
+失败判定：第 1 次点按后立刻结束收音；持续收音期间输入法识别被反复关闭（说明换流被当成了新的
+用户动作）；或**松键后**（已出现 `ATVV MIC_OPEN written` 与 `reason=0x00` 的 `ATVV STREAM START`）
+`ATVV AUDIO notify` 仍恒为零。
 
 ### 用例 2b：`frame=` 与链路容量的对照（本版新增的判断题）
 
@@ -295,29 +344,38 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 预期：按住期间收音，松开即结束；`completion=normal reason=hold_release`。
 
+⚠️ **本型号不要期待这个模式出音频**：按住期间远端那条 HTT 流实测零帧（「根因 #2」），松键又立刻
+结束收音，因此全程静音。该用例只验证状态机与命令时序（不补发 `MIC_OPEN`、松键 `hold_release`、
+必要时 `MIC_CLOSE`），**不作为本型号语音链路验收的判据**。要真正听到声音请用用例 2 的快速点按。
+
 切换后先核对运行时是否真的换了模式：开始收音那行日志的末段应为 `mode=hold`。若界面已切而日志仍是 `mode=toggle`，即为接线缺陷，本用例结论无效。
 
 失败判定：松开后仍在收音；或按住期间没有开始。
 
 ### 用例 4：首字完整性（最关键）
 
-在 toggle 模式下，按一下语音键后**立刻**说第一个字（例如「测试」，不要先停顿）。
+在 toggle 模式下，**快速点按**语音键（< 0.55 秒），**松键之后立刻**说第一个字（例如「测试」，不要先停顿）。
 
 1. 重复 10 次，每次换一个首字（如「你好」「今天」「帮我」）。
 2. 检查识别结果与录音资产的首字是否完整。
 
 预期：10 次首字全部完整。设计上宿主是在包写 `MIC_OPEN` 之前备好音频出口的，因此最早几帧不应丢失。
 
-失败判定：出现首字缺失或吞字。这正是需要重点观察的换流缺口风险；历史上该协议的实现在此处出现过偶发失败。
+失败判定：出现首字缺失或吞字。⚠️ 本型号的风险点从「包内换流」变成了**松键→远端开始推流之间的启动延迟**
+（远端收到 `MIC_OPEN` 后才真正开麦，实测首帧在同秒内出现，但存在间隙）。因此这一条要按**松键即说**来测，
+并同时比对 `ATVV MIC_OPEN written` 与第一条 `ATVV AUDIO notify count=1` 的时间差。
 
 ### 用例 5：尾字完整性（正常停止不 flush）
 
-1. 按住语音键（hold 模式）说一句结尾有力的短句，例如「今天天气很好」，说完立刻松开。
+1. toggle 模式下**快速点按**开始收音，说完一句结尾有力的短句（例如「今天天气很好」），
+   再**快速点按**结束。
 2. 检查最后两个字是否完整。
 
 预期：尾字完整。正常结束路径只做自然排空（`maximumDelay: nil`），不得 flush。
 
 失败判定：末字被截断；或日志出现 `AUDIO PLAYBACK interrupted`。
+
+> 不要再用 hold 模式测尾字：本型号按住期间零帧（「根因 #2」），测不出尾字完整性。
 
 ### 用例 6：断连、蓝牙关闭与系统休眠
 
@@ -401,6 +459,15 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 判读要点：`ATVV MIC_OPEN written` 与 `ATVV AUDIO notify` 是两条互相独立的证据。
 前者只说明宿主发了命令，后者才是远端真的在推流。**只有出现 `ATVV MIC_OPEN skipped reason=remote_initiated_stream`
 且随后 `ATVV AUDIO notify count` 持续增长，才说明 HTT 路径修对了。**
+
+⚠️ 但「随后」有严格的时点（「根因 #2」）：远端那条 HTT 流（`ATVV STREAM START reason=0x03
+origin=remoteInitiated`）**本身零帧**，所以
+
+- `reason=0x03` 的流开着时 `ATVV AUDIO notify` 为零 → **正常**；
+- 只有等到松键后宿主写出 `ATVV MIC_OPEN written bytes=0c00`、并看到
+  `ATVV STREAM START reason=0x00 stream=0 origin=hostRequested`，才是音频该开始的地方；
+- 若这一条 `reason=0x00` 的宿主流也一直零帧，才判定为缺陷（把 `frame=`、`maxWriteNoResp=`、
+  两条 `STREAM START` 一并留证）。
 
 合同要求异常原因必须出现在日志里，因此断连原因以稳定 token 输出（如 `disconnected.adapterStopped`）。
 
