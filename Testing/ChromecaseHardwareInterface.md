@@ -14,13 +14,13 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 01:28（CST） |
+| 构建时间 | 2026-09-15 01:46（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（174） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase` @ `42558cb`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`、`c30fb78`；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `2f9e70c`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
-| 主程序 SHA-256 | `249c0c1c7ae8f168b1b1489b9e28e4dfe13f5548c293a854e1f9c3b15005b2cd` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`、`c30fb78`；基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `dbfdce9`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
+| 主程序 SHA-256 | `e38b8b145e8d75ee16fbf7b3ce1ab97c2201c8e52f8147c4ba9f16f21f941acf` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
@@ -36,6 +36,8 @@
 > - `4865dbe7…`（01:25）：只加了诊断日志。
 > - 本版（01:28）：修掉**连错设备**——准入规则曾把「同一 ATVV 服务」当成型号身份，会连上
 >   小米语音遥控器并在界面上显示「已连接」。旧包均已由构建脚本移入废纸篓。
+> - 当前版（01:46，`e38b8b14…`）：修掉**语音流零音频**——HTT 交互模型下宿主补发 `MIC_OPEN`
+>   被样机当成新请求，正在推送的流被拆掉。详见下文「语音流根因」。
 >
 > ⚠️ 因此 01:18 那一版记录在案的真机证据（`frame=120`）**实际是小米语音遥控器的协商结果**，
 > 不能当作 Chromecase 已验证。本型号的协商结果是 `frame=247`。
@@ -58,6 +60,55 @@
 可用时才退回按服务采纳。冻结来源 vRemoter 1.1.1 正是这么做的（它的发现谓词把服务判断显式
 丢弃，注释写明「多款语音遥控器会广播同一个 ATVV 服务 UUID」）。
 
+### 语音流根因：HTT 下补发 `MIC_OPEN`（2026-09-15 01:32 真机）
+
+现象：按语音键后豆包输入法的电平图**有反应但没有波动**；整段收音在日志里是
+`CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0`，录音资产只有 557 字节。
+
+关键日志（`pid=83434`，一次 1.33 秒的按住）：
+
+```
+ATVV CONTROL source=control opcode=0x04 bytes=4      ← 远端 AUDIO_START(reason=0x03, codec=2, stream=14)
+VOICE INTENT start generation=2
+ATVV MIC_OPEN written attempt=1 generation=2         ← 宿主在 11ms 后补发 0x0c00
+ATVV STREAM START reason=0x03 stream=14 codec=2 generation=2
+ATVV CONTROL source=control opcode=0x04 bytes=4      ← 远端改发 AUDIO_START(reason=0x00, stream=0)
+ATVV STREAM START reason=0x00 stream=0 codec=2 generation=2
+…（此后 289ms 到松键，AB5E0003 上一个字节都没有）…
+ATVV CONTROL source=control opcode=0x00 bytes=2      ← 远端 AUDIO_STOP(reason=0x02)
+CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0
+```
+
+对照 Google *Voice over BLE* 1.0 规范（来源文件 `Google_Voice_over_BLE_spec_v1.0.pdf`；
+排查时提取的纯文本副本放在 `/tmp/atvv-spec.txt`，属临时文件，**不入库**——该 PDF 为 Google
+发布的公开规范，许可证未随文说明，不放公共仓库），根因是**宿主在 HTT 流进行中补发了 `MIC_OPEN`**：
+
+| 事实 | 规范出处 | 含义 |
+| --- | --- | --- |
+| `AUDIO_START.reason` 是**交互模型**，不是「谁按了键」 | 4.3.1 | `0x00`=`MIC_OPEN` 触发、`0x01`=PTT、`0x03`=HTT |
+| `CAPS_RESP.interaction` = `0x00`/`0x01`/`0x03` | 3 | 本机样机协商值为 **`0x03`（HTT，按住说话）** |
+| HTT 下「按下即发 `AUDIO_START` 并开始推流，松键即 `AUDIO_STOP`」 | 4.5.3 | 远端**自己**开麦，宿主只需消费 |
+| HTT/PTT 进行中收到 `MIC_OPEN`，远端只应回 `MIC_OPEN_ERROR(0x0F80)`，**不得打断音频** | 4.7.5 | 宿主补发 `MIC_OPEN` 是非法打断 |
+| `AUDIO_START` 的 `stream id`：`reason=0x00` 时固定 `0x00`，否则远端自增 `0x01..0x80` | 4.3.1 | 日志里 `14`→`15` 逐次自增，`0` 是宿主请求流的专用值 |
+| `MIC_CLOSE`/`MIC_EXTEND` 的 `stream id`：`0x00`/`0x01..0x80`/`0xFF` 三类语义 | 4.4 | 关错了流只会被远端忽略 |
+
+即：远端**已经在推** `stream=14` 的 HTT 流，宿主 11ms 后补发的 `MIC_OPEN` 让它改成了
+`stream=0` 的宿主请求流，此后一个音频帧都不再来。规范假设远端会回 `MIC_OPEN_ERROR`
+且不打断，本机样机不遵守这一点，因此**只能由宿主不补发**。
+
+修复（私有包 `dbfdce9`）：
+
+1. HTT/PTT（`reason=0x01`/`0x03`）下**不补发 `MIC_OPEN`**；只有 On-request（`startSearch`，`opcode=0x08`）
+   与「点按保持持续流」两条路径才发 `MIC_OPEN`。
+2. `MIC_CLOSE` 只关闭**宿主打开且尚未关闭**的流，`stream id` 用 `0x00`；远端发起的流由远端
+   用 `AUDIO_STOP(0x02)` 自行停止，不再补发（多发的会被远端按 4.7.3 忽略）。
+3. 续流改用 `MIC_EXTEND` 并按流来源取 `stream id`（宿主 `0x00`，远端用远端分配值）。
+   规范 4.6.1 的「音频传输超时」建议 15 s~1 min，长按必须靠它顶回去。
+4. 补上此前完全缺失的证据链（见下节新增日志行）。
+
+> ⚠️ 修复前记录的 `audio_batches=0` 不能用来判断「远端没有推流」——当时 AB5E0003 上的通知
+> 既没有计数也没有日志。修复后的日志会直接给出 `ATVV AUDIO notify count=` 与 `total=`。
+
 ### 已确认（2026-09-15 01:29:01，本机真机）
 
 遥控器已配对至系统蓝牙的前提下启动本包，链路在 **0.2 秒内**自动打通，**不需要先断开系统蓝牙**：
@@ -74,7 +125,9 @@ BLE CHARACTERISTIC uuid=AB5E0004 props=read,notify
 ATVV CAPABILITIES requested attempt=1
 ATVV CONTROL source=control opcode=0x0b bytes=9
 ATVV CAPABILITIES version=0x0100 codec=2 frame=247
-ATVV READY version=0x0100 codec=2 frame=247 fallback=false
+ATVV CAPABILITIES DETAIL interaction=0x03 remote_mic=true raw=0b 01 00 02 ?? 00 f7 ?? ??
+ATVV READY version=0x0100 codec=2 interaction=0x03 remote_mic=true frame=247 fallback=false
+BLE LINK maxWriteNoResp=182 maxWriteResp=512
 CHROMECASE CONNECTION state=available model=chromecast-voice-remote sequence=3
 CHROMECASE LINK state=connected(displayName: "Chromecase 语音遥控器")
 CHROMECASE STATUS Chromecase 语音遥控器 已连接
@@ -85,8 +138,18 @@ CHROMECASE STATUS Chromecase 语音遥控器 已连接
 2. 该服务真实暴露**三个特征**，没有额外的按键通道——`…0002` write、`…0003` notify、
    `…0004` notify。语音键事件只可能从 `…0004` 来。
 
-这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 120 字节帧）
-在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、尾字与异常路径仍待执行。
+其中 `interaction=0x03` 与 `remote_mic=true` 是本型号语音链路的关键参数：它声明
+**HTT（按住说话）** 交互模型，即远端按下语音键后**自己**开麦并推流（规范 4.5.3）。
+`ATVV CAPABILITIES DETAIL` 的 `raw=` 是 9 字节原始 payload（`version(2)+codecs(1)+interaction(1)+frame(2)+extraConfig(1)+reserved(1)`）。
+上面这段样本里的 `raw=` / `ATVV CAPABILITIES DETAIL` / `BLE LINK` / `ATVV READY` 的新增字段都是本次修复**新加**的日志行，
+因此按新格式给出；其中 `??` 是历史日志未留原始字节的位置（已确认的取值是 `[1..3]=01 00 02`、`[4]=0x03`、`[5..6]=00 f7`），
+下一轮真机必须按原样留证，不得再靠协商值还原。
+`BLE LINK maxWriteNoResp` 是本链路单包真实容量（≈ATT_MTU−3），要与 `frame=` 对照着看：
+`frame=247` 大于该值时，远端「期望的包大小」在这条链路上无法整包发送。
+
+这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 247 字节帧、
+HTT 交互模型）在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、
+尾字与异常路径仍待执行。
 
 > 日志前缀分工：包内只写 `BLE …` 与 `ATVV …`；`CHROMECASE …` 全部由宿主写出。
 > 因此排查协议问题看 `BLE`/`ATVV`，排查宿主接线与语音会话看 `CHROMECASE`。
@@ -184,15 +247,38 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 预期：
 - 第 1 次按下即开始收音，且**不结束**；用户可见"正在收音"状态保持。
 - 第 2 次按下才结束。
-- 日志出现 `ATVV CONTROL source=control opcode=0x08`（远端请求开麦）或 `opcode=0x04`（远端直接起流），
+- 日志出现 `ATVV CONTROL source=control opcode=0x04 bytes=4`（本型号是 HTT：远端按下即自行起流），
   随后才是 `CHROMECASE VOICE phase=started`。
+- **按下期间不得出现 `ATVV MIC_OPEN written`**：本型号远端自己开麦，宿主补发会被样机当成新请求、
+  拆掉正在推送的流（规范 4.7.5 明令禁止，详见上文「语音流根因」）。
+- **必须有 `ATVV AUDIO notify count=` 持续增长**，这是「远端真的在推音频」的唯一直接证据。
+  只有它非零，才谈得上电平图波动。
+- 一次性点按（松键）后应看到 `ATVV MIC_OPEN written … bytes=0c00`（这一步才是宿主主动请求持续流），
+  以及后续的 `ATVV MIC_EXTEND stream=0`（每 4 秒一次，把远端的「音频传输超时」顶回去）。
 - 完整序列：`CHROMECASE VOICE phase=started` → `CHROMECASE VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECASE VOICE playback_stop phase=waiting_for_drain` → `CHROMECASE AUDIO playback_stop phase=completed result=drained`。
+
+⚠️ **点按必须短于 0.55 秒**：超过 0.55 秒按合同即为「按住（HOLD）」，无论当前是哪种模式都会在松键时结束收音
+（`completion=normal reason=hold_release`），那不是缺陷。要验证「按一次说话」的持续收音，请**快速点按**。
 
 **若按了键却连一条 `ATVV CONTROL` 都没有**，说明远端压根没发出控制帧——此时不要继续测语音，
 把该次日志（含 `BLE CHARACTERISTIC` 与 `BLE SYSTEM CONNECTED CANDIDATES` 两行）整段留证。
-反过来，有 `ATVV CONTROL` 但没有 `CHROMECASE VOICE`，是宿主接线问题，两者必须分清。
+反过来，有 `ATVV CONTROL` 但没有 `CHROMECASE VOICE`，是宿主接线问题；有 `CHROMECASE VOICE` 但
+`ATVV AUDIO notify` 从不出现，是远端没有推流（协议层问题）。三者必须分清。
 
 失败判定：第 1 次点按后立刻结束收音；或持续收音期间输入法识别被反复关闭（说明换流被当成了新的用户动作）。
+
+### 用例 2b：`frame=` 与链路容量的对照（本版新增的判断题）
+
+修复后，连接阶段会多出两行：`ATVV CAPABILITIES DETAIL … raw=…` 与 `BLE LINK maxWriteNoResp=…`。
+
+1. 记录 `frame=`（远端期望的音频包大小）与 `maxWriteNoResp=`（本链路单包真实容量 ≈ ATT_MTU−3）。
+
+预期：`frame` 大于 `maxWriteNoResp` 时属于**正常但需要留意**的情况——规范 4.2.2 说明 `frame` 只是
+「用于音频帧计数的期望值，可以是任意值」，本实现按 v1.0 连续字节流解码，不依赖整包到达。
+只要 `ATVV AUDIO notify` 非零且电平有波动，即视为通过。
+
+失败判定：`ATVV AUDIO notify` 一直为零（远端据此拒绝推流）——这时要把两行数值一并留证，
+它是把「远端不发」与「链路装不下」分开的唯一依据。
 
 ### 用例 3：hold 模式
 
@@ -295,12 +381,19 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 | 发现（扫描） | `BLE SCANNING`、`BLE CONNECTING source=scan` |
 | 发现（系统已连接） | `BLE SYSTEM CONNECTED ADOPTED model=`、`BLE CONNECTING source=connected_peripheral` |
 | 发现（扫描未匹配，诊断用） | `BLE DISCOVERED UNMATCHED name=` |
+| 链路单包容量（MTU 代理） | `BLE LINK maxWriteNoResp=` |
+| 能力协商原文 | `ATVV CAPABILITIES DETAIL interaction=`、`ATVV READY … interaction=… remote_mic=…` |
+| 远端是否在推音频（最关键） | `ATVV AUDIO notify count=… bytes=… total=… head=…`；被丢弃时为 `ATVV AUDIO dropped_phase=` |
 | 开始收音 | `CHROMECASE VOICE phase=started` |
 | 持续收音（不得有用户可见动作） | `CHROMECASE VOICE phase=sustain result=no_visible_change` |
 | 音频路由 | `CHROMECASE AUDIO routed source=chromecase_microphone route=virtual_audio device=MiRemoteV_2ch` |
 | 结束与排空 | `CHROMECASE VOICE playback_stop phase=waiting_for_drain`、`CHROMECASE AUDIO playback_stop phase=completed result=drained` |
 | 结束原因 | `completion=normal`（hold 松键 / 第二次点按）、`completion=forced`（断连、取消、宿主关闭） |
-| 包内协议 | `ATVV MIC_OPEN written`、`ATVV MIC_CLOSE written`、`ATVV STREAM START/STOP`、`VOICE INTENT` |
+| 包内协议 | `ATVV MIC_OPEN written`（含 `bytes=`）、`ATVV MIC_OPEN skipped reason=remote_initiated_stream`、`ATVV MIC_CLOSE written` / `skipped`、`ATVV MIC_EXTEND stream=`、`ATVV STREAM START/STOP`（含 `origin=`）、`VOICE INTENT` |
+
+判读要点：`ATVV MIC_OPEN written` 与 `ATVV AUDIO notify` 是两条互相独立的证据。
+前者只说明宿主发了命令，后者才是远端真的在推流。**只有出现 `ATVV MIC_OPEN skipped reason=remote_initiated_stream`
+且随后 `ATVV AUDIO notify count` 持续增长，才说明 HTT 路径修对了。**
 
 合同要求异常原因必须出现在日志里，因此断连原因以稳定 token 输出（如 `disconnected.adapterStopped`）。
 
