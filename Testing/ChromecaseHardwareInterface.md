@@ -38,6 +38,9 @@
 >   小米语音遥控器并在界面上显示「已连接」。旧包均已由构建脚本移入废纸篓。
 > - 当前版（01:46，`e38b8b14…`）：修掉**语音流零音频**——HTT 交互模型下宿主补发 `MIC_OPEN`
 >   被样机当成新请求，正在推送的流被拆掉。详见下文「语音流根因」。
+>   01:50 已启动该版并确认连接阶段能产出新增证据行（`ATVV CAPABILITIES DETAIL … raw=…`、
+>   `BLE LINK maxWriteNoResp=…`）；`ATVV AUDIO notify` 与 `ATVV MIC_OPEN skipped` 两行**需要按一次语音键**
+>   才会出现，属用例 2 的待验项。
 >
 > ⚠️ 因此 01:18 那一版记录在案的真机证据（`frame=120`）**实际是小米语音遥控器的协商结果**，
 > 不能当作 Chromecase 已验证。本型号的协商结果是 `frame=247`。
@@ -125,7 +128,7 @@ BLE CHARACTERISTIC uuid=AB5E0004 props=read,notify
 ATVV CAPABILITIES requested attempt=1
 ATVV CONTROL source=control opcode=0x0b bytes=9
 ATVV CAPABILITIES version=0x0100 codec=2 frame=247
-ATVV CAPABILITIES DETAIL interaction=0x03 remote_mic=true raw=0b 01 00 02 ?? 00 f7 ?? ??
+ATVV CAPABILITIES DETAIL interaction=0x03 remote_mic=true raw=0b0100020300f70100
 ATVV READY version=0x0100 codec=2 interaction=0x03 remote_mic=true frame=247 fallback=false
 BLE LINK maxWriteNoResp=182 maxWriteResp=512
 CHROMECASE CONNECTION state=available model=chromecast-voice-remote sequence=3
@@ -140,12 +143,16 @@ CHROMECASE STATUS Chromecase 语音遥控器 已连接
 
 其中 `interaction=0x03` 与 `remote_mic=true` 是本型号语音链路的关键参数：它声明
 **HTT（按住说话）** 交互模型，即远端按下语音键后**自己**开麦并推流（规范 4.5.3）。
-`ATVV CAPABILITIES DETAIL` 的 `raw=` 是 9 字节原始 payload（`version(2)+codecs(1)+interaction(1)+frame(2)+extraConfig(1)+reserved(1)`）。
-上面这段样本里的 `raw=` / `ATVV CAPABILITIES DETAIL` / `BLE LINK` / `ATVV READY` 的新增字段都是本次修复**新加**的日志行，
-因此按新格式给出；其中 `??` 是历史日志未留原始字节的位置（已确认的取值是 `[1..3]=01 00 02`、`[4]=0x03`、`[5..6]=00 f7`），
-下一轮真机必须按原样留证，不得再靠协商值还原。
+`ATVV CAPABILITIES DETAIL` 的 `raw=` 是 9 字节原始 payload
+（`opcode(1)+version(2)+codecs(1)+interaction(1)+frame(2)+extraConfig(1)+reserved(1)`），
+按日志原样（无空格）摘录。2026-09-15 01:50 实测值为 `0b0100020300f70100`，即
+`version=0x0100`、`codecs=0x02`、`interaction=0x03`、`frame=0x00f7=247`、`extraConfig=0x01`、`reserved=0x00`。
+**这一行必须整段原样留证**，不要拿「协商值」去还原原始字节。
+
 `BLE LINK maxWriteNoResp` 是本链路单包真实容量（≈ATT_MTU−3），要与 `frame=` 对照着看：
 `frame=247` 大于该值时，远端「期望的包大小」在这条链路上无法整包发送。
+但注意它**不是常数**：同一台样机 01:29 会话是 `182`、01:50 会话是 `244`（`frame` 始终 `247`），
+说明每次连接的 ATT MTU 协商结果会变，每轮都必须重读，不能沿用上一轮的数字。
 
 这证明：发现路径、BLE 连接、服务发现与 ATVV 能力协商（v1.0 / 16 kHz IMA ADPCM / 247 字节帧、
 HTT 交互模型）在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、
