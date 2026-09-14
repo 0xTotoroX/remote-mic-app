@@ -307,6 +307,8 @@ final class AppSettings: ObservableObject {
         static let voiceFnTapModeEnabled = "voiceFnTapModeEnabled"
         static let voiceKeyMode = "voiceKeyMode"
         static let siriRemoteScrollArrowReversed = "siriRemote.scrollArrowReversed"
+        static let chromecaseEnabled = "chromecase.enabled"
+        static let chromecaseVoiceMode = "chromecase.voiceMode"
         static let localTranscriptHistoryEnabled = "localTranscriptHistoryEnabled"
         static let localOriginalAudioRecordingEnabled = "localOriginalAudioRecordingEnabled"
         static let continuousRecordingPowerBindingBackup = "continuousRecordingPowerBindingBackup"
@@ -449,6 +451,20 @@ final class AppSettings: ObservableObject {
                 siriRemoteScrollArrowReversed,
                 forKey: Keys.siriRemoteScrollArrowReversed
             )
+        }
+    }
+
+    /// Chromecase 遥控器总开关。私有包缺失时该设置无副作用，设置页也不会展示。
+    @Published var chromecaseEnabled: Bool {
+        didSet {
+            defaults.set(chromecaseEnabled, forKey: Keys.chromecaseEnabled)
+        }
+    }
+
+    /// Chromecase 语音手势模式。默认 `toggle`（按一下开始、再按一下结束）。
+    @Published var chromecaseVoiceMode: ChromecaseVoiceMode {
+        didSet {
+            defaults.set(chromecaseVoiceMode.rawValue, forKey: Keys.chromecaseVoiceMode)
         }
     }
 
@@ -713,6 +729,13 @@ final class AppSettings: ObservableObject {
         siriRemoteScrollArrowReversed = defaults.bool(
             forKey: Keys.siriRemoteScrollArrowReversed
         )
+        // 首次运行默认开启：私有包只会被编入有该硬件的构建，让用户先找开关再测试没有意义。
+        chromecaseEnabled = defaults.object(forKey: Keys.chromecaseEnabled) == nil
+            ? true
+            : defaults.bool(forKey: Keys.chromecaseEnabled)
+        chromecaseVoiceMode = ChromecaseVoiceMode(
+            rawValue: defaults.string(forKey: Keys.chromecaseVoiceMode) ?? ""
+        ) ?? .productDefault
         localTranscriptHistoryEnabled = defaults.bool(
             forKey: Keys.localTranscriptHistoryEnabled
         )

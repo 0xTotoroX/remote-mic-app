@@ -855,6 +855,9 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         audioSettingsPanel
                         audioCompatibilityPanel
+                        #if SAYALL_CHROMECASE_ENABLED
+                        chromecasePanel
+                        #endif
                         phoneConnectionsPanel
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -862,6 +865,110 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if SAYALL_CHROMECASE_ENABLED
+    /// Chromecase（ATVV 语音遥控器）面板。私有包缺失时整块内容不会出现在界面上。
+    private var chromecasePanel: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("chromecase.section_title")
+                            .font(.headline)
+                        Text("chromecase.section_subtitle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 16)
+                    StatusPill(
+                        text: chromecaseStatusText,
+                        tint: chromecaseStatusTint
+                    )
+                }
+
+                if case .unsupported = model.chromecaseStatus {
+                    // 具体原因由包提供且只有中文，按「界面文案归宿主」的约定只写日志，界面用本地化文案。
+                    Text("chromecase.status.unsupported.detail")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Toggle(isOn: Binding(
+                    get: { settings.chromecaseEnabled },
+                    set: { newValue in
+                        settings.chromecaseEnabled = newValue
+                        model.applyHIDSettings()
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("chromecase.enabled.title")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("chromecase.enabled.detail")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                Divider()
+
+                Text("chromecase.mode.title")
+                    .font(.system(size: 13, weight: .medium))
+
+                Picker("", selection: Binding(
+                    get: { settings.chromecaseVoiceMode },
+                    set: { newValue in
+                        settings.chromecaseVoiceMode = newValue
+                        model.applyHIDSettings()
+                    }
+                )) {
+                    ForEach(ChromecaseVoiceMode.allCases) { mode in
+                        Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(!settings.chromecaseEnabled)
+
+                Text(LocalizedStringKey(settings.chromecaseVoiceMode.detailLocalizationKey))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button("chromecase.action.reconnect") {
+                        model.reconnectChromecase()
+                    }
+                    .compatibilityButtonStyle(.standard)
+                    .disabled(!settings.chromecaseEnabled)
+                }
+
+                Text("chromecase.help.plain")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var chromecaseStatusText: String {
+        if case .connected(let displayName) = model.chromecaseStatus {
+            return displayName
+        }
+        return localization.text(model.chromecaseStatus.localizationKey)
+    }
+
+    private var chromecaseStatusTint: Color {
+        switch model.chromecaseStatus {
+        case .connected: return .green
+        case .searching, .connecting: return .orange
+        case .unsupported, .unauthorized: return .red
+        case .disabled, .unavailable, .disconnected: return .secondary
+        }
+    }
+    #endif
 
     private var phoneConnectionsPanel: some View {
         GlassPanel {

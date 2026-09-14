@@ -652,6 +652,22 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private var appleRemoteAudioStopInterruptedBuffers = 0
     private var appleRemoteAudioStopInterruptedSamples = 0
     private var loggedAppleRemoteAudioDevice = false
+
+    // MARK: - Chromecase（可选私有包）
+
+    /// 私有包缺失时该实例内部全部退化为 no-op，宿主行为与未接入前完全一致。
+    private lazy var chromecaseFeature = ChromecaseFeatureIntegration()
+    /// 当前是否有活跃的 Chromecase 收音会话。
+    private var chromecaseVoiceActive = false
+    private var chromecaseVoiceStopping = false
+    private var chromecaseVoiceStopOperation: UInt64 = 0
+    private var chromecaseAudioBatchCount = 0
+    private var chromecaseAudioSampleCount = 0
+    private var chromecaseAudioEnqueueFailureCount = 0
+    private var loggedChromecaseAudioDevice = false
+    /// 设置页展示用。私有包缺失时恒为 `.unavailable`，界面据此隐藏整块内容。
+    @Published private(set) var chromecaseStatus: ChromecaseLinkStatus =
+        ChromecaseFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
     private var hidPowerKeySuppressed = false
     private var hidAllowedLocationIDs: Set<UInt32>?
     private var started = false
@@ -759,6 +775,30 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         siriRemoteFeature.onPowerSnapshot = { [weak self] snapshot in
             self?.handleAppleRemotePowerSnapshot(snapshot)
+        }
+#endif
+#if SAYALL_CHROMECASE_ENABLED
+        // 适配层固定使用主队列，因此这里必须**同步**调用：
+        // 包在发出 startRecognition 意图之后才写 MIC_OPEN，宿主必须在那之前备好音频出口，
+        // 否则最早几帧会落在还没有出口的时刻（首字丢失）。
+        chromecaseFeature.onStatusChange = { [weak self] status in
+            self?.handleChromecaseStatusChange(status)
+        }
+        chromecaseFeature.onVoiceStart = { [weak self] in
+            self?.beginChromecaseVoice()
+        }
+        chromecaseFeature.onVoiceSustain = { [weak self] in
+            // 远端换流不产生第二次用户可见动作，否则豆包侧识别会被立刻关掉。
+            self?.logChromecaseSustain()
+        }
+        chromecaseFeature.onVoiceStop = { [weak self] reason in
+            self?.endChromecaseVoice(reason: reason)
+        }
+        chromecaseFeature.onSamples = { [weak self] samples, _ in
+            self?.receiveChromecaseAudio(samples)
+        }
+        chromecaseFeature.onLog = { message in
+            AppLogger.shared.write(message)
         }
 #endif
         phoneRemoteServer.isIdentityTrusted = { [weak self] fingerprint in
@@ -1065,6 +1105,13 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         siriRemoteFeature.stop()
         siriRemoteCursorFeedback.stop()
         resetAllAppleRemoteState(reason: "app_stop")
+#endif
+#if SAYALL_CHROMECASE_ENABLED
+        chromecaseVoiceStopOperation &+= 1
+        chromecaseVoiceActive = false
+        chromecaseVoiceStopping = false
+        chromecaseFeature.stop()
+        chromecaseStatus = .disabled
 #endif
         bluetoothBridges.removeAll()
         bluetoothBridgeStates.removeAll()
@@ -2135,6 +2182,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             siriRemoteFeature.restart(customMappingEnabled: settings.customMappingEnabled)
         }
         refreshAppleRemoteHIDStatus()
+#endif
+#if SAYALL_CHROMECASE_ENABLED
+        syncChromecaseRuntimeState()
 #endif
         completeHIDMappingRecoveryIfNeeded()
     }
@@ -5453,6 +5503,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         guard !bluetoothVoiceActive,
               appleRemoteVoiceDevices.isEmpty,
               !appleRemoteVoiceStopping,
+              !chromecaseVoiceActive,
+              !chromecaseVoiceStopping,
               activeMobileVoiceSource == nil,
               isStreaming
         else { return }
@@ -5485,10 +5537,14 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if sessionID != nil {
             recordingAssetCoordinator.finish(endedAt: endedAt)
         }
+        // 会话因别的原因结束（用户关闭语音、切换输入源）时，必须让 Chromecase 包内的
+        // latched 状态同步清空；否则下一次点按会被误判成「结束」而不是「开始」。
+        chromecaseFeature.notifyHostVoiceSessionEnded()
     }
 
     private var currentVoiceUsageSource: UsageEventSource {
-        if bluetoothVoiceActive || !appleRemoteVoiceDevices.isEmpty || appleRemoteVoiceStopping {
+        if bluetoothVoiceActive || !appleRemoteVoiceDevices.isEmpty || appleRemoteVoiceStopping
+            || chromecaseVoiceActive || chromecaseVoiceStopping {
             return .bluetoothRemote
         }
         switch activeMobileVoiceSource {
@@ -5670,4 +5726,184 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         )
         return true
     }
+
+    // MARK: - Chromecase 硬件（可选私有包）
+    //
+    // 与 Siri Remote 链路完全隔离：独立 owner（`.chromecase`）、独立会话与排空操作号，
+    // 一方结束不会取消另一方。私有包缺失时本段全部不会被编译进来。
+
+    #if SAYALL_CHROMECASE_ENABLED
+    /// 设置页「重新连接」。
+    func reconnectChromecase() {
+        chromecaseFeature.reconnect()
+    }
+
+    /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
+    private func syncChromecaseRuntimeState() {
+        guard started else { return }
+        chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)
+        if settings.chromecaseEnabled {
+            chromecaseFeature.start()
+        } else {
+            chromecaseFeature.stop()
+            chromecaseStatus = .disabled
+        }
+    }
+
+    private func handleChromecaseStatusChange(_ status: ChromecaseLinkStatus) {
+        // 用户关闭开关后链路回调仍可能上报 disconnected，此时保持「未启用」。
+        if !settings.chromecaseEnabled, !status.isActive {
+            chromecaseStatus = .disabled
+            endChromecaseVoice(reason: .hostStop)
+            return
+        }
+        chromecaseStatus = status
+        AppLogger.shared.write("CHROMECASE LINK state=\(status)")
+        switch status {
+        case .disconnected, .unauthorized, .unsupported:
+            // 链路在可用之后丢失，或型号被判为不支持：必须结束活动收音并释放 owner。
+            endChromecaseVoice(reason: .cancelled("link_unavailable"))
+        default:
+            break
+        }
+    }
+
+    private func logChromecaseSustain() {
+        AppLogger.shared.write(
+            "CHROMECASE VOICE phase=sustain result=no_visible_change"
+        )
+    }
+
+    private func beginChromecaseVoice() {
+        guard ChromecaseFeatureIntegration.isPackageIncluded, settings.chromecaseEnabled else {
+            return
+        }
+        if chromecaseVoiceStopping {
+            // 快速再按：取消排空并续用同一会话，避免尾音被截断。
+            chromecaseVoiceStopOperation &+= 1
+            chromecaseVoiceStopping = false
+            chromecaseVoiceActive = true
+            audioOutput.cancelPendingDrain()
+            AppLogger.shared.write(
+                "CHROMECASE VOICE phase=resumed result=continued_session reason=rapid_repress"
+            )
+            return
+        }
+        guard !chromecaseVoiceActive else { return }
+        chromecaseAudioBatchCount = 0
+        chromecaseAudioSampleCount = 0
+        chromecaseAudioEnqueueFailureCount = 0
+        loggedChromecaseAudioDevice = false
+        guard ensureVirtualAudioOutputReady(reason: "chromecase_voice_start") else {
+            AppLogger.shared.write(
+                "CHROMECASE VOICE phase=failed result=audio_output_unavailable route=MiRemoteV_2ch"
+            )
+            return
+        }
+        guard updateVoiceKeyState(
+            streaming: true,
+            forceSoftware: true,
+            owner: .chromecase
+        ) else {
+            AppLogger.shared.write(
+                "CHROMECASE VOICE phase=failed result=voice_key_press_failed"
+            )
+            return
+        }
+        chromecaseVoiceActive = true
+        beginVoiceSessionIfNeeded()
+        AppLogger.shared.write(
+            "CHROMECASE VOICE phase=started result=triggered " +
+                "audio_source=chromecase_microphone route=MiRemoteV_2ch " +
+                "mode=\(settings.chromecaseVoiceMode.rawValue)"
+        )
+    }
+
+    private func endChromecaseVoice(reason: ChromecaseVoiceEndReason) {
+        guard chromecaseVoiceActive else { return }
+        chromecaseVoiceActive = false
+        if chromecaseVoiceStopping {
+            AppLogger.shared.write(
+                "CHROMECASE VOICE phase=completed result=deferred_session_cancelled " +
+                    "reason=\(reason.logToken)"
+            )
+            return
+        }
+        chromecaseVoiceStopping = true
+        chromecaseVoiceStopOperation &+= 1
+        let stopOperation = chromecaseVoiceStopOperation
+        let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
+        let outputBeforeStop = audioOutput.diagnosticSnapshot(
+            deliveryGeneration: deliveryGeneration
+        )
+        AppLogger.shared.write(
+            "CHROMECASE VOICE playback_stop phase=waiting_for_drain reason=\(reason.logToken) " +
+                "completion=\(reason.isNormal ? "normal" : "forced") " +
+                "pending_buffers=\(outputBeforeStop.pendingBuffers) " +
+                "pending_samples=\(outputBeforeStop.pendingSamples)"
+        )
+        // 尾包已经在 MIC_CLOSE 之前全部投递完毕，因此这里只做自然排空，绝不 flush。
+        audioOutput.endSessionAfterDraining(maximumDelay: nil) { [weak self] in
+            self?.completeChromecaseVoiceStop(
+                operation: stopOperation,
+                deliveryGeneration: deliveryGeneration,
+                reason: reason
+            )
+        }
+    }
+
+    private func completeChromecaseVoiceStop(
+        operation: UInt64,
+        deliveryGeneration: Int,
+        reason: ChromecaseVoiceEndReason
+    ) {
+        guard chromecaseVoiceStopping, chromecaseVoiceStopOperation == operation else { return }
+        let released = releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+        chromecaseVoiceStopping = false
+        endVoiceSessionIfNeeded(flushAudio: false)
+        let outputAfterStop = audioOutput.diagnosticSnapshot(
+            deliveryGeneration: deliveryGeneration
+        )
+        AppLogger.shared.write(
+            "CHROMECASE AUDIO playback_stop phase=completed result=drained " +
+                "completion=\(reason.isNormal ? "normal" : "forced") reason=\(reason.logToken) " +
+                "pending_before_buffers=\(outputAfterStop.pendingBuffers) " +
+                "played_buffers=\(outputAfterStop.counters.playedBuffers) " +
+                "interrupted_buffers=\(outputAfterStop.counters.interruptedBuffers)"
+        )
+        AppLogger.shared.write(
+            "CHROMECASE VOICE phase=completed result=\(released ? "stopped" : "release_failed") " +
+                "reason=\(reason.logToken) audio_batches=\(chromecaseAudioBatchCount) " +
+                "audio_samples=\(chromecaseAudioSampleCount) " +
+                "enqueue_failures=\(chromecaseAudioEnqueueFailureCount) route=MiRemoteV_2ch"
+        )
+    }
+
+    private func receiveChromecaseAudio(_ samples: [Int16]) {
+        guard chromecaseVoiceActive || chromecaseVoiceStopping, !samples.isEmpty else { return }
+        recordingAssetCoordinator.append(samples: samples)
+        publishCurrentVoiceSampleReceiptIfNeeded(sampleCount: samples.count)
+        let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
+        let accepted = audioOutput.enqueue(
+            samples: samples,
+            deliveryGeneration: deliveryGeneration
+        )
+        recordVoiceAudioReceipt(samples: samples, route: .virtualAudioDirect)
+        recordVoiceAudioEnqueueOutcome(
+            accepted: accepted,
+            deliveryGeneration: deliveryGeneration
+        )
+        chromecaseAudioBatchCount += 1
+        chromecaseAudioSampleCount += samples.count
+        if !accepted { chromecaseAudioEnqueueFailureCount += 1 }
+        if !loggedChromecaseAudioDevice {
+            loggedChromecaseAudioDevice = true
+            AppLogger.shared.write(
+                "CHROMECASE AUDIO routed source=chromecase_microphone " +
+                    "route=virtual_audio device=MiRemoteV_2ch accepted=\(accepted) " +
+                    "first_batch_samples=\(samples.count)"
+            )
+        }
+    }
+    #endif
 }
