@@ -23,7 +23,7 @@
 
 | 位置或用途 | 命名方式 | 示例 |
 | --- | --- | --- |
-| 仓库固定入口 | 使用生态约定或项目既有的大写名称 | `README.md`、`AGENTS.md`、`TODO.md`、`LICENSE.md` |
+| 仓库固定入口 | 使用生态约定或项目既有的大写名称 | `README.md`、`AGENTS.md`、`DOCUMENTATION.md`、`TODO.md`、`LICENSE.md` |
 | 根目录全仓规范、流程或技术参考 | `UPPER_SNAKE_CASE.md` | `BRANCH_MANAGEMENT.md`、`FILE_NAMING.md`、`LOGGING.md`、`RELEASING.md`、`TECHNICAL.md` |
 | 功能目录 | 小写 `kebab-case` | `feature/first-run-onboarding/`、`feature/local-transcript-history/` |
 | 功能目录入口 | 固定为 `README.md` | `feature/first-run-onboarding/README.md` |
