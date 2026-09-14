@@ -57,7 +57,7 @@
 
 - `AGENTS.md`、`BRANCH_MANAGEMENT.md`、`FEATURE_DEVELOPMENT.md` 和 `.github/PULL_REQUEST_TEMPLATE.md` 属于核心治理规范；`scripts/verify-repository-governance.sh` 与 `.github/workflows/repository-governance.yml` 属于治理守护实现。除恢复缺失规则、修复明确治理缺陷或同步专项规范边界外，产品功能、Bug、发布流程和普通测试手册 PR 不得修改这些文件。
 - 核心治理文件确需修改时，必须使用独立 PR；PR 描述必须列出变更前后规则、影响范围、迁移方式和明确不做事项，并在相关提交信息中包含 `[governance-change]`。
-- 核心治理 PR 必须保持 Draft，直到仓库维护者或用户逐项确认规范覆盖对照、无功能文件改动和静态检查结果；自动化 Agent 不得自行将其标记 Ready、批准或合入。该人工确认不能由 required check、零审批 ruleset 或机器人 bypass 替代。
+- 核心治理 PR 必须保持 Draft，直到仓库维护者或用户逐项确认规范覆盖对照、无功能文件改动和静态检查结果；确认后必须在 PR 正文记录明确的批准来源，才能转为 Ready 并按正常门禁合入。自动化 Agent 不得在缺少该确认时自行将其标记 Ready、批准或合入。该人工确认不能由 required check、零审批 ruleset 或机器人 bypass 替代。
 - 发布流程可以更新 `RELEASING.md` 及其直接测试手册，但不得借发布流程重构删除或弱化核心治理规则；发布 PR 若同时修改核心治理文件，必须通过治理变更门禁并单独说明原因。
 - `scripts/verify-repository-governance.sh` 和 `.github/workflows/repository-governance.yml` 是本文件关键规则的静态守护检查。`Repository governance` 必须配置为 `main` 的 Required status check；规则增删必须与该检查、PR 模板和迁移说明在同一个独立治理 PR 中同步更新，不得只改规范文本而不更新守护检查。治理 PR 可以同时修改 `DOCUMENTATION.md`、README 的稳定文档入口和与本次规则直接冲突的专项规范、产品合同或测试合同，但必须使用静态 allowlist，且不得包含 `Sources/`、`Tests/` 下的可执行功能测试代码、产品配置、依赖或发布资产。
 

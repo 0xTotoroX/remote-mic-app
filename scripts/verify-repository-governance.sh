@@ -44,7 +44,8 @@ require_text BRANCH_MANAGEMENT.md '任何单个待提交文件超过 5 MB 时'
 require_text BRANCH_MANAGEMENT.md '相关提交信息中包含 `[governance-change]`'
 require_text BRANCH_MANAGEMENT.md '`Repository governance` 必须配置为 `main` 的 Required status check'
 require_text BRANCH_MANAGEMENT.md 'PR 默认使用 GitHub 的普通 Merge（保留合并提交）'
-require_text BRANCH_MANAGEMENT.md '自动化 Agent 不得自行将其标记 Ready、批准或合入'
+require_text BRANCH_MANAGEMENT.md '确认后必须在 PR 正文记录明确的批准来源'
+require_text BRANCH_MANAGEMENT.md '自动化 Agent 不得在缺少该确认时自行将其标记 Ready、批准或合入'
 require_heading AGENTS.md '## 规范层级与文档边界'
 require_heading AGENTS.md '## 任务范围与等待治理'
 require_text AGENTS.md '分析、审查、诊断或状态查询默认只做只读检查并给出证据和结论'
@@ -92,8 +93,6 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
     if [[ "${GITHUB_EVENT_NAME:-}" == pull_request ]]; then
       pr_body="${GOVERNANCE_PR_BODY:-}"
       [[ -n "$pr_body" ]] || fail 'governance PR body is empty'
-      [[ "${GOVERNANCE_PR_IS_DRAFT:-}" == true ]] || \
-        fail 'governance PR must remain Draft until explicit maintainer or user review'
       for required_pr_text in \
         '## 规范变更对照' \
         '变更前规则：' \
@@ -104,7 +103,8 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
         '明确不做事项：' \
         '功能源码、可执行功能测试代码、产品配置或依赖是否变化：' \
         '文档导航及 README 稳定入口是否同步：' \
-        '核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：'; do
+        '核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：' \
+        '转为 Ready 或合入的明确批准来源：'; do
         grep -Fq -- "$required_pr_text" <<< "$pr_body" || \
           fail "governance PR body is missing: $required_pr_text"
       done
@@ -115,6 +115,16 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
         fail 'governance PR must explicitly confirm the documentation entry points are synchronized'
       grep -Eq -- '^核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：是[[:space:]]*$' <<< "$pr_body" || \
         fail 'governance PR must remain Draft for explicit maintainer or user review'
+
+      if [[ "${GOVERNANCE_PR_IS_DRAFT:-}" != true ]]; then
+        approval_source="$(sed -n 's/^转为 Ready 或合入的明确批准来源：[[:space:]]*//p' <<< "$pr_body" | tail -n 1)"
+        [[ -n "$approval_source" ]] || \
+          fail 'ready governance PR is missing an explicit approval source'
+        [[ "$approval_source" != N/A ]] || \
+          fail 'ready governance PR cannot use N/A as its approval source'
+        [[ "$approval_source" != '确认渠道、日期与明确指令' ]] || \
+          fail 'ready governance PR must replace the approval-source placeholder'
+      fi
     fi
 
     while IFS= read -r path; do
