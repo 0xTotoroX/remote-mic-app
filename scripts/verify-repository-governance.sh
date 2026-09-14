@@ -23,6 +23,7 @@ require_text() {
 
 [[ -f BRANCH_MANAGEMENT.md ]] || fail 'BRANCH_MANAGEMENT.md is missing'
 [[ -f AGENTS.md ]] || fail 'AGENTS.md is missing'
+[[ -f DOCUMENTATION.md ]] || fail 'DOCUMENTATION.md is missing'
 [[ -f RELEASING.md ]] || fail 'RELEASING.md is missing'
 
 for heading in \
@@ -51,7 +52,23 @@ require_text AGENTS.md '当前任务之外的优化、重构、规范调整或�
 require_text AGENTS.md '禁止使用无法可靠收回控制权的交互式 CI 等待命令'
 require_text RELEASING.md '只记录普通用户能够看到或受益的功能、体验、兼容性和可靠性变化。'
 require_text RELEASING.md '已撤回、删除或从未公开的版本不进入 App 内版本历史。'
-require_heading README.md '## 规范文件索引'
+require_heading DOCUMENTATION.md '# 项目文档导航'
+require_text DOCUMENTATION.md "rg --files -g '*.md' | sort"
+require_text AGENTS.md '[`DOCUMENTATION.md`](DOCUMENTATION.md)'
+require_text README.md '[项目文档导航](DOCUMENTATION.md)'
+[[ "$(grep -Foc -- '[项目文档导航](DOCUMENTATION.md)' README.md)" == 1 ]] || \
+  fail 'README must contain exactly one stable documentation navigation link'
+if grep -Fq -- '## 规范文件索引' README.md; then
+  fail 'README must not embed the full specification index'
+fi
+while IFS= read -r document_path; do
+  [[ -n "$document_path" ]] || continue
+  require_text DOCUMENTATION.md "$document_path"
+done < <(find feature -type f \( -name PRODUCT_SPEC.md -o -name 'platform-*.md' \) -print | sort)
+while IFS= read -r document_path; do
+  [[ -n "$document_path" ]] || continue
+  require_text DOCUMENTATION.md "$document_path"
+done < <(find Testing -maxdepth 1 -type f -name '*Contract.md' -print | sort)
 
 base_ref="${1:-}"
 if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 ]]; then
@@ -86,7 +103,7 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
         '迁移方式：' \
         '明确不做事项：' \
         '功能源码、可执行功能测试代码、产品配置或依赖是否变化：' \
-        'README 规范索引是否同步：' \
+        '文档导航及 README 稳定入口是否同步：' \
         '核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：'; do
         grep -Fq -- "$required_pr_text" <<< "$pr_body" || \
           fail "governance PR body is missing: $required_pr_text"
@@ -94,8 +111,8 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
 
       grep -Eq -- '^功能源码、可执行功能测试代码、产品配置或依赖是否变化：否[[:space:]]*$' <<< "$pr_body" || \
         fail 'governance PR must explicitly confirm that product files do not change'
-      grep -Eq -- '^README 规范索引是否同步：是[[:space:]]*$' <<< "$pr_body" || \
-        fail 'governance PR must explicitly confirm the README specification index is synchronized'
+      grep -Eq -- '^文档导航及 README 稳定入口是否同步：是[[:space:]]*$' <<< "$pr_body" || \
+        fail 'governance PR must explicitly confirm the documentation entry points are synchronized'
       grep -Eq -- '^核心治理 PR 是否保持 Draft 等待维护者或用户逐项确认：是[[:space:]]*$' <<< "$pr_body" || \
         fail 'governance PR must remain Draft for explicit maintainer or user review'
     fi
@@ -103,7 +120,7 @@ if [[ -n "$base_ref" && "$base_ref" != 0000000000000000000000000000000000000000 
     while IFS= read -r path; do
       [[ -n "$path" ]] || continue
       case "$path" in
-        AGENTS.md|BRANCH_MANAGEMENT.md|FEATURE_DEVELOPMENT.md|FILE_NAMING.md|LOGGING.md|RELEASING.md|README.md|design-qa.md|design-qa.en.md|Bugs/README.md|Testing/*.md|feature/*/PRODUCT_SPEC.md|feature/*/platform-*.md|feature/*/testing.md|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/repository-governance.yml|scripts/verify-repository-governance.sh)
+        AGENTS.md|BRANCH_MANAGEMENT.md|DOCUMENTATION.md|FEATURE_DEVELOPMENT.md|FILE_NAMING.md|LOGGING.md|RELEASING.md|README.md|design-qa.md|design-qa.en.md|Bugs/README.md|Testing/*.md|feature/*/PRODUCT_SPEC.md|feature/*/platform-*.md|feature/*/testing.md|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/repository-governance.yml|scripts/verify-repository-governance.sh)
           ;;
         *)
           scope_violation=true

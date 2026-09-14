@@ -7,7 +7,7 @@
 - 功能目录中的 `PRODUCT_SPEC.md` 定义该功能的产品行为，平台附件只能映射平台差异。跨硬件共同语义由 [`Testing/HardwareCompatibilityContract.md`](Testing/HardwareCompatibilityContract.md) 和 [`Testing/HardwareVoiceAudioContract.md`](Testing/HardwareVoiceAudioContract.md) 定义：前者拥有设备身份、能力、按键与触摸等一致性边界，后者拥有语音音频低延迟、完整性和会话隔离边界；它们不能覆盖具体功能流程，也不能被普通测试手册降低。
 - 除上述两份跨平台合同外，根目录 `Testing/` 手册只定义验证方法和通过/失败证据，不得反向新增、覆盖或降低产品规则。`TODO.md`、`Bugs/`、功能 README、`feature/*/development.md`、`feature/*/testing.md` 以及带日期、版本号或候选分支的段落属于计划或历史证据，不是现行规范；它们与权威规范冲突时必须更新或明确标记为历史，不得据此改变产品行为。
 - 同一层级出现冲突时，先核对 Git 历史、当前实现和适用范围，采用更新且更合理的规则，并在同一个独立治理 PR 中同步所有受影响文档和静态检查。不得仅以“更严格”为由长期保留无法同时执行的互斥规则。
-- 所有现行规范入口统一列在 [`README.md`](README.md) 底部。英文翻译不得独立产生规则；与中文权威文本不一致时以中文为准，并必须修正翻译。
+- 开发者和自动化 Agent 的稳定文档入口是 [`DOCUMENTATION.md`](DOCUMENTATION.md)；面向普通用户的 [`README.md`](README.md) 底部只保留一个指向该入口的链接，不展开规范和测试清单。英文翻译不得独立产生规则；与中文权威文本不一致时以中文为准，并必须修正翻译。
 
 ## 新功能开发规范
 
