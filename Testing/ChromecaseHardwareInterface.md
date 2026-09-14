@@ -13,14 +13,14 @@
 
 | 项目 | 值 |
 | --- | --- |
-| App | `/Users/andy/MySrc/remote-mic-app/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 00:18（CST） |
+| App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
+| 构建时间 | 2026-09-15 00:25（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（174） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | `41073ea` 加当前未提交的 Chromecase 接线改动 |
-| 私有包基线 | `SayAllChromecase` @ `873a97e`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
-| 主程序 SHA-256 | `25f9a2b5ed79fc8bdf43f2f48b2935541466c9019d8321ab992630e108a40767` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware` @ `3dd3779`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `9af7633`（`sayall-private-platform/packages/audio-input-kit/chromecase`） |
+| 主程序 SHA-256 | `bc0dac5691ff6e759686cfbe175277f20362369673a1e83ebed4de5a758181cf` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
@@ -32,7 +32,7 @@
 ### 重新构建
 
 ```sh
-cd /Users/andy/MySrc/remote-mic-app
+cd /Users/andy/MySrc/remote-mic-app-chromecase
 SAYALL_CHROMECASE_PACKAGE_PATH=/Users/andy/MySrc/sayall-private-platform/packages/audio-input-kit/chromecase \
 CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   ./scripts/build-app.sh
@@ -158,15 +158,22 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 10：打包可选性回归
 
+**注意：这一步会在同一个 `dist/` 里重建 App，覆盖上面的真机测试包。请在跑完用例 1–9 之后再执行；**
+或者先 `cp -R dist/SayAll.app /tmp/SayAll-chromecase.app` 留一份。
+
 ```sh
-cd /Users/andy/MySrc/remote-mic-app
-./scripts/build-app.sh
+cd /Users/andy/MySrc/remote-mic-app-chromecase
+env -u SAYALL_CHROMECASE_PACKAGE_PATH -u SAYALL_ENABLE_SIRI_REMOTE \
+  SAYALL_CHROMECASE_PACKAGE_PATH= ./scripts/build-app.sh
 plutil -extract SayAllChromecaseIncluded raw -o - "dist/SayAll.app/Contents/Info.plist"
 ```
 
-预期：在未设置 `SAYALL_CHROMECASE_PACKAGE_PATH` 的机器上构建成功，输出 `false`，App 正常启动且设置页不出现 Chromecase 面板。
+预期：未提供私有包时构建仍然成功，输出 `false`，App 正常启动，设置页连接页不出现 Chromecase 面板。
 
-失败判定：构建报错，或缺少私有包时启动异常。
+若要同时确认"没有私有仓库权限"的场景，应在一个只有公开仓库访问权限的账号或干净机器上完成
+resolve、测试与 Release 构建；本机已持有私有包路径，不能替代该验证。
+
+失败判定：构建报错，或缺少私有包时启动异常、设置页出现空面板。
 
 ## 日志关键行
 
