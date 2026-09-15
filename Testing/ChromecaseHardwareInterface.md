@@ -14,13 +14,13 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 09:15（CST） |
+| 构建时间 | 2026-09-15 13:11（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
-| 版本 | 1.9.21（176） |
+| 版本 | 1.9.21（177） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，含 `3dd3779`、`1ea5061`、`2f0afe1`、`bcddb8a`、`c30fb78`、`30983a7`、`6434f4c`、`cd4f325`、`eacdbd6`、`923c3f0`；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `52e88ce`（`sayall-private-platform/packages/audio-input-kit/chromecase`）。宿主与私有包都从 `git worktree` 的**已提交副本**构建（见「重新构建」里的并行改包隔离）——两边的工作区当时都在被另一个会话修改（宿主新增 `onControlEvent`/`setControlMappingEnabled`/`isHIDRemotePresent` 等尚不存在的调用，私有包新增 `ChromecaseResources.swift`、`ChromecaseRemoteHIDBridge.swift`、`ChromecaseMappingPage.swift`、`Resources/` 与 `Package.swift` 的 `resources:`），那些按键映射相关的开发内容**不在本包里**。 |
-| 主程序 SHA-256 | `7ad2c4aa5057ea79f595517d19f8f9e1bda8289c94d185ad2ad6caa2c1fc7c83` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，HEAD `61beea2`；并行会话的按键映射工作项已并入 `191a743`；基线 `origin/main` `41073ea`） |
+| 私有包基线 | `SayAllChromecase` @ `d25948c`（连按防抖），从 `git worktree` 的**已提交副本**构建。该副本同时包含并行会话已提交的按键页/HID 通道（`909fe85`）。 |
+| 主程序 SHA-256 | `401e1166d6dd1e91470fc3699fd95b276c47f7a4bff445353d01d73a463ef702` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
@@ -58,6 +58,13 @@
 >   （`accepted=true`），松键 latch 后宿主流接上，`audio_batches=121 audio_samples=59774
 >   enqueue_failures=0`。11:29 那轮的「无波动」根因是**音频出口引擎未运行**（与 AirPods 相关，
 >   见「根因 #4」），与协议无关。同时证实**远端 HTT 流按人声门控（VAD）**，按下即说即有帧。
+> - 用户随后反馈 AirPods 连接下也正常——根因 #4 的 AirPods 相关性**被削弱**，更可能是
+>   「启动竞态：engine 在 startup 时没起来且后续 REBIND 无法自愈」，待复现定位。
+> - 12:52 反馈「短按快放无法触发电平图」：根因 #5——latch 后 1ms 到达的第 2 按被 toggle
+>   语义当成关闭。修复为连按防抖（0.6 秒窗口，见「根因 #5」，私有包 `d25948c`）。
+> - 当前版 `401e1166…`（13:11，1.9.21 build 177）：含连按防抖。13:15 启动（pid 71447），
+>   AirPods 连接下 startup 引擎即 `engine_running=true`，链路 `frame=247`。
+>   **待真机确认：快速连按两下后说话，电平图应波动（第 1 按开启不被第 2 按关闭）。**
 >   删除 `holdThreshold` 与 `lastGestureWasHold`；日志改为
 >   `ATVV VOICE gesture duration_ms=… action=latch|stop|none mode=…`。详见「根因 #3」。
 >
@@ -286,6 +293,29 @@ audio_samples=59774 enqueue_failures=0`，且**按下后 230ms 内即有首帧**
 由此得出验收判据：**判定「没波动」之前，先确认「按键期间/松键后有没有说话」**——
 按下期间说话则远端流应有帧，松键后说话则宿主流应有帧；两者都没说话时零帧是正常的。
 
+### 根因 #5：快速连按被 toggle 语义当成「开了立刻关」（2026-09-15 12:52 真机）
+
+用户反馈「短按快放，无法触发豆包电平图」，并确认操作是**短按一下没反应、又按了一下**。
+日志（04:51:46，generation=3 会话）：
+
+```
+04:51:46.381  按下 #1（stream=5）
+04:51:47.708  松键 #1 → action=latch → MIC_OPEN written   ← 会话已开启
+04:51:47.709  按下 #2（stream=6）                          ← 距 latch 仅 1ms
+04:51:49.014  松键 #2 → action=stop                        ← 第 2 按把会话关了
+04:51:49.027  completed audio_batches=0
+```
+
+toggle 语义本身没错（第 1 按开、第 2 按关），但**快速连按的两下之间不存在有意的「开了立刻关」**——
+真想关的人至少会先说一句话。第 1 按其实已经成功开启持续收音，用户「没反应」是因为第 2 按紧跟着
+把它关了。修复（私有包 `d25948c`）：**连按防抖**——
+
+- `latchGraceInterval = 0.6` 秒：latch 之后 0.6 秒内到来的再次按下，整个手势标记
+  `withinLatchGrace`，其松键**不执行 stop**、收音保持；
+- 窗口判定用**按下时刻**与 latch 时刻的间隔（松键可能延迟很久才来）；
+- 日志 `action=` 新增 `debounced`，区分「连按被防抖」与「无动作」；
+- 窗口外的第 2 次按下（≥0.6 秒）仍正常关闭，防抖不得扩大成「一段时间内无法关闭」。
+
 ### 已确认（2026-09-15 01:29:01，本机真机）
 
 遥控器已配对至系统蓝牙的前提下启动本包，链路在 **0.2 秒内**自动打通，**不需要先断开系统蓝牙**：
@@ -451,7 +481,8 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 - 日志出现 `ATVV CONTROL source=control opcode=0x04 bytes=4`（本型号是 HTT：远端按下即自行起流），
   随后才是 `CHROMECASE VOICE phase=started`。
 - **每次松键都必须有** `ATVV VOICE gesture duration_ms=… action=…`：第 1 次松键应为 `action=latch`、
-  第 2 次为 `action=stop`。**时长只作记录，不参与判定**（本版已彻底移除时长判定，详见「根因 #3」）。
+  第 2 次为 `action=stop`；`action=debounced` 表示 latch 后 0.6 秒内的连按被忽略（收音保持，
+  详见「根因 #5」）。**时长只作记录，不参与判定**（本版已彻底移除时长判定，详见「根因 #3」）。
 - **按下期间不得出现 `ATVV MIC_OPEN written`**：本型号远端自己开麦，宿主补发会被样机当成新请求、
   拆掉正在推送的流（规范 4.7.5 明令禁止，详见上文「语音流根因」）。
 - **按下期间 `ATVV AUDIO notify count=` 可能非零也可能为零**：远端 HTT 流是否推音频取决于按住
@@ -637,7 +668,7 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 | 音频路由 | `CHROMECASE AUDIO routed source=chromecase_microphone route=virtual_audio device=MiRemoteV_2ch` |
 | 结束与排空 | `CHROMECASE VOICE playback_stop phase=waiting_for_drain`、`CHROMECASE AUDIO playback_stop phase=completed result=drained` |
 | 结束原因 | `completion=normal`（hold 松键 / 第二次点按）、`completion=forced`（断连、取消、宿主关闭） |
-| 手势动作（最关键） | `ATVV VOICE gesture duration_ms=… action=latch|stop|none mode=…` |
+| 手势动作（最关键） | `ATVV VOICE gesture duration_ms=… action=latch\|stop\|debounced\|none mode=…` |
 | 包内协议 | `ATVV MIC_OPEN written`（含 `bytes=`）、`ATVV MIC_OPEN skipped reason=remote_initiated_stream`、`ATVV MIC_CLOSE written` / `skipped`、`ATVV MIC_EXTEND stream=`、`ATVV STREAM START/STOP`（含 `origin=`）、`VOICE INTENT` |
 
 判读要点：`ATVV VOICE gesture` 的 `action=` 决定后面一切——`latch` = 本次松键开始了持续收音
