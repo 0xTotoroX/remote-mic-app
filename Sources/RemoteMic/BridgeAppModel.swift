@@ -451,6 +451,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     @Published private(set) var isVoiceTriggerEnabled = false
     @Published private(set) var activeRemoteButtons = Set<RemoteButton>()
     @Published private(set) var activeAppleRemoteControlIDs = Set<String>()
+    /// Chromecase 画布的活动按键（控制 ID）。与苹果遥控器链路完全隔离，互不清除。
+    @Published private(set) var activeChromecaseControlIDs = Set<String>()
     @Published private(set) var lastRemoteButtonPress: RemoteButton?
     @Published private(set) var connectedRemoteProfileIDs = Set<UUID>()
     @Published private(set) var remoteBatteryLevels: [UUID: Int] = [:]
@@ -668,6 +670,17 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 设置页展示用。私有包缺失时恒为 `.unavailable`，界面据此隐藏整块内容。
     @Published private(set) var chromecaseStatus: ChromecaseLinkStatus =
         ChromecaseFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
+    /// 当前是否有活跃的 Chromecase 收音会话（按键页用它点亮固定的语音键卡片）。
+    @Published private(set) var isChromecaseVoiceActive = false
+    /// Chromecase 遥控器对应的设备档案。按型号识别，不存设备标识。
+    private var chromecaseProfileID: UUID?
+    /// 已连接的 Chromecase 档案，用于设备选择器与「已连接」状态。
+    private var connectedChromecaseProfileIDs = Set<UUID>()
+    /// 当前按下的 Chromecase 按键（画布控制 ID）。
+    private var chromecasePressedControls = Set<String>()
+    private var chromecaseButtonGestureRecognizer = RemoteButtonGestureRecognizer()
+    private var chromecaseDoubleClickTimers: [RemoteButton: DispatchSourceTimer] = [:]
+    private var chromecaseLongPressTimers: [RemoteButton: DispatchSourceTimer] = [:]
     private var hidPowerKeySuppressed = false
     private var hidAllowedLocationIDs: Set<UInt32>?
     private var started = false
@@ -796,6 +809,12 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         chromecaseFeature.onSamples = { [weak self] samples, _ in
             self?.receiveChromecaseAudio(samples)
+        }
+        chromecaseFeature.onControlEvent = { [weak self] event in
+            self?.handleChromecaseControlEvent(event)
+        }
+        chromecaseFeature.onHIDPresenceChange = { [weak self] isPresent in
+            AppLogger.shared.write("CHROMECASE HID DEVICE present=\(isPresent)")
         }
         chromecaseFeature.onLog = { message in
             AppLogger.shared.write(message)
@@ -1109,7 +1128,11 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 #if SAYALL_CHROMECASE_ENABLED
         chromecaseVoiceStopOperation &+= 1
         chromecaseVoiceActive = false
+        isChromecaseVoiceActive = false
         chromecaseVoiceStopping = false
+        // 按键通道必须先清干净再停 HID：否则残留的「按住」状态会拖到下一次启动。
+        resetChromecaseButtonState(reason: "app_stop")
+        connectedChromecaseProfileIDs.removeAll()
         chromecaseFeature.stop()
         chromecaseStatus = .disabled
 #endif
@@ -2284,7 +2307,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         if settings.customMappingEnabled { _ = hidEventSuppressor.start() }
         for profile in settings.remoteDeviceProfiles {
-            guard !profile.model.isAppleSiriRemote,
+            // 苹果遥控器与 Chromecase 都由各自的私有链路驱动；它们的档案不能被小米 HID
+            // 发现链路当成候选，否则会给一个不存在的小米设备建监视器。
+            guard !profile.model.usesPrivateAdapter,
                   let fingerprint = profile.hidFingerprint
             else { continue }
             let monitor = makeHIDMonitor(
@@ -2668,17 +2693,22 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             else { return nil }
             return profileID
         })
-        connectedRemoteProfileIDs = connectedBluetoothProfileIDs.union(
-            connectedAppleRemoteProfileIDs
-        )
+        connectedRemoteProfileIDs = connectedBluetoothProfileIDs
+            .union(connectedAppleRemoteProfileIDs)
+            .union(connectedChromecaseProfileIDs)
         let bluetoothIsReady = allStates.contains { state in
             if case .ready = state { return true }
             return false
         }
-        isConnected = bluetoothIsReady || !connectedAppleRemoteProfileIDs.isEmpty
+        isConnected = bluetoothIsReady
+            || !connectedAppleRemoteProfileIDs.isEmpty
+            || !connectedChromecaseProfileIDs.isEmpty
         if let selectedRemoteProfileID = settings.selectedRemoteProfileID,
            connectedAppleRemoteProfileIDs.contains(selectedRemoteProfileID) {
             connectionStatus = LocalizedMessage("connection.status.apple_remote_connected")
+        } else if let selectedRemoteProfileID = settings.selectedRemoteProfileID,
+                  connectedChromecaseProfileIDs.contains(selectedRemoteProfileID) {
+            connectionStatus = LocalizedMessage("connection.status.chromecase_connected")
         } else if let selectedBluetoothBridge,
            let state = bluetoothBridgeStates[ObjectIdentifier(selectedBluetoothBridge)] {
             connectionStatus = state.message
@@ -2689,6 +2719,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             connectionStatus = ready.message
         } else if !connectedAppleRemoteProfileIDs.isEmpty {
             connectionStatus = LocalizedMessage("connection.status.apple_remote_connected")
+        } else if !connectedChromecaseProfileIDs.isEmpty {
+            connectionStatus = LocalizedMessage("connection.status.chromecase_connected")
         } else if let state = allStates.first {
             connectionStatus = state.message
         } else {
@@ -5750,6 +5782,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private func syncChromecaseRuntimeState() {
         guard started else { return }
         chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)
+        // 映射总开关决定 HID 通道是否独占设备：它必须即时生效，否则界面上「已开启映射」
+        // 而系统仍在消费这些按键，用户会以为映射没生效。
+        chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)
         if settings.chromecaseEnabled {
             chromecaseFeature.start()
         } else {
@@ -5763,10 +5798,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if !settings.chromecaseEnabled, !status.isActive {
             chromecaseStatus = .disabled
             endChromecaseVoice(reason: .hostStop)
+            disconnectChromecaseProfile(reason: "feature_disabled")
             return
         }
         chromecaseStatus = status
         AppLogger.shared.write("CHROMECASE LINK state=\(status)")
+        if status.isConnected {
+            // 与苹果遥控器一致：链路一可用就注册档案，按键页的设备选择器里立刻能选到它。
+            _ = ensureChromecaseProfile()
+            AppLogger.shared.write("CHROMECASE REMOTE phase=completed result=profile_ready")
+        } else {
+            disconnectChromecaseProfile(reason: "link_unavailable")
+        }
         switch status {
         case .disconnected, .unauthorized, .unsupported:
             // 链路在可用之后丢失，或型号被判为不支持：必须结束活动收音并释放 owner。
@@ -5774,6 +5817,14 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         default:
             break
         }
+    }
+
+    /// 链路不再可用时把档案从「已连接」里摘掉，但保留档案本身（用户的映射不能跟着丢）。
+    private func disconnectChromecaseProfile(reason: String) {
+        guard !connectedChromecaseProfileIDs.isEmpty else { return }
+        connectedChromecaseProfileIDs.removeAll()
+        resetChromecaseButtonState(reason: reason)
+        refreshBluetoothPresentation()
     }
 
     private func logChromecaseSustain() {
@@ -5791,6 +5842,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             chromecaseVoiceStopOperation &+= 1
             chromecaseVoiceStopping = false
             chromecaseVoiceActive = true
+            isChromecaseVoiceActive = true
             audioOutput.cancelPendingDrain()
             AppLogger.shared.write(
                 "CHROMECASE VOICE phase=resumed result=continued_session reason=rapid_repress"
@@ -5819,6 +5871,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             return
         }
         chromecaseVoiceActive = true
+        isChromecaseVoiceActive = true
         beginVoiceSessionIfNeeded()
         AppLogger.shared.write(
             "CHROMECASE VOICE phase=started result=triggered " +
@@ -5830,6 +5883,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private func endChromecaseVoice(reason: ChromecaseVoiceEndReason) {
         guard chromecaseVoiceActive else { return }
         chromecaseVoiceActive = false
+        isChromecaseVoiceActive = false
         if chromecaseVoiceStopping {
             AppLogger.shared.write(
                 "CHROMECASE VOICE phase=completed result=deferred_session_cancelled " +
@@ -5885,6 +5939,251 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 "audio_samples=\(chromecaseAudioSampleCount) " +
                 "enqueue_failures=\(chromecaseAudioEnqueueFailureCount) route=MiRemoteV_2ch"
         )
+    }
+
+    // MARK: - Chromecase 普通按键（键位映射）
+    //
+    // 与语音链路是两条独立的通道：语音走 ATVV，按键走 HID。两者各自维护自己的活动状态，
+    // 一方结束不会清除另一方的状态。
+
+    private func handleChromecaseControlEvent(_ event: ChromecaseRemoteControlEvent) {
+        let controlID = event.control.canvasControlID
+
+        guard event.phase != .cancelled else {
+            resetChromecaseButtonState(reason: event.cancellationReason ?? "unknown")
+            return
+        }
+        guard settings.chromecaseEnabled else {
+            if event.phase == .began {
+                AppLogger.shared.write(
+                    "CHROMECASE ACTION phase=completed result=feature_disabled control=\(controlID)"
+                )
+            }
+            return
+        }
+        guard settings.customMappingEnabled else {
+            // 与小米/苹果遥控器同一规则：映射总开关关闭时按键由系统消费，宿主不接管。
+            if event.phase == .began {
+                AppLogger.shared.write(
+                    "CHROMECASE ACTION phase=completed result=system_managed control=\(controlID)"
+                )
+            }
+            return
+        }
+
+        let profileID = ensureChromecaseProfile()
+        let isPress = event.phase == .began
+        if isPress {
+            selectRemoteProfile(profileID)
+            chromecasePressedControls.insert(controlID)
+            settings.recordButtonPress(
+                control: .remoteButton(event.control.remoteButton),
+                source: .bluetoothRemote
+            )
+            lastRemoteButtonPress = event.control.remoteButton
+        } else {
+            chromecasePressedControls.remove(controlID)
+        }
+        refreshChromecaseActiveControlIDs()
+
+        handleChromecaseButton(
+            event.control.remoteButton,
+            phase: isPress ? .press : .release,
+            profileID: profileID
+        )
+    }
+
+    /// 注册并连接 Chromecase 设备档案。档案按型号识别，不存设备标识。
+    private func ensureChromecaseProfile() -> UUID {
+        if let existing = chromecaseProfileID { return existing }
+        let profileID = settings.registerChromecaseRemote()
+        chromecaseProfileID = profileID
+        connectedChromecaseProfileIDs.insert(profileID)
+        refreshBluetoothPresentation()
+        return profileID
+    }
+
+    private func refreshChromecaseActiveControlIDs() {
+        activeChromecaseControlIDs = chromecasePressedControls
+    }
+
+    private func resetChromecaseButtonState(reason: String) {
+        guard !chromecasePressedControls.isEmpty
+            || !chromecaseDoubleClickTimers.isEmpty
+            || !chromecaseLongPressTimers.isEmpty
+        else { return }
+        chromecasePressedControls.removeAll()
+        chromecaseDoubleClickTimers.values.forEach { $0.cancel() }
+        chromecaseDoubleClickTimers.removeAll()
+        chromecaseLongPressTimers.values.forEach { $0.cancel() }
+        chromecaseLongPressTimers.removeAll()
+        chromecaseButtonGestureRecognizer.reset()
+        activeChromecaseControlIDs = []
+        AppLogger.shared.write(
+            "CHROMECASE CONTROL phase=completed result=state_reset reason=\(reason)"
+        )
+    }
+
+    private func handleChromecaseButton(
+        _ button: RemoteButton,
+        phase: RemoteButtonPhase,
+        profileID: UUID
+    ) {
+        if macroFeature.isEditorActive {
+            if phase == .press { macroFeature.noteButtonInteraction(button: button) }
+            AppLogger.shared.write(
+                "CHROMECASE BUTTON button=\(button.rawValue) phase=\(phase.rawValue) " +
+                    "path=binding_editor_capture"
+            )
+            return
+        }
+
+        let recognizesDoubleClick = settings.configuredAction(
+            for: button,
+            trigger: .doubleClick,
+            profileID: profileID
+        ).action != .disabled || macroFeature.hasActiveBinding(
+            profileID: profileID,
+            button: button,
+            trigger: .doubleClick
+        )
+        let recognizesLongPress = settings.configuredAction(
+            for: button,
+            trigger: .longPress,
+            profileID: profileID
+        ).action != .disabled || macroFeature.hasActiveBinding(
+            profileID: profileID,
+            button: button,
+            trigger: .longPress
+        )
+
+        if phase == .press,
+           !recognizesDoubleClick,
+           !recognizesLongPress,
+           !chromecaseButtonGestureRecognizer.isTracking(button) {
+            _ = performChromecaseConfiguredAction(
+                for: button,
+                trigger: .singleClick,
+                profileID: profileID
+            )
+            return
+        }
+
+        let commands = chromecaseButtonGestureRecognizer.handle(
+            phase,
+            button: button,
+            recognizesDoubleClick: recognizesDoubleClick,
+            recognizesLongPress: recognizesLongPress
+        )
+        _ = processChromecaseGestureCommands(commands, profileID: profileID)
+    }
+
+    private func processChromecaseGestureCommands(
+        _ commands: [RemoteButtonGestureRecognizer.Command],
+        profileID: UUID
+    ) -> Bool {
+        for command in commands {
+            switch command {
+            case let .scheduleDoubleClickTimeout(button):
+                scheduleChromecaseDoubleClickTimeout(for: button, profileID: profileID)
+            case let .cancelDoubleClickTimeout(button):
+                chromecaseDoubleClickTimers.removeValue(forKey: button)?.cancel()
+            case let .scheduleLongPressTimeout(button):
+                scheduleChromecaseLongPressTimeout(for: button, profileID: profileID)
+            case let .cancelLongPressTimeout(button):
+                chromecaseLongPressTimers.removeValue(forKey: button)?.cancel()
+            case let .trigger(button, trigger):
+                guard performChromecaseConfiguredAction(
+                    for: button,
+                    trigger: trigger,
+                    profileID: profileID
+                ) else { return false }
+            }
+        }
+        return true
+    }
+
+    private func scheduleChromecaseDoubleClickTimeout(
+        for button: RemoteButton,
+        profileID: UUID
+    ) {
+        chromecaseDoubleClickTimers.removeValue(forKey: button)?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + .milliseconds(300))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            chromecaseDoubleClickTimers.removeValue(forKey: button)
+            let commands = chromecaseButtonGestureRecognizer.doubleClickTimedOut(button)
+            _ = processChromecaseGestureCommands(commands, profileID: profileID)
+        }
+        chromecaseDoubleClickTimers[button] = timer
+        timer.resume()
+    }
+
+    private func scheduleChromecaseLongPressTimeout(
+        for button: RemoteButton,
+        profileID: UUID
+    ) {
+        chromecaseLongPressTimers.removeValue(forKey: button)?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + .milliseconds(550))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            chromecaseLongPressTimers.removeValue(forKey: button)
+            let commands = chromecaseButtonGestureRecognizer.longPressTimedOut(button)
+            _ = processChromecaseGestureCommands(commands, profileID: profileID)
+        }
+        chromecaseLongPressTimers[button] = timer
+        timer.resume()
+    }
+
+    private func performChromecaseConfiguredAction(
+        for button: RemoteButton,
+        trigger: ButtonTrigger,
+        profileID: UUID
+    ) -> Bool {
+        if performButtonProfileBoundAction(
+            profileID: profileID,
+            button: button,
+            trigger: trigger
+        ) {
+            AppLogger.shared.write(
+                "CHROMECASE ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                    "action=private_feature"
+            )
+            return true
+        }
+        let configured = settings.configuredAction(for: button, trigger: trigger, profileID: profileID)
+        if configured.action.isAppInternal {
+            let handled = performInternalAction(configured.action)
+            AppLogger.shared.write(
+                "CHROMECASE ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                    "action=\(configured.action.rawValue) handled=\(handled)"
+            )
+            return handled
+        }
+        guard KeyboardInjector.isAccessibilityTrusted else {
+            _ = KeyboardInjector.requestAccessibilityAccess()
+            AppLogger.shared.write(
+                "CHROMECASE ACTION phase=failed result=accessibility_required " +
+                    "button=\(button.rawValue) trigger=\(trigger.rawValue)"
+            )
+            return false
+        }
+        guard performExternalConfiguredAction(configured) else {
+            AppLogger.shared.write(
+                "CHROMECASE ACTION phase=failed result=submission_failed " +
+                    "button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                    "action=\(configured.action.rawValue)"
+            )
+            return false
+        }
+        AppLogger.shared.write(
+            "CHROMECASE ACTION phase=completed result=dispatched " +
+                "button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                "action=\(configured.action.rawValue)"
+        )
+        return true
     }
 
     private func receiveChromecaseAudio(_ samples: [Int16]) {

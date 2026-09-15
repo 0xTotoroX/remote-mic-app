@@ -57,6 +57,7 @@
 "connection.status.initializing_voice" = "Initializing the voice service";
 "connection.status.connected_to_device" = "Xiaomi remote connected";
 "connection.status.apple_remote_connected" = "Apple Remote connected";
+"connection.status.chromecase_connected" = "Chromecase remote connected";
 "connection.status.reconnecting" = "Connection lost; preparing to reconnect";
 "connection.error.voice_service_timeout" = "Remote voice service initialization timed out";
 "connection.error.invalid_voice_response" = "The remote returned an invalid voice capability response";
@@ -97,6 +98,10 @@
 "remote.button.full.tv" = "TV button";
 "remote.button.full.play_pause" = "Play/Pause button";
 "remote.button.full.mute" = "Mute button";
+"remote.button.full.youtube" = "YouTube button";
+"remote.button.full.netflix" = "NETFLIX button";
+"remote.button.full.input" = "Input button";
+"remote.button.short.input" = "Input";
 "siri_remote.mapping.voice.title" = "Siri voice button";
 "siri_remote.mapping.voice.fixed" = "Fixed voice input";
 "siri_remote.mapping.voice.detail" = "Hold the Siri button to stream audio from the remote microphone. It is not configurable as a normal button.";
@@ -124,6 +129,10 @@
 "chromecase.mode.hold.detail" = "Listen while the voice key is held, stop on release. Matches the Siri Remote feel.";
 "chromecase.action.reconnect" = "Reconnect";
 "chromecase.help.plain" = "Audio is captured by the remote microphone and routed to MiRemoteV 2ch; the computer microphone is not used.";
+"chromecase.mapping.voice.title" = "Voice key";
+"chromecase.mapping.voice.fixed" = "Fixed voice input";
+"chromecase.mapping.voice.detail" = "Use the voice key to dictate through the remote microphone; it cannot be remapped as a regular button.";
+"chromecase.mapping.photo.missing" = "Chromecase remote image unavailable";
 "keyboard.key_code" = "Key %1$@";
 "keyboard.key.return" = "Return";
 "keyboard.key.tab" = "Tab";
@@ -232,6 +241,7 @@
 "remote.device.model.rc003" = "Xiaomi Bluetooth Remote 2 Pro";
 "remote.device.model.apple_siri_remote_a2854" = "Apple Remote Type-C";
 "remote.device.model.apple_siri_remote_a2540" = "Apple Remote Lightning";
+"remote.device.model.chromecase_voice_remote" = "Chromecase Remote";
 "remote.device.model.unknown" = "Xiaomi Remote";
 "remote.device.custom_name" = "Custom name";
 "remote.device.bind_button" = "Bind physical buttons";

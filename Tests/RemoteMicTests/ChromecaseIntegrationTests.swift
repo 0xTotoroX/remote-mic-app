@@ -87,14 +87,19 @@ struct ChromecaseIntegrationTests {
         integration.onVoiceStop = { _ in eventCount += 1 }
         integration.onSamples = { _, _ in eventCount += 1 }
         integration.onStatusChange = { _ in eventCount += 1 }
+        integration.onControlEvent = { _ in eventCount += 1 }
+        integration.onHIDPresenceChange = { _ in eventCount += 1 }
 
         integration.start()
         integration.setVoiceMode(.hold)
+        integration.setControlMappingEnabled(true)
+        integration.setControlMappingEnabled(false)
         integration.reconnect()
         integration.notifyHostVoiceSessionEnded()
         integration.stop()
 
         #expect(eventCount == 0)
+        #expect(!integration.isHIDRemotePresent)
     }
 
     // MARK: - 打包与接线契约
@@ -148,6 +153,117 @@ struct ChromecaseIntegrationTests {
         // 模式推送必须真的发生在运行入口里，而不是只写偏好。
         #expect(modelSource.contains("chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)"))
         #expect(modelSource.contains("func applyChromecaseSettings()"))
+    }
+
+    // MARK: - 按键页契约
+
+    @Test func everyChromecaseControlMapsToItsOwnRemoteButton() {
+        let expected: [ChromecaseRemoteControl: RemoteButton] = [
+            .power: .power,
+            .up: .up,
+            .down: .down,
+            .left: .left,
+            .right: .right,
+            .select: .ok,
+            .back: .back,
+            .home: .home,
+            .mute: .mute,
+            .youtube: .youtube,
+            .netflix: .netflix,
+            .input: .input,
+            .volumeUp: .volumeUp,
+            .volumeDown: .volumeDown,
+        ]
+        #expect(ChromecaseRemoteControl.allCases.count == expected.count)
+        for control in ChromecaseRemoteControl.allCases {
+            #expect(control.remoteButton == expected[control])
+        }
+        // 一控一键：两个控件映射到同一个键位会让其中一个的配置永远读不到。
+        #expect(Set(ChromecaseRemoteControl.allCases.map(\.remoteButton)).count == expected.count)
+    }
+
+    @Test func chromecaseOnlyButtonsStayOutOfTheXiaomiLayout() {
+        for button in [RemoteButton.youtube, .netflix, .input] {
+            #expect(!RemoteButton.xiaomiCases.contains(button))
+        }
+        // 小米画布的锚点表按 xiaomiCases 生成，新增的键位不得改变它的规模。
+        #expect(RemoteButton.xiaomiCases.count == 12)
+    }
+
+    @Test func chromecaseModelIsRoutedToItsOwnAdapter() {
+        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.isChromecaseRemote)
+        #expect(!XiaomiRemoteModel.chromecaseVoiceRemote.isAppleSiriRemote)
+        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.usesPrivateAdapter)
+        #expect(XiaomiRemoteModel.appleSiriRemoteA2854.usesPrivateAdapter)
+        #expect(!XiaomiRemoteModel.rc003.usesPrivateAdapter)
+        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.stableHardwareModelID == "chromecast-voice-remote")
+        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.localizationKey.hasPrefix("remote.device.model."))
+    }
+
+    /// 该型号不宣告电池能力，界面不得显示一个永远是「未知」的电量位。
+    @Test func chromecaseProfileNeverShowsBattery() {
+        #expect(!RemoteBatteryPresentationPolicy.shouldShowBattery(
+            model: .chromecaseVoiceRemote,
+            level: 42,
+            powerState: .onBattery
+        ))
+        #expect(!RemoteBatteryPresentationPolicy.shouldShowBattery(
+            model: .chromecaseVoiceRemote,
+            level: nil,
+            powerState: .charging
+        ))
+        #expect(RemoteBatteryPresentationPolicy.shouldShowBattery(
+            model: .rc003,
+            level: 42,
+            powerState: .onBattery
+        ))
+    }
+
+    /// Chromecase 设备档案按型号识别并且可重复注册，否则每次连接都会新建一个档案、丢掉映射。
+    @Test func chromecaseProfileRegistrationIsIdempotent() throws {
+        let suiteName = "RemoteMicTests.ChromecaseProfile.(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+
+        let first = settings.registerChromecaseRemote()
+        let second = settings.registerChromecaseRemote()
+
+        #expect(first == second)
+        #expect(settings.selectedRemoteProfile?.model == .chromecaseVoiceRemote)
+        let profile = try #require(settings.remoteDeviceProfiles.first(where: { $0.id == first }))
+        #expect(profile.model == .chromecaseVoiceRemote)
+        #expect(settings.remoteDeviceProfiles.filter { $0.model == .chromecaseVoiceRemote }.count == 1)
+    }
+
+    // MARK: - 按键页接线契约
+
+    @Test func mappingPageRoutesChromecaseToItsOwnCanvas() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let settingsView = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
+            encoding: .utf8
+        )
+        let modelSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/BridgeAppModel.swift"),
+            encoding: .utf8
+        )
+
+        // 按键页必须按型号分派到 Chromecase 画布，且整块受私有包门禁保护。
+        #expect(settingsView.contains("chromecaseMappingPage"))
+        #expect(settingsView.contains("canImport(SayAllChromecase)"))
+        // 映射总开关必须真的推给 HID 通道：独占与否决定了按键是被宿主还是被系统消费。
+        #expect(modelSource.contains(
+            "chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)"
+        ))
+        // 私有包档案不得被小米 HID 发现链路当成候选。
+        #expect(modelSource.contains("!profile.model.usesPrivateAdapter"))
+        // 按键事件必须接到执行链路上，而不是只更新界面状态。
+        #expect(modelSource.contains("handleChromecaseControlEvent"))
+        #expect(modelSource.contains("performChromecaseConfiguredAction"))
     }
 
     @Test func chromecaseNeverCapturesFromTheComputerMicrophone() throws {

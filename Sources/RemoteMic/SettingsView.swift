@@ -4,6 +4,9 @@ import Combine
 import CoreBluetooth
 import SayAllMacRemoteCore
 import SayAllMacRemoteUI
+#if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+import SayAllChromecase
+#endif
 #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
 import SayAllSiriRemote
 #endif
@@ -111,6 +114,8 @@ enum RemoteBatteryPresentationPolicy {
         level: Int?,
         powerState: RemotePowerState?
     ) -> Bool {
+        // Chromecase 不宣告电池能力，界面不得显示永远是「未知」的电量位。
+        guard !model.isChromecaseRemote else { return false }
         guard model.isAppleSiriRemote else { return true }
         guard level == nil else { return true }
         return powerState == .charging || powerState == .externalPower
@@ -386,6 +391,7 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSection
     @State private var selectedRemoteButton: RemoteButton = .ok
     @State private var selectedSiriRemoteControlID = "select"
+    @State private var selectedChromecaseControlID = "select"
     @State private var isMappingSelectionLocked = true
     @State private var selectedStatisticsDate: Date?
     @State private var mappingEditingTarget: ShortcutEditingTarget?
@@ -788,6 +794,12 @@ struct SettingsView: View {
             if settings.selectedRemoteProfile?.model.isAppleSiriRemote == true {
                 #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
                 siriRemoteMappingPage
+                #else
+                mappingPage
+                #endif
+            } else if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
+                #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+                chromecaseMappingPage
                 #else
                 mappingPage
                 #endif
@@ -1203,6 +1215,13 @@ struct SettingsView: View {
             RC003Photo()
                 .frame(width: 82, height: 166)
             #endif
+        } else if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
+            #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+            ChromecaseConnectionPhoto()
+            #else
+            RC003Photo()
+                .frame(width: 82, height: 166)
+            #endif
         } else {
             RC003Photo()
                 .frame(width: 82, height: 166)
@@ -1400,6 +1419,59 @@ struct SettingsView: View {
         case "volume_down": return .volumeDown
         default: return nil
         }
+    }
+    #endif
+
+    #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+    /// Chromecase 按键页。
+    ///
+    /// 与小米/苹果按键页共用同一个页面框架（页头、设备选择器、动作编辑器、页脚），
+    /// 只有中间的遥控器画布由私有包提供，因此三种遥控器的页面功能完全一致。
+    private var chromecaseMappingPage: some View {
+        hardwareMappingPage {
+            ChromecaseMappingCanvas(
+                selectedControlID: $selectedChromecaseControlID,
+                activeControlIDs: model.activeChromecaseControlIDs,
+                voiceActive: model.isChromecaseVoiceActive,
+                labels: ChromecaseMappingCanvas.Labels(
+                    voiceTitle: localization.text("chromecase.mapping.voice.title"),
+                    voiceFixed: localization.text("chromecase.mapping.voice.fixed"),
+                    voiceDetail: localization.text("chromecase.mapping.voice.detail"),
+                    missingPhoto: localization.text("chromecase.mapping.photo.missing")
+                ),
+                buttonTitle: { controlID in
+                    chromecaseButton(for: controlID)?.displayName(using: localization)
+                        ?? controlID
+                },
+                triggerTitle: { triggerID in
+                    ButtonTrigger(rawValue: triggerID)?.displayName(using: localization)
+                        ?? triggerID
+                },
+                actionSummary: { controlID, triggerID in
+                    guard let button = chromecaseButton(for: controlID),
+                          let trigger = ButtonTrigger(rawValue: triggerID)
+                    else { return localization.text("action.disabled") }
+                    return mappingActionSummary(for: button, trigger: trigger)
+                },
+                onEdit: { controlID, triggerID in
+                    guard let button = chromecaseButton(for: controlID),
+                          let trigger = ButtonTrigger(rawValue: triggerID)
+                    else { return }
+                    selectedChromecaseControlID = controlID
+                    selectedRemoteButton = button
+                    mappingActionFilter = .all
+                    isPresetApplicationActionsExpanded = false
+                    mappingEditingTarget = ShortcutEditingTarget(
+                        button: button,
+                        trigger: trigger
+                    )
+                }
+            )
+        }
+    }
+
+    private func chromecaseButton(for controlID: String) -> RemoteButton? {
+        ChromecaseRemoteControl(rawValue: controlID)?.remoteButton
     }
     #endif
 

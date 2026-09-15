@@ -168,6 +168,23 @@ if [[ -n "$SAYALL_CHROMECASE_PACKAGE_PATH" ]]; then
   SAYALL_CHROMECASE_PACKAGE_PATH="${SAYALL_CHROMECASE_PACKAGE_PATH:A}"
   export SAYALL_CHROMECASE_PACKAGE_PATH
   SAYALL_CHROMECASE_INCLUDED=true
+  # 按键页的遥控器素材随私有包打进 App，因此解析器必须优先读 App 的 Resources；
+  # 退回 SwiftPM 内嵌的构建机路径会让发布包找不到图片，界面只会显示占位块。
+  CHROMECASE_SOURCE_ROOT="$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecase"
+  CHROMECASE_RESOURCE_RESOLVER="$CHROMECASE_SOURCE_ROOT/ChromecaseResources.swift"
+  if [[ ! -f "$CHROMECASE_RESOURCE_RESOLVER" ]] || \
+      ! /usr/bin/grep -Eq 'Bundle\.main\.resourceURL' "$CHROMECASE_RESOURCE_RESOLVER"; then
+    print -u2 "Chromecase resource resolver is missing or does not prefer the packaged App resource bundle"
+    exit 1
+  fi
+  # 只检查画布源文件；解析器本身必须保留 `Bundle.module` 作为兜底分支。
+  for chromecase_source in \
+    ChromecaseMappingPage.swift; do
+    if /usr/bin/grep -Eq 'Bundle\.module' "$CHROMECASE_SOURCE_ROOT/$chromecase_source"; then
+      print -u2 "Chromecase source bypasses the packaged resource resolver: $chromecase_source"
+      exit 1
+    fi
+  done
 else
   SAYALL_CHROMECASE_INCLUDED=false
 fi
@@ -339,6 +356,9 @@ APPLE_REMOTE_HCI_SERVICE_PATH="$BIN_DIR/AppleRemoteHCIService"
 if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
   SIRI_REMOTE_RESOURCE_BUNDLE="$BIN_DIR/SayAllSiriRemote_SayAllSiriRemote.bundle"
 fi
+if [[ "$SAYALL_CHROMECASE_INCLUDED" == "true" ]]; then
+  CHROMECASE_RESOURCE_BUNDLE="$BIN_DIR/SayAllChromecase_SayAllChromecase.bundle"
+fi
 
 case "$APP_DIR" in
   "$ROOT/dist/"*.app|"$ROOT/dist/intel/"*.app) ;;
@@ -381,6 +401,14 @@ if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
   fi
   ditto --norsrc --noextattr --noqtn --noacl \
     "$SIRI_REMOTE_RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/SayAllSiriRemote_SayAllSiriRemote.bundle"
+fi
+if [[ "$SAYALL_CHROMECASE_INCLUDED" == "true" ]]; then
+  if [[ ! -d "$CHROMECASE_RESOURCE_BUNDLE" ]]; then
+    print -u2 "SayAllChromecase resource bundle is missing from the Swift build"
+    exit 1
+  fi
+  ditto --norsrc --noextattr --noqtn --noacl \
+    "$CHROMECASE_RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/SayAllChromecase_SayAllChromecase.bundle"
 fi
 ditto --norsrc --noextattr --noqtn --noacl \
   "$ROOT/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"

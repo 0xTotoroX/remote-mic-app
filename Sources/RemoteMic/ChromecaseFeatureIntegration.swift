@@ -94,6 +94,65 @@ enum ChromecaseVoiceEndReason: Equatable {
     }
 }
 
+/// Chromecase 遥控器的普通按键。
+///
+/// 与私有包的 `ChromecaseControl` 一一对应（rawValue 相同），宿主用 `…Remote…` 前缀命名是为了
+/// 与 `import SayAllChromecase` 之后的同名类型区分：本仓库里苹果遥控器链路也是同样的命名约定。
+///
+/// 语音键不在这里：该遥控器的语音键不产生可靠 HID 边沿，语音由 ATVV 控制流驱动。
+enum ChromecaseRemoteControl: String, CaseIterable, Equatable {
+    case power
+    case up
+    case down
+    case left
+    case right
+    case select
+    case back
+    case home
+    case mute
+    case youtube
+    case netflix
+    case input
+    case volumeUp = "volume_up"
+    case volumeDown = "volume_down"
+
+    /// 该按键对应的宿主映射键位。私有画布的控制 ID 与本类型的 rawValue 同值。
+    var remoteButton: RemoteButton {
+        switch self {
+        case .power: return .power
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .select: return .ok
+        case .back: return .back
+        case .home: return .home
+        case .mute: return .mute
+        case .youtube: return .youtube
+        case .netflix: return .netflix
+        case .input: return .input
+        case .volumeUp: return .volumeUp
+        case .volumeDown: return .volumeDown
+        }
+    }
+
+    /// 画布用的控制 ID。与 `ChromecaseMappingCanvas.configurableControlIDs` 同值。
+    var canvasControlID: String { rawValue }
+}
+
+enum ChromecaseRemoteControlPhase: String, Equatable {
+    case began
+    case ended
+    case cancelled
+}
+
+struct ChromecaseRemoteControlEvent: Equatable {
+    let control: ChromecaseRemoteControl
+    let phase: ChromecaseRemoteControlPhase
+    let sequence: Int
+    let cancellationReason: String?
+}
+
 /// Chromecase 硬件接入层。
 ///
 /// 隔离保证：本类型与 Siri Remote 接入层互不引用；私有包缺失时全部方法退化为 no-op，
@@ -116,6 +175,10 @@ final class ChromecaseFeatureIntegration {
     var onVoiceSustain: (() -> Void)?
     /// 遥控器请求结束收音。宿主结束会话并自然排空尾音，不得 flush。
     var onVoiceStop: ((ChromecaseVoiceEndReason) -> Void)?
+    /// 普通按键的按下/抬起边沿。宿主据此执行键位映射。
+    var onControlEvent: ((ChromecaseRemoteControlEvent) -> Void)?
+    /// HID 侧是否看到了本遥控器（用于诊断，不参与业务判断）。
+    var onHIDPresenceChange: ((Bool) -> Void)?
     /// 解码后的 16 kHz 单声道 PCM。
     var onSamples: (([Int16], Int) -> Void)?
     /// 诊断日志。
@@ -144,6 +207,17 @@ final class ChromecaseFeatureIntegration {
         feature.onLog = { [weak self] message in
             self?.onLog?(message)
         }
+        feature.onControlEvent = { [weak self] event in
+            guard let control = ChromecaseRemoteControl(rawValue: event.control.rawValue),
+                  let phase = ChromecaseRemoteControlPhase(rawValue: event.phase.rawValue)
+            else { return }
+            self?.onControlEvent?(ChromecaseRemoteControlEvent(
+                control: control,
+                phase: phase,
+                sequence: event.sequence,
+                cancellationReason: event.cancellationReason?.logToken
+            ))
+        }
         #endif
     }
 
@@ -169,6 +243,24 @@ final class ChromecaseFeatureIntegration {
     func setVoiceMode(_ mode: ChromecaseVoiceMode) {
         #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
         feature.setVoiceGestureMode(mode == .hold ? .hold : .toggle)
+        #endif
+    }
+
+    /// 宿主「按键映射」总开关。开启后私有包独占该遥控器的 HID 设备，关闭时只观察。
+    ///
+    /// 缺包时 no-op。幂等，可安全重复调用。
+    func setControlMappingEnabled(_ enabled: Bool) {
+        #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+        feature.setControlMappingEnabled(enabled)
+        #endif
+    }
+
+    /// HID 侧是否已看到本遥控器。缺包时恒为 false。
+    var isHIDRemotePresent: Bool {
+        #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+        return feature.isHIDRemotePresent
+        #else
+        return false
         #endif
     }
 
