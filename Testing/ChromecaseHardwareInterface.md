@@ -14,12 +14,12 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 13:11（CST） |
+| 构建时间 | 2026-09-15 17:24（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（177） |
 | Bundle ID | `com.hd838a.RemoteMic` |
 | 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，HEAD `61beea2`；并行会话的按键映射工作项已并入 `191a743`；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `d25948c`（连按防抖），从 `git worktree` 的**已提交副本**构建。该副本同时包含并行会话已提交的按键页/HID 通道（`909fe85`）。 |
+| 私有包基线 | `SayAllChromecase` @ `d25948c`（防抖；父提交 `909fe85` 含 HID 桥/映射画布/素材/`voiceRemoteV1` 能力声明），主工作区构建。宿主 HEAD `9a2bb49` 含 `191a743`（按键页路由/执行链路/资源门禁/中英文案）。 |
 | 主程序 SHA-256 | `401e1166d6dd1e91470fc3699fd95b276c47f7a4bff445353d01d73a463ef702` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
