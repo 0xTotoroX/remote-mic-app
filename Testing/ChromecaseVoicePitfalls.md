@@ -57,3 +57,17 @@
   所有「固件行为」结论（330ms 推流窗口、VAD 门控、<1s 轻点不上报、幽灵 0x04、拆流不回
   `MIC_OPEN_ERROR` 等）均基于该假冒品的实测。**之后需要换真货重新验证**，上述结论在真货上
   可能不成立，验收前先确认手里的遥控器是否为正品。
+
+## HID 按键链路
+
+- **manager 级独占打开会被系统拒绝**：`IOHIDManagerOpen(manager, kIOHIDOptionsTypeSeizeDevice)`
+  返回 `kIOReturnNotPrivileged(0xE00002C1)`，桥永远不就绪、按键事件零到达（按键映射完全失效）。
+  正确结构（对齐小米链路 `HIDRemoteMonitor`，真机验证过）：manager 用 `None` 打开只做设备发现
+  与报告回调，在设备匹配回调里对**每个匹配的 HID collection** 执行
+  `IOHIDDeviceOpen(device, seize)`——该遥控器暴露多个 collection，只独占第一个时其余的媒体
+  用法仍会被系统消费（确认键会打开「音乐」）。
+- **设备级 seize 在这台（假冒）遥控器上同样被拒**（同错误码，而小米链路同调用成功）。
+  疑因：本地包反复重签名后输入监控 TCC 绑定失效，或假冒设备接口差异。已实现降级：
+  seize 失败 → `IOHIDDeviceOpen(None)` 观察模式打开（`seized=false`），报告仍能驱动按键
+  映射，代价是系统同时消费按键。若要恢复独占，先到「系统设置 → 隐私与安全性 → 输入监控」
+  重置授权再试；换正品遥控器后重验。
