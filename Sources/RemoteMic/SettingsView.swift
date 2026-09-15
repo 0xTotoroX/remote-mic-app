@@ -923,45 +923,38 @@ struct SettingsView: View {
                     }
                 }
                 .toggleStyle(.switch)
-
-                Divider()
-
-                Text("chromecase.mode.title")
-                    .font(.system(size: 13, weight: .medium))
-
-                Picker("", selection: Binding(
-                    get: { settings.chromecaseVoiceMode },
-                    set: { newValue in
-                        settings.chromecaseVoiceMode = newValue
-                        model.applyChromecaseSettings()
-                    }
-                )) {
-                    ForEach(ChromecaseVoiceMode.allCases) { mode in
-                        Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .disabled(!settings.chromecaseEnabled)
-
-                Text(LocalizedStringKey(settings.chromecaseVoiceMode.detailLocalizationKey))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 10) {
-                    Button("chromecase.action.reconnect") {
-                        model.reconnectChromecase()
-                    }
-                    .compatibilityButtonStyle(.standard)
-                    .disabled(!settings.chromecaseEnabled)
-                }
-
-                Text("chromecase.help.plain")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecase 档案的按键页显示）；
+    /// 从连接设置页迁移过来，避免同一控件出现在两处。
+    private var chromecaseVoiceModeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider()
+
+            Text("chromecase.mode.title")
+                .font(.system(size: 13, weight: .medium))
+
+            Picker("", selection: Binding(
+                get: { settings.chromecaseVoiceMode },
+                set: { newValue in
+                    settings.chromecaseVoiceMode = newValue
+                    model.applyChromecaseSettings()
+                }
+            )) {
+                ForEach(ChromecaseVoiceMode.allCases) { mode in
+                    Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .disabled(!settings.chromecaseEnabled)
+
+            Text(LocalizedStringKey(settings.chromecaseVoiceMode.detailLocalizationKey))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -1544,6 +1537,12 @@ struct SettingsView: View {
                         if let target = mappingEditingTarget {
                             mappingEditorPanel(target)
                                 .id("mapping-action-editor")
+                        }
+
+                        // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
+                        // 放在按键页靠下的位置，方便随时切换手感。
+                        if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
+                            chromecaseVoiceModeSection
                         }
 
                         mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
