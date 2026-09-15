@@ -5807,6 +5807,10 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             // 与苹果遥控器一致：链路一可用就注册档案，按键页的设备选择器里立刻能选到它。
             _ = ensureChromecaseProfile()
             AppLogger.shared.write("CHROMECASE REMOTE phase=completed result=profile_ready")
+            // 音频出口预热：否则首次按键要在「按下」的同时做一轮 REBIND（真机实测 ~30ms），
+            // 更关键的是根因 #4 那种「引擎在 startup 时没起来且无人修复」的竞态会在按键瞬间
+            // 才暴露（enqueue_failures 全量丢弃）。链路就绪即准备好出口，按键时只剩纯音频往返。
+            ensureVirtualAudioOutputReady(reason: "chromecase_link_ready")
         } else {
             disconnectChromecaseProfile(reason: "link_unavailable")
         }
