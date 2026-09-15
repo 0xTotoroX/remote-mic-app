@@ -3,6 +3,36 @@ import Testing
 
 @Suite("Voice Fn hold")
 struct VoiceFunctionKeyLatchTests {
+    @Test func pendingDownRejectsEveryReentrantStartBeforeThePhysicalPressExists() {
+        var latch = VoiceFunctionKeyLatch()
+
+        #expect(latch.transition(streaming: true, owner: .bluetooth) == .press)
+        #expect(VoiceKeyPendingDownPolicy.shouldRejectStart(
+            streaming: true,
+            pendingDown: true
+        ))
+        #expect(VoiceKeyPendingDownPolicy.shouldRejectStart(
+            streaming: true,
+            pendingDown: true
+        ))
+
+        latch.rollback(.press, owner: .bluetooth)
+        #expect(!latch.isHeld)
+    }
+
+    @Test func confirmedDownStillAllowsMultipleOwnersToShareOneKeyHold() {
+        var latch = VoiceFunctionKeyLatch()
+
+        #expect(latch.transition(streaming: true, owner: .bluetooth) == .press)
+        #expect(!VoiceKeyPendingDownPolicy.shouldRejectStart(
+            streaming: true,
+            pendingDown: false
+        ))
+        #expect(latch.transition(streaming: true, owner: .mobile) == nil)
+        #expect(latch.transition(streaming: false, owner: .bluetooth) == nil)
+        #expect(latch.transition(streaming: false, owner: .mobile) == .release)
+        #expect(!latch.isHeld)
+    }
     @Test func emitsOnePressAndOneReleasePerStream() {
         var latch = VoiceFunctionKeyLatch()
 
@@ -22,6 +52,17 @@ struct VoiceFunctionKeyLatchTests {
         #expect(latch.transition(streaming: false, owner: .bluetooth) == nil)
         #expect(latch.isHeld)
         #expect(latch.transition(streaming: false, owner: .mobile) == .release)
+        #expect(!latch.isHeld)
+    }
+
+    @Test func appleRemoteVoiceOwnerDoesNotReleaseOtherSources() {
+        var latch = VoiceFunctionKeyLatch()
+
+        #expect(latch.transition(streaming: true, owner: .appleRemote) == .press)
+        #expect(latch.transition(streaming: true, owner: .bluetooth) == nil)
+        #expect(latch.transition(streaming: false, owner: .appleRemote) == nil)
+        #expect(latch.isHeld)
+        #expect(latch.transition(streaming: false, owner: .bluetooth) == .release)
         #expect(!latch.isHeld)
     }
 

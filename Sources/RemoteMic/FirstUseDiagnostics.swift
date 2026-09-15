@@ -251,6 +251,10 @@ struct FirstUseVoiceAttemptDiagnostic: Equatable {
     var firstSampleLatencyMilliseconds: Int?
     var sessionDurationMilliseconds: Int?
     var transcriptWaitMilliseconds: Int?
+    var externalToolVoiceKeyUserConfirmed = false
+    var externalToolExpectedVoiceKey = "fn_hold"
+    var externalToolGlobalVoiceApplicable = false
+    var externalToolGlobalVoiceUserConfirmed = true
     var externalToolMicrophoneUserConfirmed = false
     var audioDelivery = VoiceAudioDeliveryDiagnostic()
     var result: FirstUseVoiceAttemptResult = .none
@@ -264,6 +268,13 @@ struct FirstUseVoiceAttemptDiagnostic: Equatable {
         case .audioDeliveryFailed:
             return "audio_\(audioDelivery.result.rawValue)"
         case .externalToolNoCommit:
+            if !externalToolVoiceKeyUserConfirmed {
+                return "external_tool_voice_key_not_confirmed"
+            }
+            if externalToolGlobalVoiceApplicable,
+               !externalToolGlobalVoiceUserConfirmed {
+                return "external_tool_global_voice_not_confirmed"
+            }
             return externalToolMicrophoneUserConfirmed
                 ? "external_tool_no_commit"
                 : "external_tool_microphone_not_confirmed"
@@ -304,6 +315,32 @@ enum FirstUseVoiceAttemptPolicy {
     }
 }
 
+enum FirstUseRemoteInputKind: String, Equatable {
+    case none
+    case voice
+    case control
+}
+
+struct FirstUseRemoteInputDiagnostic: Equatable {
+    var voiceButtonPressCount = 0
+    var controlButtonObservationCount = 0
+    var lastInputKind: FirstUseRemoteInputKind = .none
+
+    var shouldShowVoiceButtonCorrection: Bool {
+        lastInputKind == .voice && controlButtonObservationCount == 0
+    }
+
+    mutating func recordVoiceButtonPress() {
+        voiceButtonPressCount += 1
+        lastInputKind = .voice
+    }
+
+    mutating func recordControlButtonObservation() {
+        controlButtonObservationCount += 1
+        lastInputKind = .control
+    }
+}
+
 struct FirstUseDiagnosticContext: Equatable {
     let step: OnboardingStep
     let remoteAvailability: OnboardingRemoteAvailability
@@ -311,6 +348,7 @@ struct FirstUseDiagnosticContext: Equatable {
     let capabilities: OnboardingCapabilities
     let hasSelectedAudioUID: Bool
     let voiceAttempt: FirstUseVoiceAttemptDiagnostic?
+    let remoteInput: FirstUseRemoteInputDiagnostic
 
     init(
         step: OnboardingStep,
@@ -318,7 +356,8 @@ struct FirstUseDiagnosticContext: Equatable {
         controlMethod: OnboardingControlMethod = .physicalRemote,
         capabilities: OnboardingCapabilities,
         hasSelectedAudioUID: Bool,
-        voiceAttempt: FirstUseVoiceAttemptDiagnostic? = nil
+        voiceAttempt: FirstUseVoiceAttemptDiagnostic? = nil,
+        remoteInput: FirstUseRemoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
     ) {
         self.step = step
         self.remoteAvailability = remoteAvailability
@@ -326,6 +365,7 @@ struct FirstUseDiagnosticContext: Equatable {
         self.capabilities = capabilities
         self.hasSelectedAudioUID = hasSelectedAudioUID
         self.voiceAttempt = voiceAttempt
+        self.remoteInput = remoteInput
     }
 
     var failureReason: FirstUseFailureReason? {
@@ -398,6 +438,21 @@ struct FirstUseEvent: Codable, Equatable {
         "\(kind.rawValue)|\(step.rawValue)|\(failureReason?.rawValue ?? "none")|" +
             "\(voiceAttemptID.map(String.init) ?? "none")|\(voiceResult?.rawValue ?? "none")"
     }
+
+    var runtimeLogMessage: String {
+        var message = kind == .entered
+            ? "ONBOARDING STEP entered=\(step.rawValue)"
+            : "ONBOARDING EVENT kind=\(kind.rawValue) step=\(step.rawValue)"
+        message += " elapsed_ms=\(elapsedMilliseconds)"
+        message += " failure=\(failureReason?.rawValue ?? "none")"
+        if let voiceAttemptID {
+            message += " attempt=\(voiceAttemptID)"
+        }
+        if let voiceResult {
+            message += " voice_result=\(voiceResult.rawValue)"
+        }
+        return message
+    }
 }
 
 struct FirstUseDiagnosticSnapshot {
@@ -451,6 +506,10 @@ struct FirstUseDiagnosticSnapshot {
             "permission_accessibility=\(capabilities.accessibilityGranted)",
             "control_connected=\(capabilities.remoteConnected)",
             "control_button_observed=\(capabilities.remoteButtonObserved)",
+            "remote_voice_button_press_count=\(context.remoteInput.voiceButtonPressCount)",
+            "remote_control_button_observation_count=\(context.remoteInput.controlButtonObservationCount)",
+            "remote_last_input_kind=\(context.remoteInput.lastInputKind.rawValue)",
+            "remote_voice_button_mistake_detected=\(context.remoteInput.voiceButtonPressCount > 0)",
             "audio_device_selected=\(context.hasSelectedAudioUID)",
             "audio_device_available=\(capabilities.audioOutputSelected)",
             "audio_output_ready=\(capabilities.audioReady)",
@@ -481,10 +540,16 @@ struct FirstUseDiagnosticSnapshot {
             "voice_session_duration_ms=\(Self.metric(voiceAttempt.sessionDurationMilliseconds))",
             "voice_session_under_1s=\((voiceAttempt.sessionDurationMilliseconds ?? 1_000) < 1_000)",
             "voice_transcript_wait_ms=\(Self.metric(voiceAttempt.transcriptWaitMilliseconds))",
+            "voice_external_tool_voice_key_observable=false",
+            "voice_external_tool_voice_key_user_confirmed=\(voiceAttempt.externalToolVoiceKeyUserConfirmed)",
+            "voice_external_tool_expected_voice_key=\(voiceAttempt.externalToolExpectedVoiceKey)",
+            "voice_external_tool_global_voice_observable=false",
+            "voice_external_tool_global_voice_applicable=\(voiceAttempt.externalToolGlobalVoiceApplicable)",
+            "voice_external_tool_global_voice_user_confirmed=\(voiceAttempt.externalToolGlobalVoiceUserConfirmed)",
             "voice_external_tool_microphone_observable=false",
             "voice_external_tool_microphone_user_confirmed=\(voiceAttempt.externalToolMicrophoneUserConfirmed)",
             "voice_external_tool_expected_microphone=\(voiceAttempt.audioDelivery.outputAtStart.selectedDeviceKind.rawValue)",
-            "voice_external_tool_next_checks=microphone_matches_selected_device,voice_input_enabled,trigger_mode_matches_fn,session_duration_sufficient",
+            "voice_external_tool_next_checks=trigger_mode_matches_fn,global_voice_enabled_if_required,microphone_matches_selected_device,voice_input_enabled,session_duration_sufficient",
             "voice_audio_generation=\(voiceAttempt.audioDelivery.generation)",
             "voice_audio_source=\(voiceAttempt.audioDelivery.source)",
             "voice_audio_route=\(voiceAttempt.audioDelivery.route.rawValue)",

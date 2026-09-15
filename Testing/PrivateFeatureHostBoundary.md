@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-- 分支：`codex/remove-secret-ai-entry` 及其合入后的版本。
+- 适用版本：当前待验证 PR 或已合入 `main` 的精确 Commit；原功能分支 `codex/remove-secret-ai-entry` 只作为历史审计来源。
 - 范围：公开 Mac 宿主与可选私有组件之间的显示、生命周期和稳定功能边界。
 - 本手册不记录资格获取方式、内部触发方式、邀请码或服务配置。
 
@@ -23,10 +23,13 @@
 
 ## 用例 B：无私有组件构建
 
-1. 不设置私有组件路径，完成测试与 Release 构建。
-2. 启动 App 并逐一检查全部设置页。
+1. 清除 `SAYALL_AI_PACKAGE_PATH`、`SAYALL_COMBINATION_ACTIONS_PATH`、`SAYALL_BUTTON_PROFILES_PACKAGE_PATH`、`SAYALL_MEMBERSHIP_PACKAGE_PATH` 和 `SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH`，不要依赖宿主目录旁边的 Package 自动探测。
+2. 完成测试与 Release 构建。
+3. 启动 App 并逐一检查全部设置页。
 
-预期：App 可正常构建和运行，不显示私有页面、私有入口或私有组件文案；蓝牙、按键映射、统计、权限和关于页保持可用。
+预期：App 可正常构建和运行，不显示私有页面、私有入口或私有组件文案；蓝牙、按键映射、统计、权限和关于页保持可用。私有功能只能通过显式路径变量启用；缺少路径时应保持公开模式。
+
+如果设置了任一私有路径变量但路径不存在、包清单不完整或构件校验失败，构建必须直接失败；不得静默回退到公开模式。
 
 ## 用例 C：已授权用户兼容性
 

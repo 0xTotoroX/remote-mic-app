@@ -14,6 +14,15 @@ enum RemoteButton: String, CaseIterable, Codable, Identifiable {
     case volumeDown = "volume_down"
     case menu
     case tv
+    case playPause = "play_pause"
+    case mute
+
+    /// Buttons physically present on the Xiaomi RC001/RC003 layout.
+    /// Siri Remote has its own private page and does not use this list.
+    static let xiaomiCases: [RemoteButton] = [
+        .power, .up, .left, .ok, .right, .down, .back,
+        .volumeUp, .home, .volumeDown, .menu, .tv,
+    ]
 
     var id: String { rawValue }
 
@@ -31,6 +40,10 @@ enum RemoteButton: String, CaseIterable, Codable, Identifiable {
         case .volumeDown: return 0x81
         case .menu: return 0x65
         case .tv: return 0x35
+        // Reserved values: these controls are decoded by the Siri Remote
+        // adapter and are not part of Xiaomi HID discovery.
+        case .playPause: return 0x1000
+        case .mute: return 0x1001
         }
     }
 
@@ -48,6 +61,8 @@ enum RemoteButton: String, CaseIterable, Codable, Identifiable {
         case .volumeDown: return "−"
         case .menu: return localization.text("remote.button.short.menu")
         case .tv: return "TV"
+        case .playPause: return localization.text("remote.button.short.play_pause")
+        case .mute: return localization.text("remote.button.short.mute")
         }
     }
 
@@ -65,11 +80,13 @@ enum RemoteButton: String, CaseIterable, Codable, Identifiable {
         case .volumeDown: return localization.text("remote.button.full.volume_down")
         case .menu: return localization.text("remote.button.full.menu")
         case .tv: return localization.text("remote.button.full.tv")
+        case .playPause: return localization.text("remote.button.full.play_pause")
+        case .mute: return localization.text("remote.button.full.mute")
         }
     }
 
     static let usageMap = Dictionary(
-        uniqueKeysWithValues: allCases.map { ($0.hidUsage, $0) }
+        uniqueKeysWithValues: xiaomiCases.map { ($0.hidUsage, $0) }
     )
 
     static func buttons(for usages: Set<UInt16>) -> Set<RemoteButton> {
@@ -94,6 +111,8 @@ enum RemoteButton: String, CaseIterable, Codable, Identifiable {
         case .volumeUp: return .systemKey(type: 0)
         case .volumeDown: return .systemKey(type: 1)
         case .back: return nil
+        case .playPause: return .systemKey(type: 2)
+        case .mute: return .systemKey(type: 3)
         }
     }
 
@@ -124,7 +143,10 @@ struct CustomKeyboardShortcut: Codable, Equatable {
 
     init(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags, keyLabel: String) {
         self.keyCode = keyCode
-        modifierFlagsRawValue = modifierFlags.intersection(Self.supportedModifiers).rawValue
+        modifierFlagsRawValue = Self.normalizedModifierFlags(
+            keyCode: keyCode,
+            modifierFlags: modifierFlags
+        ).rawValue
         self.keyLabel = keyLabel
     }
 
@@ -137,8 +159,10 @@ struct CustomKeyboardShortcut: Codable, Equatable {
     }
 
     var modifierFlags: NSEvent.ModifierFlags {
-        NSEvent.ModifierFlags(rawValue: modifierFlagsRawValue)
-            .intersection(Self.supportedModifiers)
+        Self.normalizedModifierFlags(
+            keyCode: keyCode,
+            modifierFlags: NSEvent.ModifierFlags(rawValue: modifierFlagsRawValue)
+        )
     }
 
     var cgEventFlags: CGEventFlags {
@@ -155,6 +179,17 @@ struct CustomKeyboardShortcut: Codable, Equatable {
         StandaloneKeyboardModifier.matching(self)
     }
 
+    private static func normalizedModifierFlags(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> NSEvent.ModifierFlags {
+        var normalized = modifierFlags.intersection(Self.supportedModifiers)
+        if (123...126).contains(keyCode) {
+            normalized.remove(.function)
+        }
+        return normalized
+    }
+
     func displayName(using localization: LocalizationStore) -> String {
         if let standaloneModifier {
             return standaloneModifier.displayName(using: localization)
@@ -166,6 +201,64 @@ struct CustomKeyboardShortcut: Codable, Equatable {
         if modifierFlags.contains(.command) { result += "⌘" }
         if modifierFlags.contains(.function) { result += "fn " }
         return result + localizedKeyLabel(using: localization)
+    }
+
+    /// Compact macOS-style representation used by the mapping UI.
+    func visualDisplayName(using localization: LocalizationStore) -> String {
+        if let standaloneModifier {
+            return standaloneModifier.symbol
+        }
+        var result = ""
+        if modifierFlags.contains(.control) { result += "⌃" }
+        if modifierFlags.contains(.option) { result += "⌥" }
+        if modifierFlags.contains(.shift) { result += "⇧" }
+        if modifierFlags.contains(.command) { result += "⌘" }
+        if modifierFlags.contains(.function) { result += "fn " }
+        return result + visualKeyLabel
+    }
+
+    /// Full keyboard wording used by tooltips and accessibility labels.
+    func detailedDisplayName(using localization: LocalizationStore) -> String {
+        if let standaloneModifier {
+            return standaloneModifier.displayName(using: localization)
+        }
+        var parts: [String] = []
+        if modifierFlags.contains(.control) { parts.append(localization.text("shortcut.modifier.control")) }
+        if modifierFlags.contains(.option) { parts.append(localization.text("shortcut.modifier.option")) }
+        if modifierFlags.contains(.shift) { parts.append(localization.text("shortcut.modifier.shift")) }
+        if modifierFlags.contains(.command) { parts.append(localization.text("shortcut.modifier.command")) }
+        if modifierFlags.contains(.function) { parts.append(localization.text("shortcut.modifier.function")) }
+        parts.append(detailedKeyLabel(using: localization))
+        return parts.joined(separator: " + ")
+    }
+
+    private var visualKeyLabel: String {
+        switch keyCode {
+        case 36: return "⏎"
+        case 48: return "⇥"
+        case 49: return "␠"
+        case 51: return "⌫"
+        case 53: return "⎋"
+        case 76: return "⌤"
+        case 117: return "⌦"
+        default: return keyLabel
+        }
+    }
+
+    private func detailedKeyLabel(using localization: LocalizationStore) -> String {
+        switch keyCode {
+        case 36: return localization.text("keyboard.key.return")
+        case 48: return localization.text("keyboard.key.tab")
+        case 49: return localization.text("keyboard.key.space")
+        case 51: return localization.text("keyboard.key.delete")
+        case 53: return localization.text("keyboard.key.escape")
+        case 76: return localization.text("keyboard.key.enter")
+        case 123: return localization.text("keyboard.key.left")
+        case 124: return localization.text("keyboard.key.right")
+        case 125: return localization.text("keyboard.key.down")
+        case 126: return localization.text("keyboard.key.up")
+        default: return localizedKeyLabel(using: localization)
+        }
     }
 
     private func localizedKeyLabel(using localization: LocalizationStore) -> String {

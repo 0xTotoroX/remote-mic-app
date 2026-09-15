@@ -26,11 +26,13 @@ struct OnboardingView: View {
     private let allowsInputSourceSwitching: Bool
     private let systemFunctionKeyAvailableOverride: Bool?
     private let voiceToolAvailabilityOverride: [OnboardingVoiceTool: OnboardingVoiceToolAvailability]?
+    private let remoteInputDiagnosticOverride: FirstUseRemoteInputDiagnostic?
 
     @State private var bluetoothAuthorization = CBManager.authorization
     @State private var inputMonitoringGranted = HIDRemoteMonitor.isInputMonitoringGranted
     @State private var accessibilityGranted = KeyboardInjector.isAccessibilityTrusted
     @State private var observedRemoteButtons = Set<RemoteButton>()
+    @State private var remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
     @State private var requestedRemoteConnectionRecovery = false
     @State private var testedControlButtons = Set<RemoteButton>()
     @State private var voiceSessionStarted = false
@@ -52,6 +54,8 @@ struct OnboardingView: View {
     @State private var voiceAttemptStartedAtUptime: TimeInterval?
     @State private var voiceTranscriptWaitStartedAtUptime: TimeInterval?
     @State private var activeFocusLossStartedAtUptime: TimeInterval?
+    @State private var externalToolVoiceKeyConfirmed = false
+    @State private var externalToolGlobalVoiceConfirmed = false
     @State private var externalToolMicrophoneConfirmed = false
     @State private var voiceTranscriptDeadlineToken = UUID()
     @State private var suppressConnectedPhysicalRemoteAutoRouteOnce = false
@@ -68,7 +72,8 @@ struct OnboardingView: View {
         allowsInputSourceSwitching: Bool = true,
         systemFunctionKeyAvailableOverride: Bool? = nil,
         voiceToolAvailabilityOverride: [OnboardingVoiceTool: OnboardingVoiceToolAvailability]? = nil,
-        initialInputMethodGuideStep: Int = 0
+        initialInputMethodGuideStep: Int = 0,
+        remoteInputDiagnosticOverride: FirstUseRemoteInputDiagnostic? = nil
     ) {
         self.model = model
         settings = model.settings
@@ -76,6 +81,7 @@ struct OnboardingView: View {
         self.allowsInputSourceSwitching = allowsInputSourceSwitching
         self.systemFunctionKeyAvailableOverride = systemFunctionKeyAvailableOverride
         self.voiceToolAvailabilityOverride = voiceToolAvailabilityOverride
+        self.remoteInputDiagnosticOverride = remoteInputDiagnosticOverride
         _selectedInputMethodGuideStep = State(initialValue: initialInputMethodGuideStep)
         _voiceKeyMigrationSource = State(
             initialValue: model.settings.pendingOnboardingVoiceKeyMigration
@@ -138,7 +144,7 @@ struct OnboardingView: View {
             guard settings.onboardingControlMethod == .physicalRemote,
                   !buttons.isEmpty else { return }
             if settings.onboardingStep == .remote {
-                observedRemoteButtons.formUnion(buttons)
+                recordRemoteControlButtons(buttons, source: "physical_remote")
                 recoverRemoteConnectionIfNeeded()
             } else if settings.onboardingStep == .controls {
                 testedControlButtons.formUnion(buttons)
@@ -147,7 +153,7 @@ struct OnboardingView: View {
         .onReceive(model.$lastRemoteButtonPress.compactMap { $0 }) { button in
             guard settings.onboardingControlMethod == .physicalRemote else { return }
             if settings.onboardingStep == .remote {
-                observedRemoteButtons.insert(button)
+                recordRemoteControlButtons(Set([button]), source: "physical_remote")
                 recoverRemoteConnectionIfNeeded()
             } else if settings.onboardingStep == .controls {
                 testedControlButtons.insert(button)
@@ -156,18 +162,24 @@ struct OnboardingView: View {
         .onReceive(model.$lastMobileRemoteButtonObservation.compactMap { $0 }) { observation in
             guard selectedControlAccepts(observation.source) else { return }
             if settings.onboardingStep == .remote {
-                observedRemoteButtons.insert(observation.button)
+                recordRemoteControlButtons(Set([observation.button]), source: observation.source.rawValue)
             } else if settings.onboardingStep == .controls {
                 testedControlButtons.insert(observation.button)
             }
         }
-        .onReceive(model.$isStreaming) { isStreaming in
-            guard settings.onboardingStep == .voiceTest,
-                  selectedControlAcceptsVoice(model.activeVoiceSource) else { return }
-            if isStreaming {
-                beginVoiceAttempt(triggerPath: model.activeVoiceSource?.rawValue ?? "unknown")
-            } else if voiceSessionStarted {
-                endVoiceAttempt()
+        .onReceive(model.$isStreaming.removeDuplicates()) { isStreaming in
+            guard selectedControlAcceptsVoice(model.activeVoiceSource) else { return }
+            switch settings.onboardingStep {
+            case .remote where isStreaming:
+                recordRemoteVoiceButtonPress()
+            case .voiceTest:
+                if isStreaming {
+                    beginVoiceAttempt(triggerPath: model.activeVoiceSource?.rawValue ?? "unknown")
+                } else if voiceSessionStarted {
+                    endVoiceAttempt()
+                }
+            default:
+                break
             }
         }
         .onReceive(model.$hasReceivedCurrentVoiceSamples.removeDuplicates()) { hasReceivedSamples in
@@ -188,6 +200,8 @@ struct OnboardingView: View {
             prepareForStep(step)
         }
         .onChange(of: settings.onboardingVoiceTool) { _ in
+            resetExternalToolVoiceKeyConfirmation(reason: "voice_tool_changed")
+            resetExternalToolGlobalVoiceConfirmation(reason: "voice_tool_changed")
             resetExternalToolMicrophoneConfirmation(reason: "voice_tool_changed")
         }
         .onChange(of: settings.selectedAudioDeviceUID) { _ in
@@ -198,6 +212,20 @@ struct OnboardingView: View {
                 "ONBOARDING EXTERNAL_MICROPHONE_CONFIRMATION source=user " +
                     "confirmed=\(confirmed) tool=\(settings.onboardingVoiceTool.rawValue) " +
                     "expected_device=\(selectedAudioDeviceDiagnosticKind.rawValue)"
+            )
+        }
+        .onChange(of: externalToolVoiceKeyConfirmed) { confirmed in
+            AppLogger.shared.write(
+                "ONBOARDING EXTERNAL_VOICE_KEY_CONFIRMATION source=user " +
+                    "confirmed=\(confirmed) tool=\(settings.onboardingVoiceTool.rawValue) " +
+                    "expected=\(externalToolExpectedVoiceKeyDiagnosticValue)"
+            )
+        }
+        .onChange(of: externalToolGlobalVoiceConfirmed) { confirmed in
+            AppLogger.shared.write(
+                "ONBOARDING EXTERNAL_GLOBAL_VOICE_CONFIRMATION source=user " +
+                    "confirmed=\(confirmed) tool=\(settings.onboardingVoiceTool.rawValue) " +
+                    "applicable=\(externalToolGlobalVoiceConfirmationRequired)"
             )
         }
         .onChange(of: transcript) { updatedText in
@@ -997,22 +1025,40 @@ struct OnboardingView: View {
             )
 
             statusCard(
-                icon: observedRemoteButtons.isEmpty ? "button.programmable" : "checkmark.circle.fill",
+                icon: remoteInputDiagnostic.shouldShowVoiceButtonCorrection
+                    ? "exclamationmark.triangle.fill"
+                    : observedRemoteButtons.isEmpty
+                        ? "button.programmable"
+                        : "checkmark.circle.fill",
                 title: localization.text(
-                    observedRemoteButtons.isEmpty
-                        ? "onboarding.remote.button_waiting"
-                        : "onboarding.remote.button_received"
+                    remoteInputDiagnostic.shouldShowVoiceButtonCorrection
+                        ? "onboarding.remote.voice_button_mistake.title"
+                        : observedRemoteButtons.isEmpty
+                            ? "onboarding.remote.button_waiting"
+                            : "onboarding.remote.button_received"
                 ),
-                detail: observedRemoteButtons.isEmpty
-                    ? model.hidStatus.text(using: localization)
-                    : localization.text("onboarding.remote.button_detail"),
-                isComplete: !observedRemoteButtons.isEmpty
+                detail: physicalRemoteButtonStatusDetail,
+                isComplete: !observedRemoteButtons.isEmpty,
+                pendingColor: remoteInputDiagnostic.shouldShowVoiceButtonCorrection ? .orange : nil
             )
 
             if !selectedControlConnected {
                 openBluetoothSettingsButton
             }
         }
+    }
+
+    private var physicalRemoteButtonStatusDetail: String {
+        let instructionKey = remoteInputDiagnostic.shouldShowVoiceButtonCorrection
+            ? "onboarding.remote.voice_button_mistake.detail"
+            : observedRemoteButtons.isEmpty
+                ? "onboarding.remote.button_waiting_detail"
+                : "onboarding.remote.button_detail"
+        let listenerStatus = LocalizedMessage(
+            "onboarding.remote.listener_status",
+            arguments: [model.hidStatus.text(using: localization)]
+        ).text(using: localization)
+        return "\(localization.text(instructionKey))\n\(listenerStatus)"
     }
 
     private var iPhoneRemoteContent: some View {
@@ -1183,11 +1229,7 @@ struct OnboardingView: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
 
-            Text(voiceTestEnvironmentText)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            externalToolMicrophoneConfirmationCard
+            externalToolConfigurationConfirmationCard
 
             ZStack(alignment: .topLeading) {
                 OnboardingTranscriptEditor(
@@ -1236,10 +1278,15 @@ struct OnboardingView: View {
         }
     }
 
-    private var externalToolMicrophoneConfirmationCard: some View {
+    private var externalToolConfigurationConfirmationCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label {
-                Text("onboarding.voice_test.microphone_confirmation.title")
+                Text(
+                    LocalizedMessage(
+                        "onboarding.voice_test.configuration.title",
+                        arguments: [localization.text(settings.onboardingVoiceTool.titleKey)]
+                    ).text(using: localization)
+                )
                     .font(.system(size: 13, weight: .semibold))
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -1248,17 +1295,67 @@ struct OnboardingView: View {
 
             Text(
                 LocalizedMessage(
-                    "onboarding.voice_test.microphone_confirmation.detail",
-                    arguments: [
-                        selectedAudioDevice?.name ?? localization.text("onboarding.audio.select_required"),
-                        localization.text(settings.onboardingVoiceTool.titleKey),
-                        selectedAudioDevice?.name ?? localization.text("onboarding.audio.select_required"),
-                    ]
+                    "onboarding.voice_test.configuration.detail",
+                    arguments: [localization.text(settings.onboardingVoiceTool.titleKey)]
                 ).text(using: localization)
             )
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("onboarding.voice_test.configuration.sayall_voice_key")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 8)
+                Label(
+                    sayAllVoiceKeyConfigurationText,
+                    systemImage: sayAllVoiceKeyConfigurationReady
+                        ? "checkmark.circle.fill"
+                        : "xmark.circle.fill"
+                )
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(sayAllVoiceKeyConfigurationReady ? Color.green : Color.red)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("onboarding.voice_test.configuration.sayall_audio_output")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 8)
+                Label(
+                    sayAllAudioOutputConfigurationText,
+                    systemImage: onboardingAudioReady
+                        ? "checkmark.circle.fill"
+                        : "xmark.circle.fill"
+                )
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(onboardingAudioReady ? Color.green : Color.red)
+            }
+
+            Divider()
+
+            Toggle(isOn: $externalToolVoiceKeyConfirmed) {
+                Text(
+                    LocalizedMessage(
+                        "onboarding.voice_test.configuration.voice_key_checkbox",
+                        arguments: [
+                            localization.text(settings.onboardingVoiceTool.titleKey),
+                            externalToolExpectedVoiceKeyText,
+                        ]
+                    ).text(using: localization)
+                )
+                .font(.system(size: 12, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .toggleStyle(.checkbox)
+
+            if externalToolGlobalVoiceConfirmationRequired {
+                Toggle(isOn: $externalToolGlobalVoiceConfirmed) {
+                    Text("onboarding.voice_test.configuration.global_voice_checkbox")
+                        .font(.system(size: 12, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .toggleStyle(.checkbox)
+            }
 
             Toggle(isOn: $externalToolMicrophoneConfirmed) {
                 Text(
@@ -1274,6 +1371,13 @@ struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
             .toggleStyle(.checkbox)
+
+            if voiceAttempt.result == .externalToolNoCommit {
+                Label("onboarding.voice_test.configuration.no_commit", systemImage: "xmark.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1292,7 +1396,7 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                ForEach(RemoteButton.allCases) { button in
+                ForEach(RemoteButton.xiaomiCases) { button in
                     let tested = testedControlButtons.contains(button)
                     HStack(spacing: 8) {
                         Image(systemName: tested ? "checkmark.circle.fill" : "circle")
@@ -1763,14 +1867,16 @@ struct OnboardingView: View {
         icon: String,
         title: String,
         detail: String,
-        isComplete: Bool
+        isComplete: Bool,
+        pendingColor: Color? = nil
     ) -> some View {
-        HStack(spacing: 13) {
+        let statusColor = isComplete ? Color.green : (pendingColor ?? Color.accentColor)
+        return HStack(spacing: 13) {
             Image(systemName: icon)
                 .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(isComplete ? Color.green : Color.accentColor)
+                .foregroundStyle(statusColor)
                 .frame(width: 36, height: 36)
-                .background((isComplete ? Color.green : Color.accentColor).opacity(0.10), in: Circle())
+                .background(statusColor.opacity(0.10), in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
@@ -1782,7 +1888,10 @@ struct OnboardingView: View {
             Spacer()
         }
         .padding(14)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+        .background(
+            (pendingColor?.opacity(0.08) ?? Color.primary.opacity(0.035)),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
     }
 
     private var currentPhase: OnboardingPhase {
@@ -1824,7 +1933,7 @@ struct OnboardingView: View {
         if settings.onboardingStep == .voiceTest {
             return policyAllowsContinue &&
                 voiceAttempt.phase == .passed &&
-                externalToolMicrophoneConfirmed
+                externalToolConfigurationConfirmed
         }
         return policyAllowsContinue &&
             (settings.onboardingStep != .voiceTool || voiceToolSelectionIsValid)
@@ -1866,7 +1975,8 @@ struct OnboardingView: View {
             controlMethod: settings.onboardingControlMethod,
             capabilities: capabilities,
             hasSelectedAudioUID: !settings.selectedAudioDeviceUID.isEmpty,
-            voiceAttempt: settings.onboardingStep == .voiceTest ? voiceAttempt : nil
+            voiceAttempt: settings.onboardingStep == .voiceTest ? voiceAttempt : nil,
+            remoteInput: remoteInputDiagnostic
         )
     }
 
@@ -1992,10 +2102,79 @@ struct OnboardingView: View {
         }
     }
 
-    private var voiceTestEnvironmentText: String {
-        let tool = localization.text(settings.onboardingVoiceTool.titleKey)
-        let device = selectedAudioDevice?.name ?? localization.text("onboarding.audio.select_required")
-        return "\(tool)  ·  \(device)"
+    private var externalToolExpectedVoiceKeyText: String {
+        localization.text(
+            OnboardingVoiceTestConfigurationPolicy.expectsFnTap(
+                for: settings.onboardingVoiceTool
+            )
+                ? "onboarding.voice_test.configuration.voice_key_fn_tap"
+                : "onboarding.voice_test.configuration.voice_key_fn_hold"
+        )
+    }
+
+    private var externalToolExpectedVoiceKeyDiagnosticValue: String {
+        OnboardingVoiceTestConfigurationPolicy.expectsFnTap(
+            for: settings.onboardingVoiceTool
+        ) ? "fn_tap" : "fn_hold"
+    }
+
+    private var sayAllVoiceKeyConfigurationReady: Bool {
+        OnboardingVoiceTestConfigurationPolicy.isSayAllVoiceKeyReady(
+            voiceTool: settings.onboardingVoiceTool,
+            voiceKeyMode: settings.voiceKeyMode,
+            voiceFnTapModeEnabled: settings.voiceFnTapModeEnabled
+        )
+    }
+
+    private var sayAllVoiceKeyConfigurationText: String {
+        guard !sayAllVoiceKeyConfigurationReady else {
+            return externalToolExpectedVoiceKeyText
+        }
+        let current: String
+        if settings.voiceKeyMode == .function {
+            current = localization.text(
+                settings.voiceFnTapModeEnabled
+                    ? "onboarding.voice_test.configuration.voice_key_fn_tap"
+                    : "onboarding.voice_test.configuration.voice_key_fn_hold"
+            )
+        } else {
+            current = localization.text(settings.voiceKeyMode.localizationKey)
+        }
+        return LocalizedMessage(
+            "onboarding.voice_test.configuration.sayall_voice_key_mismatch",
+            arguments: [current, externalToolExpectedVoiceKeyText]
+        ).text(using: localization)
+    }
+
+    private var sayAllAudioOutputConfigurationText: String {
+        guard let selectedAudioDevice else {
+            return localization.text("onboarding.audio.select_required")
+        }
+        guard onboardingAudioReady else {
+            return LocalizedMessage(
+                "onboarding.voice_test.configuration.audio_output_not_ready",
+                arguments: [selectedAudioDevice.name]
+            ).text(using: localization)
+        }
+        return selectedAudioDevice.name
+    }
+
+    private var externalToolGlobalVoiceConfirmationRequired: Bool {
+        OnboardingVoiceTestConfigurationPolicy.requiresGlobalVoiceConfirmation(
+            for: settings.onboardingVoiceTool
+        )
+    }
+
+    private var externalToolConfigurationConfirmed: Bool {
+        OnboardingVoiceTestConfigurationPolicy.isComplete(
+            voiceTool: settings.onboardingVoiceTool,
+            voiceKeyMode: settings.voiceKeyMode,
+            voiceFnTapModeEnabled: settings.voiceFnTapModeEnabled,
+            audioOutputReady: onboardingAudioReady,
+            externalVoiceKeyConfirmed: externalToolVoiceKeyConfirmed,
+            externalGlobalVoiceConfirmed: externalToolGlobalVoiceConfirmed,
+            externalMicrophoneConfirmed: externalToolMicrophoneConfirmed
+        )
     }
 
     private var voiceTestStatusText: String {
@@ -2180,6 +2359,7 @@ struct OnboardingView: View {
         }
         settings.setOnboardingControlMethod(method)
         observedRemoteButtons.removeAll()
+        remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
         testedControlButtons.removeAll()
     }
 
@@ -2239,6 +2419,7 @@ struct OnboardingView: View {
             routeConnectedPhysicalRemoteIfNeeded()
         case .remote:
             observedRemoteButtons.removeAll()
+            remoteInputDiagnostic = remoteInputDiagnosticOverride ?? FirstUseRemoteInputDiagnostic()
             requestedRemoteConnectionRecovery = false
             prepareSelectedControlConnection()
         case .audio:
@@ -2253,7 +2434,6 @@ struct OnboardingView: View {
         default:
             break
         }
-        AppLogger.shared.write("ONBOARDING STEP entered=\(step.rawValue)")
         settings.recordFirstUseEvent(.entered, step: step)
         lastRecordedFailure = nil
         DispatchQueue.main.async {
@@ -2440,6 +2620,11 @@ struct OnboardingView: View {
             firstSampleLatencyMilliseconds: nil,
             sessionDurationMilliseconds: nil,
             transcriptWaitMilliseconds: nil,
+            externalToolVoiceKeyUserConfirmed: externalToolVoiceKeyConfirmed,
+            externalToolExpectedVoiceKey: externalToolExpectedVoiceKeyDiagnosticValue,
+            externalToolGlobalVoiceApplicable: externalToolGlobalVoiceConfirmationRequired,
+            externalToolGlobalVoiceUserConfirmed: !externalToolGlobalVoiceConfirmationRequired ||
+                externalToolGlobalVoiceConfirmed,
             externalToolMicrophoneUserConfirmed: externalToolMicrophoneConfirmed,
             audioDelivery: model.voiceAudioDeliveryDiagnosticSnapshot(),
             result: .none
@@ -2563,9 +2748,16 @@ struct OnboardingView: View {
                 "focus_ready_at_end=\(voiceAttempt.focusReadyAtEnd) " +
                 "focus_ready_at_deadline=\(voiceAttempt.focusReadyAtDeadline.map(String.init) ?? "unknown") " +
                 "focus_total_loss_ms=\(voiceAttempt.totalFocusLossMilliseconds) " +
+                "external_voice_key_observable=false " +
+                "external_voice_key_user_confirmed=\(voiceAttempt.externalToolVoiceKeyUserConfirmed) " +
+                "external_expected_voice_key=\(voiceAttempt.externalToolExpectedVoiceKey) " +
+                "external_global_voice_observable=false " +
+                "external_global_voice_applicable=\(voiceAttempt.externalToolGlobalVoiceApplicable) " +
+                "external_global_voice_user_confirmed=\(voiceAttempt.externalToolGlobalVoiceUserConfirmed) " +
                 "external_microphone_observable=false " +
                 "external_microphone_user_confirmed=\(voiceAttempt.externalToolMicrophoneUserConfirmed) " +
-                "external_next_check=microphone_matches_selected_device " +
+                "external_next_checks=trigger_mode_matches_fn,global_voice_enabled_if_required," +
+                "microphone_matches_selected_device " +
                 "first_sample_latency_ms=\(voiceAttempt.firstSampleLatencyMilliseconds.map(String.init) ?? "unavailable") " +
                 "session_duration_ms=\(voiceAttempt.sessionDurationMilliseconds.map(String.init) ?? "unavailable") " +
                 "session_under_1s=\((voiceAttempt.sessionDurationMilliseconds ?? 1_000) < 1_000) " +
@@ -2598,6 +2790,22 @@ struct OnboardingView: View {
         )
     }
 
+    private func resetExternalToolVoiceKeyConfirmation(reason: String) {
+        guard externalToolVoiceKeyConfirmed else { return }
+        externalToolVoiceKeyConfirmed = false
+        AppLogger.shared.write(
+            "ONBOARDING EXTERNAL_VOICE_KEY_CONFIRMATION reset reason=\(reason)"
+        )
+    }
+
+    private func resetExternalToolGlobalVoiceConfirmation(reason: String) {
+        guard externalToolGlobalVoiceConfirmed else { return }
+        externalToolGlobalVoiceConfirmed = false
+        AppLogger.shared.write(
+            "ONBOARDING EXTERNAL_GLOBAL_VOICE_CONFIRMATION reset reason=\(reason)"
+        )
+    }
+
     private func elapsedMilliseconds(sinceUptime uptime: TimeInterval) -> Int {
         max(0, Int((ProcessInfo.processInfo.systemUptime - uptime) * 1_000))
     }
@@ -2626,6 +2834,10 @@ struct OnboardingView: View {
             "ONBOARDING DIAGNOSTICS copied step=\(settings.onboardingStep.rawValue) " +
                 "failure=\(failureReason?.rawValue ?? "none")"
         )
+        AppLogger.shared.writeDiagnosticSummary(
+            snapshot.redactedText,
+            event: "ONBOARDING DIAGNOSTICS"
+        )
     }
 
     private func recoverRemoteConnectionIfNeeded() {
@@ -2637,6 +2849,33 @@ struct OnboardingView: View {
         ) else { return }
         requestedRemoteConnectionRecovery = true
         model.reconnect()
+    }
+
+    private func recordRemoteVoiceButtonPress() {
+        remoteInputDiagnostic.recordVoiceButtonPress()
+        AppLogger.shared.write(
+            "ONBOARDING REMOTE_INPUT observed=voice " +
+                "source=\(model.activeVoiceSource?.rawValue ?? "unknown") " +
+                "voice_count=\(remoteInputDiagnostic.voiceButtonPressCount) " +
+                "control_count=\(remoteInputDiagnostic.controlButtonObservationCount) " +
+                "last_input=\(remoteInputDiagnostic.lastInputKind.rawValue)"
+        )
+    }
+
+    private func recordRemoteControlButtons(_ buttons: Set<RemoteButton>, source: String) {
+        let newlyObserved = buttons.subtracting(observedRemoteButtons)
+        guard !newlyObserved.isEmpty else { return }
+        observedRemoteButtons.formUnion(newlyObserved)
+        for _ in newlyObserved {
+            remoteInputDiagnostic.recordControlButtonObservation()
+        }
+        AppLogger.shared.write(
+            "ONBOARDING REMOTE_INPUT observed=control source=\(source) " +
+                "new_count=\(newlyObserved.count) " +
+                "voice_count=\(remoteInputDiagnostic.voiceButtonPressCount) " +
+                "control_count=\(remoteInputDiagnostic.controlButtonObservationCount) " +
+                "last_input=\(remoteInputDiagnostic.lastInputKind.rawValue)"
+        )
     }
 
     private func prepareSelectedControlConnection() {

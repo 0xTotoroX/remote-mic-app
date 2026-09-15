@@ -11,13 +11,17 @@ APP="${1:-$RELEASE_OUTPUT_DIR/SayAll.app}"
 PLIST="$APP/Contents/Info.plist"
 BINARY="$APP/Contents/MacOS/RemoteMic"
 MCP_HELPER="$APP/Contents/Helpers/SayAllMCP"
+APPLE_REMOTE_AUDIO_HELPER="$APP/Contents/Helpers/SayAllAppleRemoteAudioCapture"
+APPLE_REMOTE_HCI_SERVICE="$APP/Contents/Helpers/SayAllAppleRemoteHCIService"
+OPUS_DYLIB="$APP/Contents/Frameworks/libopus.0.dylib"
 SPARKLE_FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
 APP_ICON="$APP/Contents/Resources/AppIcon.icns"
 EXPECTED_DEVELOPER_TEAM_ID="${EXPECTED_DEVELOPER_TEAM_ID:-}"
 REQUIRE_DEVELOPER_ID_SIGNING="${REQUIRE_DEVELOPER_ID_SIGNING:-0}"
 REQUIRE_NOTARIZATION="${REQUIRE_NOTARIZATION:-0}"
 REQUIRE_SAYALL_AI_PACKAGE="${REQUIRE_SAYALL_AI_PACKAGE:-0}"
-REQUIRE_SAYALL_MACRO_PLATFORM="${REQUIRE_SAYALL_MACRO_PLATFORM:-0}"
+REQUIRE_SAYALL_COMBINATION_ACTIONS="${REQUIRE_SAYALL_COMBINATION_ACTIONS:-0}"
+REQUIRE_SAYALL_BUTTON_PROFILES="${REQUIRE_SAYALL_BUTTON_PROFILES:-0}"
 REQUIRE_SAYALL_PRIVATE_ARTIFACT_PACKAGE="${REQUIRE_SAYALL_PRIVATE_ARTIFACT_PACKAGE:-0}"
 
 case "$REQUIRE_DEVELOPER_ID_SIGNING" in
@@ -32,9 +36,13 @@ case "$REQUIRE_SAYALL_AI_PACKAGE" in
   0|1) ;;
   *) print -u2 "REQUIRE_SAYALL_AI_PACKAGE must be 0 or 1"; exit 1 ;;
 esac
-case "$REQUIRE_SAYALL_MACRO_PLATFORM" in
+case "$REQUIRE_SAYALL_COMBINATION_ACTIONS" in
   0|1) ;;
-  *) print -u2 "REQUIRE_SAYALL_MACRO_PLATFORM must be 0 or 1"; exit 1 ;;
+  *) print -u2 "REQUIRE_SAYALL_COMBINATION_ACTIONS must be 0 or 1"; exit 1 ;;
+esac
+case "$REQUIRE_SAYALL_BUTTON_PROFILES" in
+  0|1) ;;
+  *) print -u2 "REQUIRE_SAYALL_BUTTON_PROFILES must be 0 or 1"; exit 1 ;;
 esac
 case "$REQUIRE_SAYALL_PRIVATE_ARTIFACT_PACKAGE" in
   0|1) ;;
@@ -53,6 +61,35 @@ test -d "$APP"
 test -f "$PLIST"
 test -x "$BINARY"
 test -x "$MCP_HELPER"
+SAYALL_SIRI_REMOTE_INCLUDED="$(plutil -extract SayAllSiriRemoteIncluded raw -o - "$PLIST" 2>/dev/null || true)"
+SAYALL_SIRI_REMOTE_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllSiriRemote_SayAllSiriRemote.bundle"
+case "$SAYALL_SIRI_REMOTE_INCLUDED" in
+  true)
+    test -x "$APPLE_REMOTE_AUDIO_HELPER"
+    test -x "$APPLE_REMOTE_HCI_SERVICE"
+    test -f "$OPUS_DYLIB"
+    test -d "$SAYALL_SIRI_REMOTE_RESOURCE_BUNDLE"
+    SIRI_REMOTE_SIGNATURE_DETAILS="$(codesign -dvvv "$APP" 2>&1)"
+    print -r -- "$SIRI_REMOTE_SIGNATURE_DETAILS" | rg -q '^Authority=Developer ID Application:' || {
+      print -u2 "Siri Remote voice app must use Developer ID Application signing; ad-hoc apps cannot connect to the installed HCI helper"
+      exit 1
+    }
+    print -r -- "$SIRI_REMOTE_SIGNATURE_DETAILS" | rg -q '^TeamIdentifier=L3QHLDRPAY$' || {
+      print -u2 "Siri Remote voice app has an unexpected Developer ID team"
+      exit 1
+    }
+    ;;
+  false|"")
+    test ! -e "$APPLE_REMOTE_AUDIO_HELPER"
+    test ! -e "$APPLE_REMOTE_HCI_SERVICE"
+    test ! -e "$OPUS_DYLIB"
+    test ! -e "$SAYALL_SIRI_REMOTE_RESOURCE_BUNDLE"
+    ;;
+  *)
+    print -u2 "invalid SayAllSiriRemoteIncluded marker"
+    exit 1
+    ;;
+esac
 test -d "$SPARKLE_FRAMEWORK"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Sparkle"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
@@ -240,9 +277,9 @@ if [[ "$REQUIRE_SAYALL_AI_PACKAGE" == "1" && "$SAYALL_AI_INCLUDED" != "true" ]];
   print -u2 "App is missing the required SayAllAI package marker"
   exit 1
 fi
-SAYALL_MACRO_PLATFORM_INCLUDED="$(plutil -extract SayAllMacroPlatformIncluded raw -o - "$PLIST" 2>/dev/null || true)"
-SAYALL_MACRO_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllMacroPlatform_SayAllMacroRemoteMic.bundle"
-if [[ "$SAYALL_MACRO_PLATFORM_INCLUDED" == "true" ]]; then
+SAYALL_COMBINATION_ACTIONS_INCLUDED="$(plutil -extract SayAllCombinationActionsIncluded raw -o - "$PLIST" 2>/dev/null || true)"
+SAYALL_MACRO_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllCombinationActions_SayAllMacroRemoteMic.bundle"
+if [[ "$SAYALL_COMBINATION_ACTIONS_INCLUDED" == "true" ]]; then
   test -d "$SAYALL_MACRO_RESOURCE_BUNDLE"
   if [[ -d "$SAYALL_MACRO_RESOURCE_BUNDLE/Contents/Resources" ]]; then
     SAYALL_MACRO_RESOURCE_ROOT="$SAYALL_MACRO_RESOURCE_BUNDLE/Contents/Resources"
@@ -256,21 +293,50 @@ if [[ "$SAYALL_MACRO_PLATFORM_INCLUDED" == "true" ]]; then
     "$SAYALL_MACRO_RESOURCE_PLIST")"
   if [[ ! -f "$SAYALL_MACRO_RESOURCE_ROOT/zh-Hans.lproj/Localizable.strings" && \
         ! -f "$SAYALL_MACRO_RESOURCE_ROOT/zh-hans.lproj/Localizable.strings" ]]; then
-    print -u2 "SayAll macro platform Chinese localization is missing"
+    print -u2 "SayAll combination actions Chinese localization is missing"
     exit 1
   fi
 elif [[ -e "$SAYALL_MACRO_RESOURCE_BUNDLE" ]]; then
-  print -u2 "SayAll macro platform resource bundle exists without the inclusion marker"
+  print -u2 "SayAll combination actions resource bundle exists without the inclusion marker"
   exit 1
 fi
-if [[ "$REQUIRE_SAYALL_MACRO_PLATFORM" == "1" && "$SAYALL_MACRO_PLATFORM_INCLUDED" != "true" ]]; then
-  print -u2 "App is missing the required SayAll macro platform marker"
+if [[ "$REQUIRE_SAYALL_COMBINATION_ACTIONS" == "1" && \
+      "$SAYALL_COMBINATION_ACTIONS_INCLUDED" != "true" ]]; then
+  print -u2 "App is missing the required SayAll combination actions marker"
+  exit 1
+fi
+SAYALL_BUTTON_PROFILES_INCLUDED="$(plutil -extract SayAllButtonProfilesIncluded raw -o - "$PLIST" 2>/dev/null || true)"
+SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllButtonProfiles_SayAllButtonProfiles.bundle"
+if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" ]]; then
+  test -d "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE"
+  if [[ -d "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE/Contents/Resources" ]]; then
+    SAYALL_BUTTON_PROFILES_RESOURCE_ROOT="$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE/Contents/Resources"
+    SAYALL_BUTTON_PROFILES_RESOURCE_PLIST="$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE/Contents/Info.plist"
+  else
+    SAYALL_BUTTON_PROFILES_RESOURCE_ROOT="$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE"
+    SAYALL_BUTTON_PROFILES_RESOURCE_PLIST="$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE/Info.plist"
+  fi
+  test -f "$SAYALL_BUTTON_PROFILES_RESOURCE_ROOT/en.lproj/Localizable.strings"
+  test -n "$(plutil -extract CFBundleDevelopmentRegion raw -o - \
+    "$SAYALL_BUTTON_PROFILES_RESOURCE_PLIST")"
+  if [[ ! -f "$SAYALL_BUTTON_PROFILES_RESOURCE_ROOT/zh-Hans.lproj/Localizable.strings" && \
+        ! -f "$SAYALL_BUTTON_PROFILES_RESOURCE_ROOT/zh-hans.lproj/Localizable.strings" ]]; then
+    print -u2 "SayAll button profiles Chinese localization is missing"
+    exit 1
+  fi
+elif [[ -e "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE" ]]; then
+  print -u2 "SayAll button profiles resource bundle exists without the inclusion marker"
+  exit 1
+fi
+if [[ "$REQUIRE_SAYALL_BUTTON_PROFILES" == "1" && \
+      "$SAYALL_BUTTON_PROFILES_INCLUDED" != "true" ]]; then
+  print -u2 "App is missing the required SayAll button profiles marker"
   exit 1
 fi
 SAYALL_PRIVATE_ARTIFACT_INCLUDED="$(plutil -extract SayAllPrivateArtifactsIncluded raw -o - "$PLIST" 2>/dev/null || true)"
 if [[ "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" == "true" && \
-      "$SAYALL_MACRO_PLATFORM_INCLUDED" != "true" ]]; then
-  print -u2 "private artifact marker exists without the macro platform marker"
+      "$SAYALL_COMBINATION_ACTIONS_INCLUDED" != "true" ]]; then
+  print -u2 "private artifact marker exists without the combination actions marker"
   exit 1
 fi
 if [[ "$REQUIRE_SAYALL_PRIVATE_ARTIFACT_PACKAGE" == "1" && \
@@ -281,6 +347,15 @@ fi
 
 codesign --verify --deep --strict "$APP"
 codesign --verify --strict "$MCP_HELPER"
+if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+  codesign --verify --strict "$APPLE_REMOTE_AUDIO_HELPER"
+  codesign --verify --strict "$APPLE_REMOTE_HCI_SERVICE"
+  test "$(codesign -dvv "$APPLE_REMOTE_AUDIO_HELPER" 2>&1 | \
+    sed -n 's/^Identifier=//p')" = "com.hd838a.RemoteMic.apple-remote-audio"
+  test "$(codesign -dvv "$APPLE_REMOTE_HCI_SERVICE" 2>&1 | \
+    sed -n 's/^Identifier=//p')" = "com.hd838a.SayAll.AppleRemoteHCIService"
+  codesign --verify --strict "$OPUS_DYLIB"
+fi
 if [[ "$REQUIRE_DEVELOPER_ID_SIGNING" == "1" ]]; then
   RELAY_URL="$(plutil -extract RemoteWebRelayURL raw -o - "$PLIST" 2>/dev/null || true)"
   if [[ "$RELAY_URL" != wss://?*/ws ]]; then
@@ -296,8 +371,16 @@ if [[ "$REQUIRE_DEVELOPER_ID_SIGNING" == "1" ]]; then
   print -r -- "$SIGNATURE_DETAILS" | rg -q '^Authority=Developer ID Application:'
   print -r -- "$SIGNATURE_DETAILS" | rg -q "^TeamIdentifier=$EXPECTED_DEVELOPER_TEAM_ID$"
   print -r -- "$SIGNATURE_DETAILS" | rg -q '^CodeDirectory .*flags=.*runtime'
+  signed_components=("$MCP_HELPER")
+  if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+    signed_components+=(
+      "$APPLE_REMOTE_AUDIO_HELPER"
+      "$APPLE_REMOTE_HCI_SERVICE"
+      "$OPUS_DYLIB"
+    )
+  fi
   for signed_component in \
-    "$MCP_HELPER" \
+    "${signed_components[@]}" \
     "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Installer.xpc" \
     "$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Downloader.xpc" \
     "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate" \
@@ -313,11 +396,43 @@ if [[ "$REQUIRE_DEVELOPER_ID_SIGNING" == "1" ]]; then
 fi
 file "$BINARY" | rg -q 'Mach-O 64-bit executable'
 file "$MCP_HELPER" | rg -q 'Mach-O 64-bit executable'
+if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+  file "$APPLE_REMOTE_AUDIO_HELPER" | rg -q 'Mach-O 64-bit executable'
+  file "$APPLE_REMOTE_HCI_SERVICE" | rg -q 'Mach-O 64-bit executable'
+  file "$OPUS_DYLIB" | rg -q 'Mach-O 64-bit dynamically linked shared library'
+fi
 ARCHS="$(lipo -archs "$BINARY")"
 test "$ARCHS" = "$RELEASE_ARCH"
 test "$(lipo -archs "$MCP_HELPER")" = "$RELEASE_ARCH"
+if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+  test "$(lipo -archs "$APPLE_REMOTE_AUDIO_HELPER")" = "$RELEASE_ARCH"
+  test "$(lipo -archs "$APPLE_REMOTE_HCI_SERVICE")" = "$RELEASE_ARCH"
+  test "$(lipo -archs "$OPUS_DYLIB")" = "$RELEASE_ARCH"
+fi
 xcrun vtool -show-build "$BINARY" | rg -Fq "minos $RELEASE_MIN_SYSTEM_VERSION"
 xcrun vtool -show-build "$MCP_HELPER" | rg -Fq "minos $RELEASE_MIN_SYSTEM_VERSION"
+if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+  autoload -Uz is-at-least
+  embedded_component_minimum_is_supported() {
+    local component="$1"
+    local component_minos
+    component_minos="$(xcrun vtool -show-build "$component" | awk '/minos / { print $2; exit }')"
+    [[ -n "$component_minos" ]] || return 1
+    is-at-least "$component_minos" "$RELEASE_MIN_SYSTEM_VERSION"
+  }
+  embedded_component_minimum_is_supported "$APPLE_REMOTE_AUDIO_HELPER" || {
+    print -u2 "Apple Remote audio helper requires a newer macOS than the app release floor"
+    exit 1
+  }
+  embedded_component_minimum_is_supported "$APPLE_REMOTE_HCI_SERVICE" || {
+    print -u2 "Apple Remote HCI service requires a newer macOS than the app release floor"
+    exit 1
+  }
+  embedded_component_minimum_is_supported "$OPUS_DYLIB" || {
+    print -u2 "Apple Remote Opus library requires a newer macOS than the app release floor"
+    exit 1
+  }
+fi
 otool -l "$BINARY" | rg -A2 'LC_RPATH' | rg -q '@executable_path/\.\./Frameworks'
 
 if [[ "$RELEASE_VARIANT" == "intel" ]]; then
@@ -332,6 +447,9 @@ if [[ "$RELEASE_VARIANT" == "intel" ]]; then
 fi
 
 EXPECTED_APP_FILES=$'Contents/Helpers/SayAllMCP\nContents/Info.plist\nContents/MacOS/RemoteMic\nContents/Resources/AppIcon.icns\nContents/Resources/COPYRIGHT.md\nContents/Resources/FirstInstallGuide.md\nContents/Resources/LICENSE.md\nContents/Resources/LOGO-LICENSE.md\nContents/Resources/RC003-remote-photo.png\nContents/Resources/README.md\nContents/Resources/StatusIconActiveTemplate.png\nContents/Resources/StatusIconActiveTemplate@2x.png\nContents/Resources/StatusIconTemplate.png\nContents/Resources/StatusIconTemplate@2x.png\nContents/Resources/TECHNICAL.md\nContents/Resources/THIRD_PARTY_NOTICES.md\nContents/Resources/TROUBLESHOOTING.md\nContents/_CodeSignature/CodeResources'
+if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
+  EXPECTED_APP_FILES=$'Contents/Frameworks/libopus.0.dylib\nContents/Helpers/SayAllAppleRemoteAudioCapture\nContents/Helpers/SayAllAppleRemoteHCIService\n'"$EXPECTED_APP_FILES"
+fi
 while IFS= read -r expected_file; do
   test -f "$APP/$expected_file"
 done <<< "$EXPECTED_APP_FILES"
