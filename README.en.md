@@ -107,6 +107,8 @@ Starting with v1.3.0, official release packages are signed with an Apple Develop
 4. Launch SayAll and grant Bluetooth access when asked.
 5. To customize ordinary buttons, also grant Input Monitoring and Accessibility. Restarting the app is required only after changing those macOS permissions.
 
+The menu bar icon is dimmed when no device is connected and remains clickable. An active connection from a physical remote, iPhone, Apple Watch, or web remote restores its normal appearance; voice transmission uses the active icon. Hover to read the current status. A connection does not mean audio or input permissions are ready.
+
 SayAll appears in the Dock and remains in the menu bar after launch:
 
 - Click the Dock icon to open Settings.

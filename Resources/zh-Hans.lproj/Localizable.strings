@@ -469,6 +469,9 @@
 "app.version" = "版本 %1$@";
 "status_item.voice_active_accessibility" = "小米蓝牙遥控器 2 Pro 正在传输语音";
 "status_item.accessibility_label" = "小米蓝牙遥控器 2 Pro";
+"status_item.state.disconnected" = "%@：未连接设备";
+"status_item.state.connected" = "%@：设备已连接";
+"status_item.state.streaming" = "%@：正在传输语音";
 "about.alert.description_with_version" = "版本 %1$@\n小米蓝牙遥控器 2 Pro 的无线语音与快捷操作工具。";
 "common.action.ok" = "好";
 "common.action.copy_link" = "复制链接";
