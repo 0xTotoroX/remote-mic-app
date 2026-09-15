@@ -54,6 +54,10 @@
 >   但 20 次按下里仍有 6 次被判成 hold（尤其 2070/2312/2328 ms 这几次只超阈值一点点）。
 > - 当前版 `7ad2c4aa…`（09:15，1.9.21 build 176）：**彻底移除按键时长判定**——模式语义完全由
 >   设置页开关决定，第 1 次按下松键一律进入持续收音、第 2 次一律结束，与按了 1.1 秒还是 5.7 秒无关。
+> - 12:38 复测（同一版，AirPods 断开后）：**语音链路全通**——按下 230ms 内即有首帧
+>   （`accepted=true`），松键 latch 后宿主流接上，`audio_batches=121 audio_samples=59774
+>   enqueue_failures=0`。11:29 那轮的「无波动」根因是**音频出口引擎未运行**（与 AirPods 相关，
+>   见「根因 #4」），与协议无关。同时证实**远端 HTT 流按人声门控（VAD）**，按下即说即有帧。
 >   删除 `holdThreshold` 与 `lastGestureWasHold`；日志改为
 >   `ATVV VOICE gesture duration_ms=… action=latch|stop|none mode=…`。详见「根因 #3」。
 >
@@ -229,6 +233,58 @@ case .toggle:
 > 教训：**能用显式开关表达的语义，别再叠一层启发式规则去猜。** 启发式规则在真机上必然误伤一部分
 > 正常操作；这里它的误伤方式是「立刻结束收音」，把用户后续输入全部丢掉，症状被误读成「协议不通」，
 > 白绕了两轮才定位到。
+
+### 根因 #4：音频出口引擎未运行，远端音频被 100% 丢弃（2026-09-15 11:29 真机）
+
+时长判定移除后复测（build 176），用户反馈「按一次后豆包电平图能显示但无波动」。ATVV 侧**完全正常**：
+`action=latch` → `MIC_OPEN written bytes=0c00` → `STREAM START reason=0x00 stream=0 origin=hostRequested`
+→ `ATVV AUDIO notify count` 涨到 850+。但三次会话的 `enqueue_failures` **恒等于 `audio_batches`**
+（114/114、626/626、476/476），配套 98 条：
+
+```
+AUDIO WRITE rejected count=… reason=playback_not_ready state={engine_running=false player_playing=true …}
+CHROMECASE AUDIO routed … accepted=false first_batch_samples=494
+```
+
+判据在 `AudioOutput.swift` 的 `VirtualAudioHealthPolicy.isPlaybackReady =
+hasSelectedDevice && engineRunning && playerPlaying`——本会话 `engine_running` **124 次采样全为
+false**（`player_playing=true`，即 player 起了但引擎没跑），所以每个音频包都被拒。
+对照 175 版成功那次（同一路径）是 `engine_running=true`、`accepted=true`、`enqueue_failures=0`。
+
+**强相关因素：默认输出是 AirPods 时引擎起不来。**
+
+| 会话 | 默认输出 | `engine_running` | 结果 |
+| --- | --- | --- | --- |
+| 失败（03:23） | Andy AirPods Pro 3 | false ×124 | enqueue_failures=100% |
+| 成功（昨日 18:24） | MacBook Pro 扬声器 | true | enqueue_failures=0 |
+| 重启后（03:33，AirPods 已断开） | MacBook Pro 扬声器 | true | 正常 |
+
+失败会话的输出列表里还多出一个 App 自建的 `CADefaultDeviceAggregate-<pid>-0`。
+**是否 AirPods 必现、还是启动竞态，尚待复现定位**；但验收时若见
+`enqueue_failures` 持续增长 + `playback_not_ready`，先查 `engine_running` 与默认输出设备，
+**不要往协议层查**。
+
+**12:38 复测（AirPods 断开后）全部通过**：`accepted=true`、`audio_batches=121
+audio_samples=59774 enqueue_failures=0`，且**按下后 230ms 内即有首帧**
+（用户按住期间说话）——同时证实了下述 VAD 结论。
+
+### 远端 HTT 流按人声门控（VAD），不是按时长（2026-09-15 12:38 真机证实）
+
+一个重要修正：曾根据「8 次 1.3 秒按下 0 帧、4.47 秒按住 100 批」推断「远端需要约 1.5 秒才真正
+开麦、短按拿不到音频」——**这个结论是错的**，它把「按时长」当成了因果，实际差的是
+「按住期间有没有人声」。决定性反例（pid=87091，18:13:05 那次 4.47 秒按住）：
+
+```
+18:13:05.169  STREAM START reason=0x03 stream=24   ← 按下
+18:13:05.490  ATVV AUDIO notify count=1            ← 首帧距按下仅 321ms
+```
+
+以及 12:38 复测：按下后 **230ms** 内 `accepted=true`（用户按住期间说话）。
+
+正确模型：**远端 HTT 流按下即开麦，但只在检测到人声时推帧（VAD 门控）**；没人声就一帧不发。
+「按住能用、按一次不能用」的观感差异来自两种手势下说话时机不同，与按键时长无关。
+由此得出验收判据：**判定「没波动」之前，先确认「按键期间/松键后有没有说话」**——
+按下期间说话则远端流应有帧，松键后说话则宿主流应有帧；两者都没说话时零帧是正常的。
 
 ### 已确认（2026-09-15 01:29:01，本机真机）
 
