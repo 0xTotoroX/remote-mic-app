@@ -179,6 +179,9 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
     private let hardwareAnnouncements = HardwareAnnouncementStore()
     private lazy var localization = LocalizationStore(settings: model.settings)
     private var statusItem: NSStatusItem?
+    private var statusItemPresentation: StatusItemPresentation = .disconnected
+    private var appliedStatusItemPresentation: StatusItemPresentation?
+    private var statusItemOperationID: UInt = 0
     private var statusMenu: NSMenu?
     private var settingsWindowController: NSWindowController?
     private var isSettingsWindowOpen = false
@@ -358,15 +361,9 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.toolTip = localization.text("app.name")
             button.target = self
             button.action = #selector(handleStatusItemClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            if let image = statusImage(isStreaming: false) {
-                button.image = image
-            } else {
-                button.title = localization.text("status_item.accessibility_label")
-            }
         }
 
         connectionItem.isEnabled = false
@@ -374,6 +371,15 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
         hidItem.isEnabled = false
 
         statusItem = item
+        appliedStatusItemPresentation = nil
+        statusItemPresentation = .resolve(
+            physicalConnected: model.isConnected,
+            phoneConnected: model.isPhoneRemoteConnected,
+            watchConnected: model.isWatchRemoteConnected,
+            webState: model.webRemoteState,
+            isStreaming: model.isStreaming
+        )
+        refreshStatusItemPresentation()
         rebuildStatusMenu()
     }
 
@@ -536,6 +542,21 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
     }
 
     private func observeModel() {
+        StatusItemPresentation.publisher(
+            physicalConnected: model.$isConnected.eraseToAnyPublisher(),
+            phoneConnected: model.$isPhoneRemoteConnected.eraseToAnyPublisher(),
+            watchConnected: model.$isWatchRemoteConnected.eraseToAnyPublisher(),
+            webState: model.$webRemoteState.eraseToAnyPublisher(),
+            isStreaming: model.$isStreaming.eraseToAnyPublisher()
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] presentation in
+            // Consume the published snapshot, not properties that @Published has yet to set.
+            self?.statusItemPresentation = presentation
+            self?.refreshStatusItemPresentation()
+        }
+        .store(in: &subscriptions)
+
         Publishers.CombineLatest4(
             model.$connectionStatus,
             model.$audioStatus,
@@ -566,7 +587,7 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.statusItem?.button?.toolTip = self.localization.text("app.name")
+                self.refreshStatusItemPresentation()
                 self.settingsWindowController?.window?.title = self.localization.text("app.name")
                 self.model.privateFeature.updateLocaleIdentifier(
                     self.localization.locale.identifier
@@ -676,24 +697,24 @@ private final class RemoteMicAppDelegate: NSObject, NSApplicationDelegate, NSMen
             ? localization.text("connection.status.voice_active")
             : model.audioStatus.text(using: localization)
         hidItem.title = model.hidStatus.text(using: localization)
-        statusItem?.button?.image = statusImage(isStreaming: model.isStreaming)
     }
 
-    private func statusImage(isStreaming: Bool) -> NSImage? {
-        let resourceName = isStreaming ? "StatusIconActiveTemplate" : "StatusIconTemplate"
-        let fallbackSymbol = isStreaming ? "mic.fill" : "dot.radiowaves.left.and.right"
-        let accessibilityDescription = localization.text(
-            isStreaming ? "status_item.voice_active_accessibility" : "status_item.accessibility_label"
+    private func refreshStatusItemPresentation() {
+        guard let button = statusItem?.button else { return }
+        let description = LocalizedMessage(
+            statusItemPresentation.descriptionKey,
+            arguments: [localization.text("app.name")]
+        ).text(using: localization)
+        statusItemPresentation.apply(to: button, description: description)
+        guard appliedStatusItemPresentation != statusItemPresentation else { return }
+        statusItemOperationID &+= 1
+        AppLogger.shared.write(
+            "UI STATUS_ITEM operation_id=\(statusItemOperationID) phase=completed result=applied " +
+                "from=\(appliedStatusItemPresentation?.rawValue ?? "none") " +
+                "to=\(statusItemPresentation.rawValue) " +
+                "rendering=\(button.image == nil ? "text" : "image")"
         )
-        let image = NSImage(named: NSImage.Name(resourceName))
-            ?? NSImage(
-                systemSymbolName: fallbackSymbol,
-                accessibilityDescription: accessibilityDescription
-            )
-        image?.isTemplate = true
-        image?.size = NSSize(width: 18, height: 18)
-        image?.accessibilityDescription = accessibilityDescription
-        return image
+        appliedStatusItemPresentation = statusItemPresentation
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
