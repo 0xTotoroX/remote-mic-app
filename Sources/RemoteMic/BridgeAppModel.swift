@@ -5837,6 +5837,13 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         )
     }
 
+    /// 预卷缓冲：会话开头 prerollDelay 秒的音频先攒后灌（见 receiveChromecaseAudio 注释）。
+    private var chromecaseAudioPrerollOpenedAt: TimeInterval?
+    private var chromecaseAudioPrerollBatches: [[Int16]] = []
+    /// 豆包从语音键到打开输入流实测 0~0.7s（TRANSCRIPT target_ready retry=false/true 两例）。
+    /// 0.5s 覆盖中位情形：开读窗口的丢失从最坏 ~0.4s 压到 ~0.1s，代价是识别出字整体晚 0.5s。
+    private static let chromecaseAudioPrerollDelay: TimeInterval = 0.5
+
     private func beginChromecaseVoice() {
         guard ChromecaseFeatureIntegration.isPackageIncluded, settings.chromecaseEnabled else {
             return
@@ -5858,6 +5865,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         chromecaseAudioSampleCount = 0
         chromecaseAudioEnqueueFailureCount = 0
         loggedChromecaseAudioDevice = false
+        chromecaseAudioPrerollOpenedAt = ProcessInfo.processInfo.systemUptime
+        chromecaseAudioPrerollBatches = []
         guard ensureVirtualAudioOutputReady(reason: "chromecase_voice_start") else {
             AppLogger.shared.write(
                 "CHROMECASE VOICE phase=failed result=audio_output_unavailable route=MiRemoteV_2ch"
@@ -5897,6 +5906,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         chromecaseVoiceStopping = true
         chromecaseVoiceStopOperation &+= 1
+        // 会话很短时预卷缓冲可能还没到期——先排入播放器，再走自然排空，尾段不丢。
+        flushChromecaseAudioPreroll()
         let stopOperation = chromecaseVoiceStopOperation
         let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
         let outputBeforeStop = audioOutput.diagnosticSnapshot(
@@ -6194,6 +6205,23 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         guard chromecaseVoiceActive || chromecaseVoiceStopping, !samples.isEmpty else { return }
         recordingAssetCoordinator.append(samples: samples)
         publishCurrentVoiceSampleReceiptIfNeeded(sampleCount: samples.count)
+
+        // 预卷门控：会话开头 prerollDelay 秒的音频先攒在内存，到期再一次性排入播放器。
+        // 背景：写入端（宿主写 MiRemoteV 输出端）比读取端（豆包打开该设备输入流）先启动，
+        // BlackHole 型环回没有回放缓冲——读端开流之前写入的数据直接消失，表现为「按下即说
+        // 时前几个字丢失」。排入 AVAudioPlayerNode 的 buffer 按实时消费，不会倾倒覆盖，
+        // 豆包开读时恰好从人声开头读到。
+        let uptime = ProcessInfo.processInfo.systemUptime
+        if chromecaseAudioPrerollOpenedAt == nil {
+            chromecaseAudioPrerollOpenedAt = uptime
+        }
+        if chromecaseVoiceActive,
+           uptime - chromecaseAudioPrerollOpenedAt! < Self.chromecaseAudioPrerollDelay {
+            chromecaseAudioPrerollBatches.append(samples)
+            return
+        }
+        flushChromecaseAudioPreroll()
+
         let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
         let accepted = audioOutput.enqueue(
             samples: samples,
@@ -6215,6 +6243,36 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                     "first_batch_samples=\(samples.count)"
             )
         }
+    }
+
+    /// 把预卷缓冲一次性排入播放器。AVAudioPlayerNode 按实时消费排队的 buffer，
+    /// 因此一次排入不会覆盖环回 ring，豆包读到的是连续实时流。
+    private func flushChromecaseAudioPreroll() {
+        guard !chromecaseAudioPrerollBatches.isEmpty else { return }
+        let batches = chromecaseAudioPrerollBatches
+        chromecaseAudioPrerollBatches = []
+        let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
+        var failures = 0
+        for batch in batches {
+            if !audioOutput.enqueue(samples: batch, deliveryGeneration: deliveryGeneration) {
+                failures += 1
+            }
+            chromecaseAudioBatchCount += 1
+            chromecaseAudioSampleCount += batch.count
+        }
+        chromecaseAudioEnqueueFailureCount += failures
+        if !loggedChromecaseAudioDevice, let first = batches.first {
+            loggedChromecaseAudioDevice = true
+            AppLogger.shared.write(
+                "CHROMECASE AUDIO routed source=chromecase_microphone " +
+                    "route=virtual_audio device=MiRemoteV_2ch accepted=\(failures == 0) " +
+                    "first_batch_samples=\(first.count)"
+            )
+        }
+        AppLogger.shared.write(
+            "CHROMECASE AUDIO preroll flushed batches=\(batches.count) " +
+                "samples=\(batches.reduce(0) { $0 + $1.count }) failures=\(failures)"
+        )
     }
     #endif
 }
