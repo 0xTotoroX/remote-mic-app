@@ -6014,6 +6014,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         let profileID = settings.registerChromecaseRemote()
         chromecaseProfileID = profileID
         connectedChromecaseProfileIDs.insert(profileID)
+        // 连接即选中（与小米链路的 activateRemoteProfile 对齐）：否则按键页停留在上一次
+        // 选中的档案（用户看到的是小米遥控器画布），要等「按键映射开启且按下普通键」才会切换。
+        selectRemoteProfile(profileID)
         refreshBluetoothPresentation()
         return profileID
     }
