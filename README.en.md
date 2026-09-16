@@ -25,6 +25,14 @@
   </tr>
 </table>
 
+## Video introduction
+
+“Possibly the least tool-like tool I have used lately” shows how SayAll turns a Bluetooth voice remote into a new way to express ideas, control your Mac, and work with AI. The video is in Chinese.
+
+[Watch the original video on Bilibili](https://www.bilibili.com/video/BV13Pep6BEXe)
+
+Video by [可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
+
 ## Windows version
 
 The first Windows preview of SayAll is now available, focusing on the essential features:

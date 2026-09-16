@@ -25,6 +25,14 @@
   </tr>
 </table>
 
+## 视频介绍
+
+《可能是我最近用过最不像工具的工具》展示了无线麦如何把蓝牙语音遥控器变成随手表达、控制 Mac 和与 AI 协作的新入口。
+
+[在 Bilibili 观看原视频](https://www.bilibili.com/video/BV13Pep6BEXe)
+
+视频作者：[可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
+
 ## Windows 版本
 
 无线麦 App Windows 版本的第一个预览版已经发布，当前以基本功能为主：
