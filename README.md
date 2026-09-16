@@ -29,7 +29,13 @@
 
 《可能是我最近用过最不像工具的工具》展示了无线麦如何把蓝牙语音遥控器变成随手表达、控制 Mac 和与 AI 协作的新入口。
 
-[在 Bilibili 观看原视频](https://www.bilibili.com/video/BV13Pep6BEXe)
+<p align="center">
+  <a href="https://www.bilibili.com/video/BV13Pep6BEXe">
+    <img src="Screenshots/video-introduction-cover.jpg" alt="《可能是我最近用过最不像工具的工具》视频封面" width="960">
+  </a>
+</p>
+
+<p align="center"><a href="https://www.bilibili.com/video/BV13Pep6BEXe">点击封面或前往 Bilibili 观看原视频</a></p>
 
 视频作者：[可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
 
