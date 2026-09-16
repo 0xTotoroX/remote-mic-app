@@ -31,6 +31,8 @@ final class KeyboardEventSuppressor {
     private var heldEventCounts: [RemoteNativeEvent: Int] = [:]
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    /// 诊断日志节流计数（miss 路径）。
+    private var missLogCount = 0
 
     private(set) var isRunning = false
 
@@ -90,6 +92,11 @@ final class KeyboardEventSuppressor {
 
     func arm(nativeEvents: Set<RemoteNativeEvent>, edge: RemoteEventEdge) {
         guard !nativeEvents.isEmpty else { return }
+        // 诊断：留证「本次预定了什么」，便于与 miss 日志里系统真实事件对照。
+        AppLogger.shared.write(
+            "HID FILTER arm events=\(nativeEvents.map(Self.logToken).sorted().joined(separator: "+")) "
+                + "edge=\(edge == .down ? "down" : "up")"
+        )
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
         pendingEvents.removeAll { $0.expiresAt <= now }
@@ -159,8 +166,26 @@ final class KeyboardEventSuppressor {
             lock.unlock()
             return true
         }
+        let pendingCount = pendingEvents.count
         lock.unlock()
+        // 诊断：tap 收到但未命中的事件——这是判断「系统真实事件与 nativeEvent 表是否一致」的唯一
+        // 直接证据（本表最初按小米 RC003 实测，其它遥控器可能不同）。
+        missLogCount += 1
+        if missLogCount <= 12 || missLogCount % 20 == 0 {
+            AppLogger.shared.write(
+                "HID FILTER miss n=\(missLogCount) type=\(type.rawValue) "
+                    + "event=\(Self.logToken(descriptor.event)) "
+                    + "edge=\(descriptor.edge == .down ? "down" : "up") pending=\(pendingCount)"
+            )
+        }
         return false
+    }
+
+    private static func logToken(_ event: RemoteNativeEvent) -> String {
+        switch event {
+        case .keyboard(let keyCode): return "key\(keyCode)"
+        case .systemKey(let type): return "sys\(type)"
+        }
     }
 
     private func descriptor(
