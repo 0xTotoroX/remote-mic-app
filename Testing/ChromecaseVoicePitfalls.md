@@ -105,3 +105,39 @@
   「键码完全对不上」的情况。**注意区分「自定义动作效果」与「系统原本功能」**——本次
   用户报告的「左/右/OK 也执行了原本功能」，实为自定义动作 arrowLeft/returnKey 在特定 App 里的
   效果，系统侧并无事件。
+
+### 按键「自定义动作 + 系统原本功能同时执行」的根因：Apple 配件协议（AACP，2026-09-16）
+
+症状：正品遥控器上左右键切歌、OK 播放/暂停、静音出音量 HUD，**同时**自定义映射正常执行。
+对照实验：**键盘方向键不切歌**（排除「注入方向键在音乐 App 里的效果」这一解释）。
+
+ioreg 取证（VID 0x18D1/PID 0x9450）：
+
+```
+"Transport" = "BT-AACP"                  ← Apple 配件协议
+"HIDVirtualDevice" = Yes                 ← Apple 给配件暴露的虚拟 HID
+"PrimaryUsagePage" = 0xFF0C（Apple 私有）
+"InputReportElements" = ReportID 1(24bit，Array) / 4(8bit) / 8(168bit)
+"DeviceOpenedByEventSystem" = Yes
+```
+
+- 报告是 **Array** 类型（字节=usage 索引）：索引 5/6/7 在系统眼里是 **Menu Up/Down/Left**，
+  索引 2 是 **Play/Pause**，8 是 Mute，12/13 是 Volume ±。
+- 系统配件服务（AACP）**直接**消费这些 usage → 媒体/导航行为，
+  **不经 CGEvent**（cghid 层只读探针实测零记录）、**不是标准 HID 客户端**（`seized=true` 也拦不住）、
+  **不读 HID 设备属性**（`hidutil --set HIDDefaultBehavior=0` / AppleVendorSupported 均无效）。
+- 我们的读取只是 Apple 为配件暴露的虚拟 HID 旁路——**能读，不能阻止系统那一侧**。
+
+可用/不可用手段一览：
+
+| 手段 | 结果 |
+| --- | --- |
+| `IOHIDDeviceOpen(seize)`（设备级独占） | ❌ 只挡标准 HID 客户端 |
+| CGEventTap 吞事件（session / cghid 两层） | ❌ 事件不经过 CGEvent |
+| `hidutil` 改设备属性 | ❌ 行为由 AACP 服务控制 |
+| 静音/音量键的抑制 | ✅ 例外：这两个 usage 恰好产生 NX_SYSDEFINED（走 CGEvent） |
+| DriverKit 系统扩展（Karabiner 方案） | ⚠️ 理论可行，需安装驱动 + 用户批准，工程量大 |
+| 系统蓝牙中移除设备 | ⚠️ 会同时失去虚拟 HID 报告源（按键数据也没了） |
+
+**结论**：这是 macOS 对 Apple 配件协议遥控器的系统级行为，用户态 App 无法拦截。
+需要产品决策：接受现状，或投入 DriverKit 扩展方案。
