@@ -29,7 +29,13 @@
 
 “Possibly the least tool-like tool I have used lately” shows how SayAll turns a Bluetooth voice remote into a new way to express ideas, control your Mac, and work with AI. The video is in Chinese.
 
-[Watch the original video on Bilibili](https://www.bilibili.com/video/BV13Pep6BEXe)
+<p align="center">
+  <a href="https://www.bilibili.com/video/BV13Pep6BEXe">
+    <img src="Screenshots/video-introduction-cover.jpg" alt="Video cover for Possibly the least tool-like tool I have used lately" width="960">
+  </a>
+</p>
+
+<p align="center"><a href="https://www.bilibili.com/video/BV13Pep6BEXe">Click the cover or watch the original video on Bilibili</a></p>
 
 Video by [可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
 
