@@ -5995,6 +5995,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             let ready = hidEventSuppressor.start()
             AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
         }
+        // 诊断探针（只读）：媒体事件疑似在 HID 层就被系统消费，session 层看不到。
+        hidEventSuppressor.startHIDLayerProbe()
         hidEventSuppressor.arm(
             nativeEvents: chromecaseNativeEvents(for: event.control),
             edge: isPress ? .down : .up
