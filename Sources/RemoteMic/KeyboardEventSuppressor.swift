@@ -31,8 +31,9 @@ final class KeyboardEventSuppressor {
     private var heldEventCounts: [RemoteNativeEvent: Int] = [:]
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    /// 诊断日志节流计数（miss 路径）。
-    private var missLogCount = 0
+    /// 最近 arm 过的事件（带过期时刻），仅用于诊断日志：只有与这些事件相关的
+    /// 未命中才值得记录，避免被无关键盘输入淹没。
+    private var recentArmed: [(event: RemoteNativeEvent, until: TimeInterval)] = []
 
     private(set) var isRunning = false
 
@@ -99,6 +100,10 @@ final class KeyboardEventSuppressor {
         )
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
+        recentArmed.removeAll { $0.until <= now }
+        for nativeEvent in nativeEvents {
+            recentArmed.append((event: nativeEvent, until: now + 1.0))
+        }
         pendingEvents.removeAll { $0.expiresAt <= now }
         for nativeEvent in nativeEvents {
             switch edge {
@@ -167,15 +172,14 @@ final class KeyboardEventSuppressor {
             return true
         }
         let pendingCount = pendingEvents.count
+        let armedRecently = recentArmed.contains { $0.event == descriptor.event && $0.until > now }
         lock.unlock()
-        // 诊断：tap 收到但未命中的事件——这是判断「系统真实事件与 nativeEvent 表是否一致」的唯一
-        // 直接证据（本表最初按小米 RC003 实测，其它遥控器可能不同）。
-        missLogCount += 1
-        if missLogCount <= 12 || missLogCount % 20 == 0 {
+        // 诊断：只记录「与最近 arm 过的事件相关」的未命中——这才是判断
+        // 「系统真实事件与 nativeEvent 表是否一致」的信号；无关键盘输入不记。
+        if armedRecently {
             AppLogger.shared.write(
-                "HID FILTER miss n=\(missLogCount) type=\(type.rawValue) "
-                    + "event=\(Self.logToken(descriptor.event)) "
-                    + "edge=\(descriptor.edge == .down ? "down" : "up") pending=\(pendingCount)"
+                "HID FILTER miss type=\(type.rawValue) event=\(Self.logToken(descriptor.event)) "
+                    + "edge=\(descriptor.edge == .down ? "down" : "up") pending=\(pendingCount) armed=true"
             )
         }
         return false
