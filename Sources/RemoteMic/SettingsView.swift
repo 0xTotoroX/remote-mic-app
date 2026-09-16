@@ -1539,11 +1539,13 @@ struct SettingsView: View {
                                 .id("mapping-action-editor")
                         }
 
+                        #if SAYALL_CHROMECASE_ENABLED
                         // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
                         // 放在按键页靠下的位置，方便随时切换手感。
                         if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
                             chromecaseVoiceModeSection
                         }
+                        #endif
 
                         mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
                     }
