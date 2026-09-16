@@ -203,3 +203,30 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 - **现实可行的缓解（配置层规避）**：把最常用的自定义动作挪到无副作用的键上，
   受影响的三键按需使用——不需要任何代码改动。
 - 根治仍需 DriverKit（见上一节的可行性初判）。
+
+### 「按一次说话」（toggle 持续收音）在正品上失败（2026-09-16，build 198→199）
+
+现象：**按住说话正常，按一次说话时豆包电平图不动**（用户实测）。
+
+日志判据（同一实例 build 198，`ATVV` 全链路）：
+
+```
+[按住] 远端自行推流：STREAM START reason=0x03(HTT) → 松键 STREAM STOP reason=0x02(physicalVoiceKeyReleased)
+[按一次] 松键 → 宿主 latch → MIC_OPEN written(0c00) → STREAM STOP reason=0x02
+         → 之后**没有任何宿主发起的流**：当天 39 条 STREAM START 全是 reason=0x03
+         → 远端不推流 = 无音频 = 豆包电平图不动
+```
+
+- **对照（假冒品，09-14/15）**：`MIC_OPEN written` → `STREAM STOP` → **`STREAM START reason=0x00
+  stream=0 origin=hostRequested`** → 音频连续（该机型累计 54 次 host-requested 流建立）。
+  → **主动请求持续流在假冒品上可行，在正品上从未成功**（当天 0 次）。
+- 两条独立原因都会造成失败，build 199 同时处理：
+  1. **时序**：松键那一刻远端正在收尾它自己的 `AUDIO_STOP`，宿主在同一毫秒发 `MIC_OPEN`
+     是抢跑 → 先静默 `openSettleDelay = 0.25s` 再发；
+  2. **写成功但远端不回**：旧实现只在传输层写失败时重试，`pendingLatchRequest` 会一直挂着，
+     界面显示「持续收音中」而远端根本没推流 → 新增响应超时重试
+     （`openResponseTimeout = 0.4s`，最多 `maximumOpenWriteAttempts = 3` 次），
+     用尽后记 `ATVV MIC_OPEN no_response` 留证。
+- **若重试仍无流** → 判定该硬件为 **HTT-only（不响应宿主 `MIC_OPEN`）**，
+  「按一次持续收音」在协议层无法实现 → 应改为对该型号隐藏/禁用 toggle，只保留「按住说话」。
+  判据就是日志里有没有 `origin=hostRequested` 的 `STREAM START`。
