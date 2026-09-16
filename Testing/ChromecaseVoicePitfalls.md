@@ -184,3 +184,22 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 - **DriverKit 可行性初判**：ioreg 显示该设备在 `IOHIDEventService` 层有 `AppleUserHIDEventDriver`
   + `IOHIDEventServiceUserClient`，正是 Karabiner-Elements 系列拦截的层级，因此技术路径存在；
   代价是需要自研 DriverKit 驱动 + 系统扩展授权 + 签名公证 + 后续系统版本维护（独立立项级别）。
+
+#### 影响面结论：只有 left/right/ok 三颗键（2026-09-16 全键实机验证）
+
+用户逐键验证后的完整结果：
+
+| 分组 | 按键 | 系统 usage | 系统副作用 |
+| --- | --- | --- | --- |
+| **受影响（3 键）** | left / right / ok | Menu Up `0x44` / Menu Down `0x45` / Menu Left `0x41` | 切歌、切歌、播放暂停 |
+| 可拦截（2 键） | mute / volume ± | Mute `0xE2` / Volume `0xE9/0xEA` | 已抑制（走 CGEvent） |
+| 无副作用 | ↑/↓ | Menu `0x42` / Menu Pick `0x43` | 无 |
+| 无副作用 | back / home | AC Back `0x0224` / AC Home `0x0223` | 无 |
+| 无副作用 | power / youtube / netflix / input | `0x019E` / `0x77` / `0x78` / `0x89` | 无 |
+
+- **规律**：只有 **Menu Up / Menu Down / Menu Left** 这三个「方向性 Menu usage」被系统映射为媒体控制
+  （上一首 / 下一首 / 播放暂停）；Menu、Menu Pick、AC Back/Home 等都不会。
+- **影响面很小**：三键，且只在音乐/视频播放时才会被察觉。
+- **现实可行的缓解（配置层规避）**：把最常用的自定义动作挪到无副作用的键上，
+  受影响的三键按需使用——不需要任何代码改动。
+- 根治仍需 DriverKit（见上一节的可行性初判）。
