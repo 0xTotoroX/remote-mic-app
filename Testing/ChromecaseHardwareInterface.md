@@ -14,16 +14,29 @@
 | 项目 | 值 |
 | --- | --- |
 | App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
-| 构建时间 | 2026-09-15 17:24（CST） |
+| 构建时间 | 2026-09-16 19:17（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
-| 版本 | 1.9.21（177） |
+| 版本 | 1.9.21（197） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware`（worktree `/Users/andy/MySrc/remote-mic-app-chromecase`，HEAD `61beea2`；并行会话的按键映射工作项已并入 `191a743`；基线 `origin/main` `41073ea`） |
-| 私有包基线 | `SayAllChromecase` @ `d25948c`（防抖；父提交 `909fe85` 含 HID 桥/映射画布/素材/`voiceRemoteV1` 能力声明），主工作区构建。宿主 HEAD `9a2bb49` 含 `191a743`（按键页路由/执行链路/资源门禁/中英文案）。 |
-| 主程序 SHA-256 | `401e1166d6dd1e91470fc3699fd95b276c47f7a4bff445353d01d73a463ef702` |
+| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware` 合并 `origin/main`（`bc19f79`）：PR #445 已并入 main（`e46348d`），本次再把 main 的 13 个新提交（Right Option 语音键、未连接设备时灰化状态栏图标、README 视频等）合入。基线 `origin/main` `014d2b2`。 |
+| 私有包基线 | `SayAllChromecase` @ 私有仓 `main`（合并 `origin/main` `1c949ea`「merge Chromecase adapter package」后的 `0e7ec51`）；相对远端 main 的差异仅 3 个文件（`ChromecaseMappingPage` / `ChromecaseHardwareContract` / `ChromecaseRemoteHIDBridge`，+59/−7）。 |
+| 主程序 SHA-256 | `f277b8568cc22ab84b1e1bbb6aa189f7fb79209ab6f9737fe826df30a1694986` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
 | Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
+
+### 隔离性验证（2026-09-16，build 197）
+
+「加 Chromecase 是否影响小米 / Siri Remote」的核查证据（合并 main 后重新出包时执行）：
+
+| 项目 | 结果 |
+| --- | --- |
+| 小米 / Siri 源文件改动 | **零改动**——`AppleSiriRemoteAdapter` / `SiriRemoteFeatureIntegration` / `SiriRemoteCursorFeedbackController` / `XiaomiBluetoothBridge` / `HIDRemoteMonitor` / `HIDRemoteScheduler` 均不在 diff 内 |
+| 改动文件清单（相对 `origin/main`，共 8 个） | `Info.plist`、中英 `Localizable.strings`、`BridgeAppModel`（+36，全部在 chromecase 专属分支内）、`ChromecaseFeatureIntegration`（+9）、`SettingsView`（chromecase 卡片移除 + 槽位文案）、`KeyboardEventSuppressor`（+122）、本手册与踩坑文档 |
+| `KeyboardEventSuppressor` | **纯追加日志与只读探针**：`handle(type:event:)` 的所有 `return true/false` 判定与 main 逐行一致，未改抑制语义 |
+| 测试 | 宿主 **583 项 / 45 套件全绿**（含 `RC003 hardware Fn mapping`、`Siri Remote cursor feedback`、`Remote buttons`、`Remote hardware input contract`）；私有包 106 项全绿 |
+| 运行时（build 197 启动，实例 pid 95137） | Chromecase 正常（`seized=true`、`ATVV READY frame=240`、`AUDIO READY engine_running=true`）；小米链路照常被扫描并连接（`BLE CONNECTING name=小米蓝牙语音遥控器`、`HID UPDATE RECOVERY applied`），日志行与合并前各版本逐字一致；无新增错误行 |
+| 私有仓影响面 | 相对远端 main 仅 3 个 chromecase 包内文件，未触碰会员中心等其他包/应用 |
 
 > **同一台机器上还有一份 `/Applications/SayAll.app`（1.9.21 build 181，无 Chromecase）。**
 > 它的构建号比本测试包更大，但没有 `SayAllChromecaseIncluded` 标记，从启动台或 Spotlight
