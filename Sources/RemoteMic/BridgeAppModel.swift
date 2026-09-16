@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Combine
 import CoreAudio
+import CoreBluetooth
 import Foundation
 import SayAllMacRemoteCore
 
@@ -684,6 +685,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private var hidPowerKeySuppressed = false
     private var hidAllowedLocationIDs: Set<UInt32>?
     private var started = false
+    private var remoteDeviceNameRefreshOperation: UInt64 = 0
     private var appliedHIDPermissionSnapshot: HIDPermissionSnapshot?
     private var terminationObserver: NSObjectProtocol?
     private var completedUpdateHIDRecoveryWorkItem: DispatchWorkItem?
@@ -1072,6 +1074,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         siriRemoteFeature.start()
 #endif
         applyHIDSettings()
+        refreshRemoteDeviceNames(reason: .startup)
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
@@ -2684,6 +2687,45 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return profileID
     }
 
+    /// Refresh display metadata without starting discovery, reconnecting, or changing device identity.
+    func refreshRemoteDeviceNames(reason: RemoteDeviceNameRefreshReason) {
+        guard started, CBManager.authorization == .allowedAlways else { return }
+        remoteDeviceNameRefreshOperation &+= 1
+        var requested = 0
+        var resolved = 0
+        var changed = 0
+        for (identifier, bridge) in bluetoothBridges {
+            guard let profileID = settings.profileID(forBluetoothIdentifier: identifier),
+                  connectedRemoteProfileIDs.contains(profileID)
+            else { continue }
+            requested += 1
+            let name = bridge.currentSystemDeviceName()
+            if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                resolved += 1
+            }
+            if settings.updateRemoteProfileSystemName(profileID, name: name) { changed += 1 }
+        }
+        let appleProfiles = settings.remoteDeviceProfiles.filter {
+            connectedAppleRemoteProfileIDs.contains($0.id)
+        }
+        if !appleProfiles.isEmpty {
+            let names = RemoteDeviceNameReader.readHIDNames()
+            for profile in appleProfiles {
+                requested += 1
+                let name = profile.hidFingerprint.flatMap { names[$0] }
+                if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    resolved += 1
+                }
+                if settings.updateRemoteProfileSystemName(profile.id, name: name) { changed += 1 }
+            }
+        }
+        AppLogger.shared.write(
+            "REMOTE NAME REFRESH operation_id=\(remoteDeviceNameRefreshOperation) " +
+                "phase=completed reason=\(reason.rawValue) requested=\(requested) " +
+                "resolved=\(resolved) changed=\(changed) unavailable=\(requested - resolved)"
+        )
+    }
+
     private func refreshBluetoothPresentation() {
         let allStates = bluetoothBridgeStates.values
         let connectedBluetoothProfileIDs = Set<UUID>(bluetoothBridges.compactMap { identifier, bridge in
@@ -2766,6 +2808,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         refreshAppleRemoteActiveControlIDs()
         refreshAppleRemoteHIDStatus()
         refreshBluetoothPresentation()
+        if connection.isConnected { refreshRemoteDeviceNames(reason: .connection) }
     }
 
     private func handleAppleRemotePowerSnapshot(_ snapshot: SiriRemotePowerSnapshot) {
@@ -4043,6 +4086,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             }
         }
         refreshBluetoothPresentation()
+        if case .ready = state { refreshRemoteDeviceNames(reason: .connection) }
         if isConnected {
             voiceFnTapSession.resume()
             if shouldKeepVirtualAudioActive {
@@ -4060,6 +4104,11 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 self?.releaseVirtualAudioOutputIfUnused(reason: "bluetooth_not_ready")
             }
         }
+    }
+
+    func bluetoothBridgeDeviceNameDidChange(_ bridge: XiaomiBluetoothBridge) {
+        guard bluetoothBridges.values.contains(where: { $0 === bridge }) else { return }
+        refreshRemoteDeviceNames(reason: .peripheralEvent)
     }
 
     func bluetoothBridgeDidStartVoice(_ bridge: XiaomiBluetoothBridge) {
@@ -4356,6 +4405,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     ) {
         guard let profileID = remoteProfileID(for: bridge) else { return }
         settings.updateRemoteProfileModel(profileID, model: model)
+        refreshRemoteDeviceNames(reason: .connection)
     }
 
     func bluetoothBridge(

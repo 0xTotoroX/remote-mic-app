@@ -20,6 +20,22 @@ enum XiaomiVoiceRemoteNameMatcher {
     }
 }
 
+enum BluetoothDiscoveryPolicy {
+    static func accepts(
+        identifier: UUID,
+        targetIdentifier: UUID?,
+        advertisesVoiceService: Bool,
+        name: String?,
+        advertisedName: String?
+    ) -> Bool {
+        // A saved identity survives renaming, including scan fallback after cached retrieval fails.
+        if let targetIdentifier { return identifier == targetIdentifier }
+        return advertisesVoiceService
+            || XiaomiVoiceRemoteNameMatcher.matches(name)
+            || XiaomiVoiceRemoteNameMatcher.matches(advertisedName)
+    }
+}
+
 enum BluetoothLifecyclePhase: Equatable {
     case stopped
     case scanning(UInt64)

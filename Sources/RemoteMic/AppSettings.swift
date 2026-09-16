@@ -1232,6 +1232,19 @@ final class AppSettings: ObservableObject {
         remoteDeviceProfiles[index].customName = customName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The system name is a display cache, never a device identity or a stored numbered label.
+    @discardableResult
+    func updateRemoteProfileSystemName(_ profileID: UUID, name: String?) -> Bool {
+        guard let index = remoteDeviceProfiles.firstIndex(where: { $0.id == profileID }),
+              let customName = RemoteDeviceNamePolicy.customName(
+                from: name, model: remoteDeviceProfiles[index].model
+              ),
+              remoteDeviceProfiles[index].customName != customName
+        else { return false }
+        remoteDeviceProfiles[index].customName = customName
+        return true
+    }
+
     func updateRemoteProfileModel(_ profileID: UUID, model: XiaomiRemoteModel) {
         guard model != .unknown,
               let index = remoteDeviceProfiles.firstIndex(where: { $0.id == profileID }),

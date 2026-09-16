@@ -33,6 +33,7 @@ protocol XiaomiBluetoothBridgeDelegate: AnyObject {
     func bluetoothBridge(_ bridge: XiaomiBluetoothBridge, didUpdateBatteryLevel level: Int?)
     func bluetoothBridge(_ bridge: XiaomiBluetoothBridge, didIdentifyRemoteModel model: XiaomiRemoteModel)
     func bluetoothBridge(_ bridge: XiaomiBluetoothBridge, didUpdatePowerState state: RemotePowerState?)
+    func bluetoothBridgeDeviceNameDidChange(_ bridge: XiaomiBluetoothBridge)
 }
 
 private final class XiaomiPeripheralDelegateProxy: NSObject, CBPeripheralDelegate {
@@ -42,6 +43,10 @@ private final class XiaomiPeripheralDelegateProxy: NSObject, CBPeripheralDelegat
     init(generation: UInt64, owner: XiaomiBluetoothBridge) {
         self.generation = generation
         self.owner = owner
+    }
+
+    func peripheralDidUpdateName(_ peripheral: CBPeripheral) {
+        owner?.handleNameUpdate(peripheral: peripheral, generation: generation)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
@@ -151,6 +156,20 @@ final class XiaomiBluetoothBridge: NSObject {
         peripheral?.identifier ?? targetIdentifier
     }
 
+    /// Refresh the system snapshot without changing the bridge's connection or audio state.
+    func currentSystemDeviceName() -> String? {
+        guard shouldRun, let central, central.state == .poweredOn,
+              let peripheral, case .ready = lifecycle
+        else { return nil }
+        return central.retrieveConnectedPeripherals(withServices: [serviceUUID])
+            .first(where: { $0.identifier == peripheral.identifier })?.name
+    }
+
+    fileprivate func handleNameUpdate(peripheral: CBPeripheral, generation: UInt64) {
+        guard shouldRun, isCurrent(peripheral), lifecycle == .ready(generation) else { return }
+        delegate?.bluetoothBridgeDeviceNameDidChange(self)
+    }
+
     private(set) var state: BluetoothBridgeState = .stopped {
         didSet {
             guard oldValue != state else { return }
@@ -217,8 +236,7 @@ final class XiaomiBluetoothBridge: NSObject {
         }
         let centralState = central.map { String($0.state.rawValue) } ?? "none"
         AppLogger.shared.write(
-            "BLE WAKE recovery_requested state=\(String(describing: state)) " +
-                "lifecycle=\(String(describing: lifecycle)) " +
+            "BLE WAKE recovery_requested lifecycle=\(String(describing: lifecycle)) " +
                 "central_state=\(centralState) " +
                 "generation=\(generationCounter)"
         )
@@ -329,7 +347,7 @@ final class XiaomiBluetoothBridge: NSObject {
 
         if targetIdentifier == nil,
            let connected = central.retrieveConnectedPeripherals(withServices: [serviceUUID])
-            .first(where: { isCandidate($0) && !excludedIdentifiers().contains($0.identifier) }) {
+            .first(where: { !excludedIdentifiers().contains($0.identifier) }) {
             connect(connected, using: central, generation: generation, source: "connected_peripheral")
             return
         }
@@ -364,11 +382,7 @@ final class XiaomiBluetoothBridge: NSObject {
         state = .connecting
         startConnectionTimeout(generation: generation)
         central.connect(candidate, options: nil)
-        AppLogger.shared.write("BLE CONNECTING source=\(source) name=\(candidate.name ?? "unknown")")
-    }
-
-    private func isCandidate(_ candidate: CBPeripheral) -> Bool {
-        XiaomiVoiceRemoteNameMatcher.matches(candidate.name)
+        AppLogger.shared.write("BLE CONNECTING source=\(source)")
     }
 
     private func resetPeripheral() {
@@ -543,7 +557,7 @@ final class XiaomiBluetoothBridge: NSObject {
         write(ATVVProtocol.getCapabilitiesV10)
         lifecycle = .awaitingCapabilities(generation)
         state = .discovering
-        AppLogger.shared.write("ATVV CAPABILITIES requested name=\(peripheral.name ?? "MI RC")")
+        AppLogger.shared.write("ATVV CAPABILITIES requested")
     }
 
     private func handleControl(_ data: Data) {
@@ -578,7 +592,7 @@ final class XiaomiBluetoothBridge: NSObject {
             lifecycle = .ready(generation)
             if let peripheral {
                 state = .ready(peripheral.name ?? "MI RC")
-                AppLogger.shared.write("BLE READY name=\(peripheral.name ?? "MI RC")")
+                AppLogger.shared.write("BLE READY")
             }
         case 0x08:
             guard requestMicrophoneOpen() else {
@@ -864,8 +878,13 @@ extension XiaomiBluetoothBridge: CBCentralManagerDelegate {
               lifecycle == .scanning(generation),
               self.peripheral == nil,
               !excludedIdentifiers().contains(peripheral.identifier),
-              targetIdentifier == nil || peripheral.identifier == targetIdentifier,
-              serviceMatch || isCandidate(peripheral) || XiaomiVoiceRemoteNameMatcher.matches(advertisedName)
+              BluetoothDiscoveryPolicy.accepts(
+                  identifier: peripheral.identifier,
+                  targetIdentifier: targetIdentifier,
+                  advertisesVoiceService: serviceMatch,
+                  name: peripheral.name,
+                  advertisedName: advertisedName
+              )
         else { return }
         connect(peripheral, using: central, generation: generation, source: "scan")
     }
@@ -890,7 +909,7 @@ extension XiaomiBluetoothBridge: CBCentralManagerDelegate {
             batteryServiceUUID,
             deviceInformationServiceUUID,
         ])
-        AppLogger.shared.write("BLE CONNECTED name=\(peripheral.name ?? "unknown")")
+        AppLogger.shared.write("BLE CONNECTED")
     }
 
     func centralManager(
