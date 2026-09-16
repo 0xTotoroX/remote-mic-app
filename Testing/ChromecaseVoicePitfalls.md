@@ -89,3 +89,19 @@
   （系统静音、焦点移动）。必须叠加第二道保险——与小米/苹果链路一致，在按键边沿调用
   `hidEventSuppressor.arm(nativeEvents:edge:)` 让 CGEventTap 吞掉随之到达的原生事件。
   **Chromecase 链路此前漏了这一步（HID FILTER 从未启动）**，修复见 build 186。
+
+### 正品按键的原生事件实测表（2026-09-16，`HID FILTER arm/miss/suppressed` 日志为证）
+
+| 按键 | 通用表（小米 RC003） | 正品 Chromecase 实测 | 结果 |
+| --- | --- | --- | --- |
+| 音量 +/− | `systemKey(0/1)` | `systemKey(0/1)` | 抑制命中（`suppressed`），无系统副作用 |
+| **静音** | `systemKey(3)` | **`systemKey(7)`** | 沿用通用表必然 miss → 系统音量 HUD 照常出现 |
+| 方向（上/下/左/右） | `keyCode 126/125/123/124` | 系统侧**不产生事件** | tap 零记录，无副作用，无需抑制 |
+| 确认（OK） | `keyCode 36` | 系统侧**不产生事件** | 同上 |
+
+- 修复：静音按设备单独映射 `chromecaseNativeEvents(for:)`（build 190）。
+- 教训：**通用 `RemoteButton.nativeEvent` 表是小米 RC003 的实测值，换遥控器必须重新实测**；
+  诊断「抑制无效」时，命中与未命中都要留日志（`suppressed`/`miss`），只看 miss 会漏掉
+  「键码完全对不上」的情况。**注意区分「自定义动作效果」与「系统原本功能」**——本次
+  用户报告的「左/右/OK 也执行了原本功能」，实为自定义动作 arrowLeft/returnKey 在特定 App 里的
+  效果，系统侧并无事件。
