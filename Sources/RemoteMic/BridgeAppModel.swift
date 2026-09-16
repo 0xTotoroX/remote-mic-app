@@ -5988,6 +5988,20 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
         let profileID = ensureChromecaseProfile()
         let isPress = event.phase == .began
+        // 与小米/苹果链路一致的第二道保险：HID 独占（seize）只挡住 HID 层的报告，
+        // 系统仍会把这些 usage 解析成原生事件（静音→系统静音、方向键→焦点移动）。
+        // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉；
+        // 映射总开关关闭时什么都不做，按键回到系统行为。
+        if settings.customMappingEnabled {
+            if !hidEventSuppressor.isRunning {
+                let ready = hidEventSuppressor.start()
+                AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
+            }
+            hidEventSuppressor.arm(
+                nativeEvents: event.control.remoteButton.nativeEvents,
+                edge: isPress ? .down : .up
+            )
+        }
         if isPress {
             selectRemoteProfile(profileID)
             chromecasePressedControls.insert(controlID)
