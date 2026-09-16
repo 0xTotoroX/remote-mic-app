@@ -5988,20 +5988,17 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
         let profileID = ensureChromecaseProfile()
         let isPress = event.phase == .began
-        // 与小米/苹果链路一致的第二道保险：HID 独占（seize）只挡住 HID 层的报告，
-        // 系统仍会把这些 usage 解析成原生事件（静音→系统静音、方向键→焦点移动）。
-        // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉；
-        // 映射总开关关闭时什么都不做，按键回到系统行为。
-        if settings.customMappingEnabled {
-            if !hidEventSuppressor.isRunning {
-                let ready = hidEventSuppressor.start()
-                AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
-            }
-            hidEventSuppressor.arm(
-                nativeEvents: event.control.remoteButton.nativeEvents,
-                edge: isPress ? .down : .up
-            )
+        // 与小米/苹果链路一致的第二道保险：HID 独占（seize）只挡住 HID 层的报告分发，
+        // 系统仍会把部分 usage 解析成原生事件（实测：静音键产生 systemKey(7) → 系统音量 HUD）。
+        // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉。
+        if !hidEventSuppressor.isRunning {
+            let ready = hidEventSuppressor.start()
+            AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
         }
+        hidEventSuppressor.arm(
+            nativeEvents: chromecaseNativeEvents(for: event.control),
+            edge: isPress ? .down : .up
+        )
         if isPress {
             selectRemoteProfile(profileID)
             chromecasePressedControls.insert(controlID)
@@ -6020,6 +6017,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             phase: isPress ? .press : .release,
             profileID: profileID
         )
+    }
+
+    /// Chromecase 遥控器在 macOS 上产生的原生事件（2026-09-16 正品真机实测，`HID FILTER miss` 日志为证）。
+    ///
+    /// 与小米 RC003 的通用表存在差异：**静音键在系统侧是 `systemKey(7)`**（通用表按 RC003 记录为 3），
+    /// 沿用通用表时抑制必然 miss、系统音量 HUD 照常出现。其余按键实测与通用表一致：
+    /// 音量 = sys0/sys1（抑制命中）、方向/确认键系统侧不产生事件（tap 零记录，无副作用）。
+    private func chromecaseNativeEvents(for control: ChromecaseRemoteControl) -> Set<RemoteNativeEvent> {
+        switch control {
+        case .mute: return [.systemKey(type: 7)]
+        default: return control.remoteButton.nativeEvents
+        }
     }
 
     /// 注册并连接 Chromecase 设备档案。档案按型号识别，不存设备标识。
@@ -6060,8 +6069,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         _ button: RemoteButton,
         phase: RemoteButtonPhase,
         profileID: UUID
-    ) {
-        if macroFeature.isEditorActive {
+    ) {        if macroFeature.isEditorActive {
             if phase == .press { macroFeature.noteButtonInteraction(button: button) }
             AppLogger.shared.write(
                 "CHROMECASE BUTTON button=\(button.rawValue) phase=\(phase.rawValue) " +
