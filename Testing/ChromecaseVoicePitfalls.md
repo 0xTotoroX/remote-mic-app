@@ -77,3 +77,15 @@
   （HIDRemoteMonitor）的 seize 是成功的**，排除进程/TCC 权限问题 → 这台假冒遥控器的蓝牙
   HID 通道不允许 macOS 独占采集，**按键映射在该设备上不可用**，换正品遥控器是唯一解。
   语音链路（ATVV over BLE GATT 通知）不受影响。输入监控里加「无线麦.app」授权也无济于事。
+
+### 正品遥控器实测（2026-09-16，替换假冒品后）
+
+- **正品可被独占采集**：`CHROMECASE HID phase=connected mode=mapped seized=true`，管理级与设备级
+  seize 均成功——假冒品做不到（两级都被 `NotPrivileged` 拒绝）。**seize 能力差异是真伪的判据之一**。
+- **报告格式**：`reportID=0x01 len=3 head=01 XX 00`（首字节是 reportID，第二字节 usage，
+  第三字节 0），与 `ChromecaseHIDUsage` 表完全对得上（0x06=right / 0x08=mute / 0x0a=home /
+  0x0e=youtube）。按键映射执行链路 `CHROMECASE ACTION phase=completed result=dispatched` 正常。
+- **seize 不足以阻止系统消费按键**：正品在 `seized=true` 下，静音/左右等键仍会触发系统原本行为
+  （系统静音、焦点移动）。必须叠加第二道保险——与小米/苹果链路一致，在按键边沿调用
+  `hidEventSuppressor.arm(nativeEvents:edge:)` 让 CGEventTap 吞掉随之到达的原生事件。
+  **Chromecase 链路此前漏了这一步（HID FILTER 从未启动）**，修复见 build 186。
