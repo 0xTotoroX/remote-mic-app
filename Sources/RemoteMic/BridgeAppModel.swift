@@ -6082,7 +6082,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         _ button: RemoteButton,
         phase: RemoteButtonPhase,
         profileID: UUID
-    ) {        if macroFeature.isEditorActive {
+    ) {
+        if macroFeature.isEditorActive {
             if phase == .press { macroFeature.noteButtonInteraction(button: button) }
             AppLogger.shared.write(
                 "CHROMECASE BUTTON button=\(button.rawValue) phase=\(phase.rawValue) " +

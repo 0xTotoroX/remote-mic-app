@@ -25,6 +25,20 @@
   </tr>
 </table>
 
+## Video introduction
+
+“Possibly the least tool-like tool I have used lately” shows how SayAll turns a Bluetooth voice remote into a new way to express ideas, control your Mac, and work with AI. The video is in Chinese.
+
+<p align="center">
+  <a href="https://www.bilibili.com/video/BV13Pep6BEXe">
+    <img src="Screenshots/video-introduction-cover.jpg" alt="Video cover for Possibly the least tool-like tool I have used lately" width="960">
+  </a>
+</p>
+
+<p align="center"><a href="https://www.bilibili.com/video/BV13Pep6BEXe">Click the cover or watch the original video on Bilibili</a></p>
+
+Video by [可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
+
 ## Windows version
 
 The first Windows preview of SayAll is now available, focusing on the essential features:
@@ -107,6 +121,8 @@ Starting with v1.3.0, official release packages are signed with an Apple Develop
 4. Launch SayAll and grant Bluetooth access when asked.
 5. To customize ordinary buttons, also grant Input Monitoring and Accessibility. Restarting the app is required only after changing those macOS permissions.
 
+The menu bar icon is dimmed when no device is connected and remains clickable. An active connection from a physical remote, iPhone, Apple Watch, or web remote restores its normal appearance; voice transmission uses the active icon. Hover to read the current status. A connection does not mean audio or input permissions are ready.
+
 SayAll appears in the Dock and remains in the menu bar after launch:
 
 - Click the Dock icon to open Settings.
@@ -127,7 +143,7 @@ The app checks for updates once per day and asks before installing a newer versi
 4. Choose the same device as the microphone in the app that receives dictation or voice input.
 5. Click the target text field, hold the remote voice button to speak, then release it to finish.
 
-Under **Button Mapping**, the voice-button area lets you choose the default Fn/Globe behavior, a Left Command hold, or a Right Command hold. Command modes require SayAll Accessibility permission and press the selected Command side when voice starts, then release it when voice ends. The target voice app must support that standalone side; many apps merge both sides into a generic Command, so verify the target app directly. Pressing another key while Command is held may trigger a Command shortcut.
+Under **Button Mapping**, the voice-button area lets you choose the default Fn/Globe behavior, a Left Command hold, a Right Command hold, or a Right Option hold. Modifier-key modes require SayAll Accessibility permission and press the selected key when voice starts, then release it when voice ends. The target voice app must support that standalone key; many apps merge both sides into a generic modifier, so verify the target app directly. Pressing another key while the modifier is held may trigger a modifier shortcut. Right Option is the least-used modifier, making it a good dedicated voice trigger, and several voice input tools accept it as their trigger key.
 
 Fn remains the default because it directly matches Fn-hold voice entry in apps such as Doubao and Weixin, Fn-tap entry in Typeless, and the remote's hold-to-capture/release-to-stop lifecycle. F18, F19, F20, or other uncommon keys could be added technically, but this version does not offer an arbitrary voice-key binding: the target voice app must use the same key, and RC003, iPhone, Apple Watch, Web, permissions, and input-source switching must all share one paired press/release lifecycle. Ordinary remote buttons can still use F1–F20 shortcuts.
 
@@ -161,7 +177,7 @@ Each ordinary button supports a single-click action and optional double-click an
 - A long press triggers after about 0.55 seconds and suppresses the single-click action.
 - Buttons with a configured double-click or long-press do not hold-repeat, preventing multiple actions from firing at once.
 
-The voice button is always reserved for voice input and does not participate in ordinary button mapping; choose Fn/Globe, Left Command, or Right Command hold in its dedicated area.
+The voice button is always reserved for voice input and does not participate in ordinary button mapping; choose Fn/Globe, Left Command, Right Command, or Right Option hold in its dedicated area.
 
 ## Usage statistics
 

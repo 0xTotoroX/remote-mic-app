@@ -12,12 +12,46 @@ struct VoiceKeyModeTests {
         #expect(VoiceKeyMode.function.keyCode == 63)
         #expect(VoiceKeyMode.leftCommand.keyCode == 55)
         #expect(VoiceKeyMode.rightCommand.keyCode == 54)
+        #expect(VoiceKeyMode.rightOption.rawValue == "right_option")
+        #expect(VoiceKeyMode.rightOption.keyCode == 61)
         #expect(!VoiceKeyMode.function.requiresAccessibility)
         #expect(VoiceKeyMode.leftCommand.requiresAccessibility)
         #expect(VoiceKeyMode.rightCommand.requiresAccessibility)
+        #expect(VoiceKeyMode.rightOption.requiresAccessibility)
         #expect(VoiceKeyMode.function.usesHardwareMapping)
         #expect(!VoiceKeyMode.leftCommand.usesHardwareMapping)
         #expect(VoiceKeyMode.function.localizationKey == "connection.voice_key.mode.fn")
+    }
+
+    @Test func rightOptionVoiceKeyInjectionPreservesModifierSideAndReleasesCleanly() {
+        var posted: [(CGKeyCode, Bool, CGEventFlags)] = []
+        let poster: KeyboardInjector.KeyStatePoster = { code, isDown, flags in
+            posted.append((code, isDown, flags))
+            return true
+        }
+
+        #expect(KeyboardInjector.setVoiceKeyPressed(
+            .rightOption,
+            isPressed: true,
+            accessibilityTrusted: { true },
+            keyStatePoster: poster
+        ))
+        #expect(KeyboardInjector.setVoiceKeyPressed(
+            .rightOption,
+            isPressed: false,
+            accessibilityTrusted: { true },
+            keyStatePoster: poster
+        ))
+
+        let rightDeviceMask = CGEventFlags(rawValue: UInt64(NX_DEVICERALTKEYMASK))
+        #expect(posted.count == 2)
+        #expect(posted[0].0 == VoiceKeyMode.rightOption.keyCode)
+        #expect(posted[0].1)
+        #expect(posted[0].2.contains(.maskAlternate))
+        #expect(posted[0].2.contains(rightDeviceMask))
+        #expect(posted[1].0 == VoiceKeyMode.rightOption.keyCode)
+        #expect(!posted[1].1)
+        #expect(posted[1].2.isEmpty)
     }
 
     @Test func voiceKeyInjectionPreservesSideAndReleasesWithEmptyFlags() {
