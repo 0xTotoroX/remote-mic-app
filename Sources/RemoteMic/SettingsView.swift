@@ -1366,8 +1366,7 @@ struct SettingsView: View {
                     voiceTitle: localization.text("chromecase.mapping.voice.title"),
                     voiceFixed: localization.text("chromecase.mapping.voice.fixed"),
                     voiceDetail: localization.text("chromecase.mapping.voice.detail"),
-                    missingPhoto: localization.text("chromecase.mapping.photo.missing"),
-                    systemReserved: localization.text("chromecase.mapping.system_reserved")
+                    missingPhoto: localization.text("chromecase.mapping.photo.missing")
                 ),
                 buttonTitle: { controlID in
                     chromecaseButton(for: controlID)?.displayName(using: localization)
