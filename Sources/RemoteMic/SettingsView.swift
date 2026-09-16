@@ -1380,6 +1380,14 @@ struct SettingsView: View {
                     guard let button = chromecaseButton(for: controlID),
                           let trigger = ButtonTrigger(rawValue: triggerID)
                     else { return localization.text("action.disabled") }
+                    // 系统占用键（left/right/select）不在本 App 的映射范围内：单击槽位展示该键
+                    // 在系统侧的实际行为，其余槽位无动作。行为由 macOS 配件服务（BT-AACP）产生，
+                    // 详见 Testing/ChromecaseVoicePitfalls.md。
+                    if let control = ChromecaseRemoteControl(rawValue: controlID),
+                       ChromecaseRemoteControl.systemReservedControls.contains(control) {
+                        guard trigger == .singleClick else { return "—" }
+                        return localization.text("chromecase.mapping.system.\(controlID)")
+                    }
                     return mappingActionSummary(for: button, trigger: trigger)
                 },
                 onEdit: { controlID, triggerID in
