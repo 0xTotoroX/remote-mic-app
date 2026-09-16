@@ -162,3 +162,25 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
   「系统已连接的设备」取回。删除配对后设备既不广播也不在系统列表 → App 完全够不着，
   **语音链路一并失效**，实测确认。排查此类问题前不要动系统配对；恢复方法是系统蓝牙
   重新配对（同时按住 Home + Back 3~5 秒进配对模式）。
+
+#### 逐键对照：我们的映射 vs 系统的 standard consumer usage（2026-09-16 实测确认）
+
+| 我们的映射 | 报告字节（Array 索引） | 系统眼里的 usage | 系统行为 | 可否拦截 |
+| --- | --- | --- | --- | --- |
+| left | 0x05 | Menu Up `0x44` | 切歌（上一首） | ❌ 不走 CGEvent |
+| right | 0x06 | Menu Down `0x45` | 切歌（下一首） | ❌ |
+| ok | 0x07 | Menu Left `0x41` | 播放/暂停 | ❌ |
+| mute | 0x08 | Mute `0xE2` | 系统静音 | ✅ `suppressed sys7` |
+| volume ± | 0x0C/0x0D | Volume ± `0xE9/0xEA` | 无异常 | ✅ `suppressed sys0/1` |
+| up/down | 0x03/0x04 | Menu `0x42` / Menu Pick `0x43` | 待测 | 预期 ❌ |
+| home/back | 0x0A/0x0B | AC Home `0x0223` / AC Back `0x0224` | 待测 | 预期 ❌ |
+
+- 结论：**同一物理键被两套语义解读**——我们按 vRemoter 实测字节值映射（正确），系统按 HID 描述符的
+  标准 consumer usage 解读（Menu Up/Down/Left → 媒体控制）。出问题的三键都是标准媒体/导航 usage，
+  能拦的静音/音量恰好走 NX_SYSDEFINED（CGEvent）通道——**这是路径差异，不是键位差异**。
+- **参考实现（Vokie）的对照**：它只映射「中间圆键=确认发送 / 返回键=撤销 / 花瓣键=录音」三键，
+  其余（含方向键、音量键）**明确忽略并交给系统**——等于"避开"而不是"解决"。
+  我们要求"所有键都归映射且不触发系统行为"，因此需要 DriverKit 级别的拦截。
+- **DriverKit 可行性初判**：ioreg 显示该设备在 `IOHIDEventService` 层有 `AppleUserHIDEventDriver`
+  + `IOHIDEventServiceUserClient`，正是 Karabiner-Elements 系列拦截的层级，因此技术路径存在；
+  代价是需要自研 DriverKit 驱动 + 系统扩展授权 + 签名公证 + 后续系统版本维护（独立立项级别）。
