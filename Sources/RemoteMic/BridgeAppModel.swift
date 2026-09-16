@@ -5988,6 +5988,17 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
         let profileID = ensureChromecaseProfile()
         let isPress = event.phase == .began
+        // 系统占用键（left/right/select）：报告 usage 在系统眼里是 Menu Up/Down/Left，macOS 配件服务
+        // 直接消费成媒体控制且**不经 CGEvent**（真机实测：事件 tap 两层与 hidutil 都无法拦截）。
+        // 按产品决策完全不接管：不武装抑制（无效）、不执行自定义动作，按键归系统。
+        if ChromecaseRemoteControl.systemReservedControls.contains(event.control) {
+            if isPress {
+                AppLogger.shared.write(
+                    "CHROMECASE ACTION phase=completed result=system_reserved control=\(controlID)"
+                )
+            }
+            return
+        }
         // 与小米/苹果链路一致的第二道保险：HID 独占（seize）只挡住 HID 层的报告分发，
         // 系统仍会把部分 usage 解析成原生事件（实测：静音键产生 systemKey(7) → 系统音量 HUD）。
         // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉。

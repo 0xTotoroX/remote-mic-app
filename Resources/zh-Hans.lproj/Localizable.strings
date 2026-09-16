@@ -133,6 +133,7 @@
 "chromecase.mapping.voice.fixed" = "固定语音输入";
 "chromecase.mapping.voice.detail" = "用语音键直接使用遥控器麦克风传输语音；该键不能作为普通按键重新配置。";
 "chromecase.mapping.photo.missing" = "Chromecase 遥控器图片不可用";
+"chromecase.mapping.system_reserved" = "由系统占用，不可自定义";
 "keyboard.key_code" = "按键 %1$@";
 "keyboard.key.return" = "Return（回车）";
 "keyboard.key.tab" = "Tab（制表）";

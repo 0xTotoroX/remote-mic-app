@@ -867,9 +867,8 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         audioSettingsPanel
                         audioCompatibilityPanel
-                        #if SAYALL_CHROMECASE_ENABLED
-                        chromecasePanel
-                        #endif
+                        // Chromecase 连接卡片已按产品要求移除：启用开关默认常开，
+                        // 语音键模式在按键页底部，状态见侧边栏「连接」的设备列表。
                         phoneConnectionsPanel
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -879,54 +878,6 @@ struct SettingsView: View {
     }
 
     #if SAYALL_CHROMECASE_ENABLED
-    /// Chromecase（ATVV 语音遥控器）面板。私有包缺失时整块内容不会出现在界面上。
-    private var chromecasePanel: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("chromecase.section_title")
-                            .font(.headline)
-                        Text("chromecase.section_subtitle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 16)
-                    StatusPill(
-                        text: chromecaseStatusText,
-                        tint: chromecaseStatusTint
-                    )
-                }
-
-                if case .unsupported = model.chromecaseStatus {
-                    // 具体原因由包提供且只有中文，按「界面文案归宿主」的约定只写日志，界面用本地化文案。
-                    Text("chromecase.status.unsupported.detail")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Toggle(isOn: Binding(
-                    get: { settings.chromecaseEnabled },
-                    set: { newValue in
-                        settings.chromecaseEnabled = newValue
-                        model.applyChromecaseSettings()
-                    }
-                )) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("chromecase.enabled.title")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("chromecase.enabled.detail")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .toggleStyle(.switch)
-            }
-        }
-    }
-
     /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecase 档案的按键页显示）；
     /// 从连接设置页迁移过来，避免同一控件出现在两处。
     private var chromecaseVoiceModeSection: some View {
@@ -958,21 +909,6 @@ struct SettingsView: View {
         }
     }
 
-    private var chromecaseStatusText: String {
-        if case .connected(let displayName) = model.chromecaseStatus {
-            return displayName
-        }
-        return localization.text(model.chromecaseStatus.localizationKey)
-    }
-
-    private var chromecaseStatusTint: Color {
-        switch model.chromecaseStatus {
-        case .connected: return .green
-        case .searching, .connecting: return .orange
-        case .unsupported, .unauthorized: return .red
-        case .disabled, .unavailable, .disconnected: return .secondary
-        }
-    }
     #endif
 
     private var phoneConnectionsPanel: some View {
@@ -1430,7 +1366,8 @@ struct SettingsView: View {
                     voiceTitle: localization.text("chromecase.mapping.voice.title"),
                     voiceFixed: localization.text("chromecase.mapping.voice.fixed"),
                     voiceDetail: localization.text("chromecase.mapping.voice.detail"),
-                    missingPhoto: localization.text("chromecase.mapping.photo.missing")
+                    missingPhoto: localization.text("chromecase.mapping.photo.missing"),
+                    systemReserved: localization.text("chromecase.mapping.system_reserved")
                 ),
                 buttonTitle: { controlID in
                     chromecaseButton(for: controlID)?.displayName(using: localization)

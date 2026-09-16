@@ -133,6 +133,7 @@
 "chromecase.mapping.voice.fixed" = "Fixed voice input";
 "chromecase.mapping.voice.detail" = "Use the voice key to dictate through the remote microphone; it cannot be remapped as a regular button.";
 "chromecase.mapping.photo.missing" = "Chromecase remote image unavailable";
+"chromecase.mapping.system_reserved" = "Reserved by the system";
 "keyboard.key_code" = "Key %1$@";
 "keyboard.key.return" = "Return";
 "keyboard.key.tab" = "Tab";
