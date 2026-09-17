@@ -7,6 +7,7 @@ enum RemoteDeviceNameReader {
     struct HIDIdentity {
         let fingerprint: String
         let address: String?
+        var serialNumber: String? = nil
     }
 
     struct PairedDevice {
@@ -14,7 +15,13 @@ enum RemoteDeviceNameReader {
         let name: String?
     }
 
-    static func readHIDNames() -> [String: String] {
+    /// Transient observation only; serial numbers must never be persisted or logged.
+    struct HIDName: Equatable {
+        let name: String
+        let serialNumber: String?
+    }
+
+    static func readHIDNames() -> [String: HIDName] {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         IOHIDManagerSetDeviceMatching(manager, nil)
         let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
@@ -22,7 +29,8 @@ enum RemoteDeviceNameReader {
             guard let fingerprint = HIDRemoteMonitor.fingerprint(for: device) else { return nil }
             return HIDIdentity(
                 fingerprint: fingerprint,
-                address: IOHIDDeviceGetProperty(device, "DeviceAddress" as CFString) as? String
+                address: IOHIDDeviceGetProperty(device, "DeviceAddress" as CFString) as? String,
+                serialNumber: IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String
             )
         }
         // Re-enumerate on every requested refresh: retained objects may keep the old name.
@@ -37,15 +45,22 @@ enum RemoteDeviceNameReader {
     static func namesByFingerprint(
         identities: [HIDIdentity],
         paired: [PairedDevice]
-    ) -> [String: String] {
+    ) -> [String: HIDName] {
         let byFingerprint = Dictionary(grouping: identities, by: \.fingerprint)
-        var result: [String: String] = [:]
+        var result: [String: HIDName] = [:]
         for (fingerprint, interfaces) in byFingerprint {
             let addresses = Set(interfaces.compactMap { normalizedAddress($0.address) })
             guard addresses.count == 1, let address = addresses.first else { continue }
             let names = Set(paired.filter { normalizedAddress($0.address) == address }.compactMap(\.name))
             guard names.count == 1, let name = names.first else { continue }
-            result[fingerprint] = name
+            let serials = Set(interfaces.compactMap(\.serialNumber).filter {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            })
+            // Multiple HID interfaces may share one identity; conflicting serials are not evidence.
+            result[fingerprint] = HIDName(
+                name: name,
+                serialNumber: serials.count == 1 ? serials.first : nil
+            )
         }
         return result
     }

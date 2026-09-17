@@ -2,10 +2,20 @@ import Foundation
 
 enum RemoteDeviceNamePolicy {
     /// nil 表示本次没有读到有效名称；空字符串表示出厂名称，调用方应清除旧缓存。
-    static func customName(from rawName: String?, model: XiaomiRemoteModel) -> String? {
+    static func customName(
+        from rawName: String?,
+        model: XiaomiRemoteModel,
+        serialNumber: String? = nil
+    ) -> String? {
         guard let rawName else { return nil }
         let name = normalizedName(rawName)
         guard !name.isEmpty else { return nil }
+        // A2854 can expose its serial as its initial Bluetooth name. Compare this device's
+        // actual metadata exactly; never infer a serial from the name's shape or prefix.
+        if model == .appleSiriRemoteA2854 || model == .appleSiriRemoteA2540,
+           let serialNumber, !serialNumber.isEmpty, rawName == serialNumber {
+            return ""
+        }
         return isFactoryName(name, model: model) ? "" : name
     }
 

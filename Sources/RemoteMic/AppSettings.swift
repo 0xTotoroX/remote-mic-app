@@ -1234,10 +1234,14 @@ final class AppSettings: ObservableObject {
 
     /// The system name is a display cache, never a device identity or a stored numbered label.
     @discardableResult
-    func updateRemoteProfileSystemName(_ profileID: UUID, name: String?) -> Bool {
+    func updateRemoteProfileSystemName(
+        _ profileID: UUID,
+        name: String?,
+        serialNumber: String? = nil
+    ) -> Bool {
         guard let index = remoteDeviceProfiles.firstIndex(where: { $0.id == profileID }),
               let customName = RemoteDeviceNamePolicy.customName(
-                from: name, model: remoteDeviceProfiles[index].model
+                from: name, model: remoteDeviceProfiles[index].model, serialNumber: serialNumber
               ),
               remoteDeviceProfiles[index].customName != customName
         else { return false }

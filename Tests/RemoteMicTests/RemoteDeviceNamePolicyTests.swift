@@ -147,6 +147,39 @@ struct RemoteDeviceNamePolicyTests {
         #expect(display(unnamed, among: [makeProfile(), makeProfile()]) == "小米蓝牙遥控器 2")
     }
 
+    @Test func appleSerialNumberNameUsesDefaultOnlyOnAnExactMatch() {
+        let serial = "TESTSERIAL001"
+        for model in [XiaomiRemoteModel.appleSiriRemoteA2854, .appleSiriRemoteA2540] {
+            #expect(RemoteDeviceNamePolicy.customName(from: serial, model: model, serialNumber: serial) == "")
+            for name in ["testserial001", "TESTSERIAL001 2", " TESTSERIAL001 ", "Office"] {
+                #expect(RemoteDeviceNamePolicy.customName(from: name, model: model, serialNumber: serial)
+                    == name.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        }
+    }
+
+    @Test func missingSerialDoesNotGuessWhetherANameIsASerialNumber() {
+        for serial: String? in [nil, "", "OTHER-SERIAL"] {
+            #expect(RemoteDeviceNamePolicy.customName(
+                from: "TESTSERIAL001", model: .appleSiriRemoteA2854, serialNumber: serial
+            ) == "TESTSERIAL001")
+        }
+        #expect(RemoteDeviceNamePolicy.customName(
+            from: nil, model: .appleSiriRemoteA2854, serialNumber: "TESTSERIAL001"
+        ) == nil)
+        #expect(RemoteDeviceNamePolicy.customName(
+            from: " ", model: .appleSiriRemoteA2854, serialNumber: " "
+        ) == nil)
+    }
+
+    @Test func serialNameRuleDoesNotChangeOtherRemoteModels() {
+        for model in [XiaomiRemoteModel.rc001, .rc003, .unknown, .chromecaseVoiceRemote] {
+            #expect(RemoteDeviceNamePolicy.customName(
+                from: "TESTSERIAL001", model: model, serialNumber: "TESTSERIAL001"
+            ) == "TESTSERIAL001")
+        }
+    }
+
     private func makeProfile(model: XiaomiRemoteModel = .rc001, name: String = "") -> RemoteDeviceProfile {
         RemoteDeviceProfile(
             model: model,

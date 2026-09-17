@@ -2712,11 +2712,14 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             let names = RemoteDeviceNameReader.readHIDNames()
             for profile in appleProfiles {
                 requested += 1
-                let name = profile.hidFingerprint.flatMap { names[$0] }
+                let observation = profile.hidFingerprint.flatMap { names[$0] }
+                let name = observation?.name
                 if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     resolved += 1
                 }
-                if settings.updateRemoteProfileSystemName(profile.id, name: name) { changed += 1 }
+                if settings.updateRemoteProfileSystemName(
+                    profile.id, name: name, serialNumber: observation?.serialNumber
+                ) { changed += 1 }
             }
         }
         AppLogger.shared.write(

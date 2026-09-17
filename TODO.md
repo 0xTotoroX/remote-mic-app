@@ -1,7 +1,7 @@
 # TODO
 
 - [ ] 蓝牙遥控器系统自定义名称（[#406](https://github.com/HD838A/remote-mic-app/issues/406)）
-	- 已接入按设备身份读取名称、历史编号和事件刷新；候选程序实际运行、截图及苹果遥控器实物验收待完成，保持 Draft。
+	- 已接入按设备身份读取名称、历史编号和事件刷新；A2854 独立 API 实验已验证改名读取和重连身份稳定，并补充序列号默认名识别；候选程序实际运行、截图及端到端验收待完成，保持 Draft。
 	- 验证入口：[BluetoothDeviceNames](Testing/BluetoothDeviceNames.md)。
 
 - [x] 统一 SayAll 品牌、官网与当前上架战略
