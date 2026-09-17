@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-- 分支：`codex/remove-secret-ai-entry` 及其合入后的版本。
+- 适用版本：当前待验证 PR 或已合入 `main` 的精确 Commit；原功能分支 `codex/remove-secret-ai-entry` 只作为历史审计来源。
 - 范围：公开 Mac 宿主与可选私有组件之间的显示、生命周期和稳定功能边界。
 - 本手册不记录资格获取方式、内部触发方式、邀请码或服务配置。
 

@@ -29,4 +29,4 @@
 
 ## 日志与验证边界
 
-日志只允许出现开始、结束、字节数和失败类别，不得包含音频、正文、路径或 App 私密内容。`swift test --filter RecordingAssetStoreTests` 只证明存储、权限、排序和设置默认值；真实 RC003、iPhone、Watch、Web、第三方 App 和音质必须人工验收，当前尚未完成。
+日志只允许出现开始、结束、字节数和失败类别，不得包含音频、正文、路径或 App 私密内容。`swift test --disable-keychain --filter RecordingAssetStoreTests` 只证明存储、权限、排序和设置默认值；真实 RC003、iPhone、Watch、Web、第三方 App 和音质必须人工验收，当前尚未完成。

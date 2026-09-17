@@ -25,6 +25,20 @@
   </tr>
 </table>
 
+## 视频介绍
+
+《可能是我最近用过最不像工具的工具》展示了无线麦如何把蓝牙语音遥控器变成随手表达、控制 Mac 和与 AI 协作的新入口。
+
+<p align="center">
+  <a href="https://www.bilibili.com/video/BV13Pep6BEXe">
+    <img src="Screenshots/video-introduction-cover.jpg" alt="《可能是我最近用过最不像工具的工具》视频封面" width="960">
+  </a>
+</p>
+
+<p align="center"><a href="https://www.bilibili.com/video/BV13Pep6BEXe">点击封面或前往 Bilibili 观看原视频</a></p>
+
+视频作者：[可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
+
 ## Windows 版本
 
 无线麦 App Windows 版本的第一个预览版已经发布，当前以基本功能为主：
@@ -109,6 +123,8 @@ Apple Silicon 安装包名为 `Remote-Mic-<版本>.dmg`，Intel 安装包名为 
 4. 启动 SayAll.app，按提示允许蓝牙权限。
 5. 如果需要自定义普通按键，再允许“输入监控”和“辅助功能”。授权后请完全退出并重新打开应用。
 
+未连接任何设备时，菜单栏图标呈灰化外观，仍可点击。实体遥控器、iPhone、Apple Watch 或网页版任一有效连接后恢复正常显示；传输语音时显示活动图标。悬停可查看当前状态，已连接不代表音频或输入权限已就绪。
+
 应用启动后会显示 Dock 图标并常驻菜单栏：
 
 - 单击 Dock 图标：打开设置面板；
@@ -129,7 +145,7 @@ Apple Silicon 安装包名为 `Remote-Mic-<版本>.dmg`，Intel 安装包名为 
 4. 在需要听写或语音输入的应用中选择同一个设备作为麦克风。
 5. 单击目标输入框，按住遥控器语音键说话，松开后结束。
 
-在“按键映射”页的“语音键”区域可以选择语音触发方式：默认的 Fn/地球键、左 Command 长按或右 Command 长按。Fn/地球键保持旧版本行为；Command 模式需要无线麦的“辅助功能”权限，并会在语音开始时按下所选 Command、结束时释放。目标语音应用必须支持对应的单独左/右 Command 长按；许多应用会把左右 Command 合并为通用 Command，需在目标应用中实际测试。Command 长按期间同时按其他键可能触发 Command 快捷键。
+在“按键映射”页的“语音键”区域可以选择语音触发方式：默认的 Fn/地球键、左 Command 长按、右 Command 长按或右 Option 长按。Fn/地球键保持旧版本行为；修饰键模式需要无线麦的“辅助功能”权限，并会在语音开始时按下所选按键、结束时释放。目标语音应用必须支持对应的单独按键长按；许多应用会把左右同侧按键合并为通用修饰键，需在目标应用中实际测试。长按期间同时按其他键可能触发修饰键快捷键。右 Option 是最少被使用的修饰键，适合作为专用语音触发键，也有语音输入软件以其为触发键。
 
 默认使用 Fn，是为了直接兼容豆包、微信等 Fn 长按语音入口和 Typeless 的 Fn 点按入口，同时让遥控器“按住采音、松开停止”的生命周期与快捷键一致。技术上可以继续扩展 F18、F19、F20 等低频键，但当前版本不支持任意自定义语音键：目标语音应用也必须配置同一个键，而且 RC003、iPhone、Apple Watch、网页版、权限与输入源切换都要共享同一套成对按下/释放逻辑。普通遥控器按键仍可单独配置 F1–F20。
 
@@ -165,7 +181,7 @@ Typeless 等点按 Fn 开始、再次点按结束的语音工具，与小米蓝�
 - 设置长按后，按住约 0.55 秒执行长按动作，并抑制单击；
 - 设置了双击或长按的实体键不会再按住重复，避免多个动作同时触发。
 
-语音键始终用于语音输入，不参与普通按键映射；触发方式可在语音键区域选择 Fn/地球键、左 Command 或右 Command 长按。
+语音键始终用于语音输入，不参与普通按键映射；触发方式可在语音键区域选择 Fn/地球键、左 Command、右 Command 或右 Option 长按。
 
 ## 使用统计
 
@@ -253,3 +269,7 @@ Typeless 等点按 Fn 开始、再次点按结束的语音工具，与小米蓝�
 - [Vibe PPT Web Template](https://github.com/GetSayAll/vibe-ppt-web-template)
 - [Claude Code Config](https://github.com/HD838A/claude-code-config)
 - [DJI 4G Mac](https://github.com/HD838A/dji-4g-mac)
+
+## 开发者文档
+
+开发者、贡献者和自动化 Agent 请从 [项目文档导航](DOCUMENTATION.md) 开始。

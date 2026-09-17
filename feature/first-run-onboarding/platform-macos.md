@@ -53,6 +53,7 @@
 - 默认内容尺寸为 `1020 × 772`，完整当前页面和底部导航不依赖页面内部滚动。
 - 中文最终显示字号不得小于 12pt。
 - 浅色和深色必须保持整个窗口视觉体系一致。
+- 用户可见文案必须遵守 [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md) 的“用户可见文案必须使用产品语言”不变量；平台实现不得把研发、测试或内部验收状态引入页面。
 - macOS 页面或流程变化必须按 [`design-qa.md`](../../design-qa.md) 和 [`Testing/FirstRunOnboarding.md`](../../Testing/FirstRunOnboarding.md) 完成检查。
 
 ## 实现与测试入口
