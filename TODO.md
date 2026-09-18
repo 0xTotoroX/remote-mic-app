@@ -1,5 +1,9 @@
 # TODO
 
+- [ ] 蓝牙遥控器系统自定义名称（[#406](https://github.com/HD838A/remote-mic-app/issues/406)）
+	- 已接入按设备身份读取名称、历史编号和事件刷新；A2854 独立 API 实验已验证改名读取和重连身份稳定，并补充序列号默认名识别；候选程序实际运行、截图及端到端验收待完成，保持 Draft。
+	- 验证入口：[BluetoothDeviceNames](Testing/BluetoothDeviceNames.md)。
+
 - [x] 统一 SayAll 品牌、官网与当前上架战略
   - App 英文名称统一为 `SayAll`，中文名称继续使用“无线麦”，官网统一为 `https://sayall.app`。
   - 2026-08-17 补齐发布产物名称层：canonical bundle 与安装目标统一为 `SayAll.app`，英文显示 SayAll、简中显示无线麦；`RemoteMic` 可执行文件、`com.hd838a.RemoteMic` Bundle ID 和 `Remote-Mic-*` 发布资产文件名继续保持兼容。安装器仅在 Bundle ID 匹配且新 App 已验证后，把旧 `Remote Mic.app` / `无线麦.app` 移到目标卷对应的废纸篓；Trash 不可用时保留旧 App。

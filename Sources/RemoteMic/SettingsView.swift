@@ -478,12 +478,16 @@ struct SettingsView: View {
             minHeight: minimumContentSize.height
         )
         .onAppear {
+            model.refreshRemoteDeviceNames(reason: .page)
             refreshPermissionStates()
             loginItemService.refresh()
             macroFeature.setEditorActive(false)
             membershipFeature.refreshIfNeeded()
         }
         .onChange(of: selectedSection) { section in
+            if section == .connection || section == .mapping {
+                model.refreshRemoteDeviceNames(reason: .page)
+            }
             if section != .macros, section != .buttonProfiles {
                 macroFeature.setEditorActive(false)
             }
@@ -1924,6 +1928,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(remoteDisplayName(profile))
+                        .help(remoteDisplayName(profile))
+                        .accessibilityLabel(Text(remoteDisplayName(profile)))
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -2042,12 +2048,11 @@ struct SettingsView: View {
     }
 
     private func remoteDisplayName(_ profile: RemoteDeviceProfile) -> String {
-        let base = localization.text(profile.displayNameFallbackKey)
-        let peers = settings.remoteDeviceProfiles.filter { $0.model == profile.model }
-        guard peers.count > 1,
-              let index = peers.firstIndex(where: { $0.id == profile.id })
-        else { return base }
-        return "\(base) \(index + 1)"
+        RemoteDeviceNamePolicy.displayName(
+            for: profile,
+            among: settings.remoteDeviceProfiles,
+            defaultName: localization.text(profile.displayNameFallbackKey)
+        )
     }
 
     private func mappingTriggerEditor(
