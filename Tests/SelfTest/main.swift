@@ -577,7 +577,7 @@ check(
 )
 
 let savedForeignIdentifier = UUID()
-let savedForeignAccepted = BluetoothDiscoveryPolicy.accepts(
+let savedForeignDecision = VoiceRemoteAdmission.decide(
     identifier: savedForeignIdentifier,
     targetIdentifier: savedForeignIdentifier,
     advertisesVoiceService: true,
@@ -585,7 +585,7 @@ let savedForeignAccepted = BluetoothDiscoveryPolicy.accepts(
     advertisedName: nil
 )
 let savedOwnIdentifier = UUID()
-let savedOwnAccepted = BluetoothDiscoveryPolicy.accepts(
+let savedOwnDecision = VoiceRemoteAdmission.decide(
     identifier: savedOwnIdentifier,
     targetIdentifier: savedOwnIdentifier,
     advertisesVoiceService: false,
@@ -593,8 +593,27 @@ let savedOwnAccepted = BluetoothDiscoveryPolicy.accepts(
     advertisedName: nil
 )
 check(
-    !savedForeignAccepted && savedOwnAccepted,
-    "saved identity does not override the other product veto"
+    !savedForeignDecision.isAdopted && savedOwnDecision.isAdopted,
+    "saved identity never overrides the foreign product veto, but still survives renaming"
+)
+// App 内置每款遥控器的真机图：认不出型号就不能采用，否则界面会给未验证设备套上别的型号的图。
+let unsupportedFresh = VoiceRemoteAdmission.decide(
+    identifier: UUID(),
+    targetIdentifier: nil,
+    advertisesVoiceService: true,
+    name: "客厅遥控器",
+    advertisedName: nil
+)
+let unnamedFresh = VoiceRemoteAdmission.decide(
+    identifier: UUID(),
+    targetIdentifier: nil,
+    advertisesVoiceService: true,
+    name: nil,
+    advertisedName: nil
+)
+check(
+    unsupportedFresh == .rejectUnrecognizedName("客厅遥控器") && unnamedFresh == .rejectUnnamed,
+    "a voice device is adopted only with a saved identity or a verified model name"
 )
 
 print("RESULT passed=\(passed) failed=\(failed)")

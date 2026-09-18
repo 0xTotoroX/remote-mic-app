@@ -6,29 +6,35 @@ import Testing
 struct RemoteDeviceNameIntegrationTests {
     @Test func renamedKnownDeviceCanBeRediscoveredWithoutNameOrServiceAdvertisement() {
         let target = UUID()
-        #expect(BluetoothDiscoveryPolicy.accepts(
+        #expect(VoiceRemoteAdmission.decide(
             identifier: target, targetIdentifier: target, advertisesVoiceService: false,
             name: "Office", advertisedName: nil
-        ))
-        #expect(!BluetoothDiscoveryPolicy.accepts(
+        ).isAdopted)
+        #expect(!VoiceRemoteAdmission.decide(
             identifier: UUID(), targetIdentifier: target, advertisesVoiceService: true,
             name: "MI RC", advertisedName: "MI RC"
-        ))
+        ).isAdopted)
     }
 
-    @Test func newDeviceStillNeedsVoiceServiceOrApprovedFactoryName() {
-        #expect(BluetoothDiscoveryPolicy.accepts(
-            identifier: UUID(), targetIdentifier: nil, advertisesVoiceService: true,
-            name: "Office", advertisedName: nil
-        ))
-        #expect(BluetoothDiscoveryPolicy.accepts(
+    /// 收紧点：ATVV 是通用服务，「广播语音服务」不再足以证明型号。
+    /// App 内置每款遥控器的真机图，没有型号证据就采用等于给未验证设备套上别的型号的图，
+    /// 因此新设备必须报出**已验证的型号名**（或已有保存身份，见上一个用例）。
+    @Test func newDeviceNeedsAVerifiedModelNameNotJustTheVoiceService() {
+        // 已验证型号名（设备自报的出厂名，不受系统改名影响）→ 采用。
+        #expect(VoiceRemoteAdmission.decide(
             identifier: UUID(), targetIdentifier: nil, advertisesVoiceService: false,
             name: "Office", advertisedName: "MI RC"
-        ))
-        #expect(!BluetoothDiscoveryPolicy.accepts(
+        ).isAdopted)
+        // 只有通用语音服务、名字是用户自己起的 → 不采用。
+        #expect(!VoiceRemoteAdmission.decide(
+            identifier: UUID(), targetIdentifier: nil, advertisesVoiceService: true,
+            name: "Office", advertisedName: nil
+        ).isAdopted)
+        // 既没有服务也没有名字 → 与本桥无关。
+        #expect(!VoiceRemoteAdmission.decide(
             identifier: UUID(), targetIdentifier: nil, advertisesVoiceService: false,
             name: "Office", advertisedName: nil
-        ))
+        ).isAdopted)
     }
 
     @Test func systemNameChangesOnlyTheMatchingProfileAndSurvivesRestart() throws {
