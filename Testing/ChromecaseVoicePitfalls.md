@@ -327,5 +327,32 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
   设备上无法通过遥控器麦克风实现；外部实现的短按可用性来自**其手上的机型**（聊天中演示的
   天长天利达 A/B 款），其 spec 也自述「未因此次迁移获得 A0 真机长时间保活验收结论」。
 - `MIC_CLOSE(0xFF)` 停不掉本机的物理流：远端会持续推流，**甚至跨 App 重启仍在推**（build 210/211
-  日志可证）。故本仓库补上「物理流按精确 stream id 收尾」（诊断开关 `/tmp/chromecase_physical_close`），
-  用于验证「上一会话未正式关闭是否正是 `MIC_OPEN` 被忽略的原因」——这是当前唯一未排除的假设。
+  日志可证）——本固件只认**精确 stream id**（规范 4.4 里 `0xFF` = 任意当前流，它没实现）。
+
+#### 根因确认：物理流必须用「精确 stream id」关掉，`MIC_OPEN` 才被接受（2026-09-18，build 212→213）
+
+**修复**：物理流（HTT/PTT）在 `AUDIO_STOP` 时，宿主用它的**精确 stream id** 补一条 `MIC_CLOSE`，
+且必须在 latch 的 `MIC_OPEN` **之前**（`ChromecaseAudioClient` 的 `.audioStop` 分支，build 213 起为默认行为）。
+
+**机制**：不关流时遥远端一直停留在「助手键按下」状态，此后所有 `MIC_OPEN` 都被**静默忽略**——
+连规范 4.7.5 要求的 `MIC_OPEN_ERROR(0xF80)` 都不回。这正是此前「远端从不响应宿主开麦」的真因，
+也与外部同款实现（vokie-plugin-chromecast-remote）在每个手势收尾都用精确 id 关流的做法吻合。
+
+**真机证据（build 212，用户实测「按一次说话 → 豆包出字成功」）**：
+
+```
+28.411  STREAM START reason=0x03 stream=50        ← 用户按下
+28.579  松键 → MIC_CLOSE(stream=50) origin=physical_close  ← 新增动作：正式关掉这次会话
+28.841  MIC_OPEN written bytes=0c01
+28.879  STREAM START stream=51                    ← 立刻起来的流
+   此后 7.1 秒无任何松键，音频连续（会话 117600 样本 = 7.35 s，普通按住最多 1~2 s）
+36.814  用户第二次按下 → 松键 → 结束收音（audio_batches=245，正常排空）
+```
+
+- 更长的一次会话拿到 `audio_batches=948`（**28.4 秒连续音频**），说明「按一次持续收音」成立；
+- 该固件把宿主 `MIC_OPEN` 换来的流仍报成 `reason=0x03`（不是规范里的 `0x00`），**判据要看行为
+  （松键后是否继续推流），不能只看 reason 字节**；
+- 回归用例：`testPhysicalStreamEndClosesWithExactStreamIDBeforeOpening`（私有包）。
+
+**遗留的 A/B（未做，不影响功能）**：`MIC_OPEN` 的 mic mode 同时从播放（`0x00`）改成了采集（`0x01`），
+两者在本机「未关流」状态下都被忽略；关流修好后是哪个模式在起作用尚未单独验证，当前取采集模式。
