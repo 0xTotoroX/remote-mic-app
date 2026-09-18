@@ -28,6 +28,10 @@ import Foundation
 extension XiaomiRemoteModel {
     /// 是否支持「按一次收音」（按一下开始、再按一下结束）。
     /// 只有 Chromecase 支持：它的语音模式可选 toggle；小米 RC001/RC003 只能按住收音。
+    ///
+    /// 该判断与私有包型号自报的能力位一一对应（`ChromecaseCapabilityFlags.toggleVoiceGesture`），
+    /// 由 `ChromecaseCapabilityContractTests` 跨仓锁定。将来若出现能力不同的新型号，
+    /// 这里要改成读取链路自报的能力，而不是继续按型号硬编码。
     var supportsToggleVoiceRecording: Bool {
         isChromecaseRemote
     }

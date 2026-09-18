@@ -132,6 +132,11 @@ if let chromecasePath = chromecasePackagePath, !chromecasePath.isEmpty {
     remoteMicDependencies.append(
         .product(name: "SayAllChromecase", package: packageIdentity)
     )
+    // 测试目标也要能引用私有包：能力矩阵要与型号自报的能力声明做跨仓一致性校验
+    // （见 Tests/RemoteMicTests/ChromecaseCapabilityContractTests.swift）。
+    remoteMicTestDependencies.append(
+        .product(name: "SayAllChromecase", package: packageIdentity)
+    )
 }
 
 if let combinationActionsPath = combinationActionsPackagePath, !combinationActionsPath.isEmpty {
