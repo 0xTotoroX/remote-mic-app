@@ -1314,7 +1314,11 @@ extension XiaomiBluetoothBridge {
                 AppLogger.shared.write("BLE MODEL unrecognized modelNumber=\(normalizedModelNumber)")
                 return
             }
-            AppLogger.shared.write("BLE MODEL identified=\(model.rawValue)")
+            // 原始型号串必须一起记：广播名与型号**不是**一一对应（本机这台广播名是
+            // 「小米蓝牙语音遥控器」，DIS 报的却是 RC003），只有原始串能支撑型号目录。
+            AppLogger.shared.write(
+                "BLE MODEL identified=\(model.rawValue) modelNumber=\(normalizedModelNumber)"
+            )
             delegate?.bluetoothBridge(self, didIdentifyRemoteModel: model)
             return
         }
