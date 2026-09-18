@@ -36,53 +36,107 @@ struct VoiceInputCapabilityMatrixTests {
         #expect(OnboardingVoiceTool.unselected.supportsHoldVoiceRecording)
     }
 
+    // MARK: - 能力判定：链路自报优先，型号默认兜底
+
+    @Test func declaredCapabilitiesWinOverTheModelTable() {
+        // 自报说「不支持按一次、但有触摸面」时，判定必须听设备的——型号默认表只用于兜底。
+        let declared: ChromecaseDeclaredCapabilities = [.controlEdges, .voiceStream, .touchSurface]
+        let resolved = RemoteVoiceCapabilities.resolve(
+            model: .chromecaseVoiceRemote,
+            declared: declared
+        )
+        #expect(!resolved.supportsToggleVoiceRecording)
+        #expect(resolved.supportsTouchSurface)
+        // 界面随之变化：Fn 点按开关出现（它只会按住），触摸类设置也出现。
+        #expect(VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
+        #expect(
+            TouchSurfaceControlApplicability.isApplicable(
+                capabilities: resolved,
+                pageRequestsControl: true
+            )
+        )
+    }
+
+    @Test func declaredCapabilitiesOfThisModelMatchTheMatrix() {
+        let declared: ChromecaseDeclaredCapabilities = [
+            .controlEdges, .voiceStream, .toggleVoiceGesture,
+        ]
+        let resolved = RemoteVoiceCapabilities.resolve(
+            model: .chromecaseVoiceRemote,
+            declared: declared
+        )
+        #expect(resolved.supportsToggleVoiceRecording)
+        #expect(!resolved.supportsTouchSurface)
+        // 会按一次收音，因此不出现「Fn 点按」开关。
+        #expect(!VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
+    }
+
+    @Test func fallsBackToTheModelTableWhenNothingIsDeclared() {
+        // 未连接、或设备未自报：用型号默认表。
+        let chromecase = RemoteVoiceCapabilities.resolve(model: .chromecaseVoiceRemote, declared: [])
+        #expect(chromecase.supportsToggleVoiceRecording)
+        #expect(!chromecase.supportsTouchSurface)
+
+        let siri = RemoteVoiceCapabilities.resolve(model: .appleSiriRemoteA2854, declared: [])
+        #expect(siri.supportsTouchSurface)
+
+        let xiaomi = RemoteVoiceCapabilities.resolve(model: .rc003, declared: [])
+        #expect(!xiaomi.supportsToggleVoiceRecording)
+        #expect(!xiaomi.supportsTouchSurface)
+    }
+
+    @Test func unknownModelNeverClaimsCapabilities() {
+        let resolved = RemoteVoiceCapabilities.resolve(model: nil, declared: [])
+        #expect(!resolved.supportsToggleVoiceRecording)
+        #expect(!resolved.supportsTouchSurface)
+        // 型号未知时仍保留「Fn 点按」入口：它是驱动点按式工具的唯一办法。
+        #expect(VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
+    }
+
     // MARK: - 界面门禁
 
     @Test func fnTapSwitchIsNotOfferedForTapOnceRemotes() {
-        // 用户要求：Chromecase 的按键页不得出现「语音键模拟 Fn 点按」——它自己就能按一次收音。
-        #expect(!VoiceFunctionKeyTapApplicability.isApplicable(model: .chromecaseVoiceRemote))
+        let resolved = RemoteVoiceCapabilities.resolve(
+            model: .chromecaseVoiceRemote,
+            declared: []
+        )
+        #expect(!VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
     }
 
     @Test func fnTapSwitchStaysAvailableForHoldOnlyRemotes() {
-        // 只能按住收音的遥控器保留入口：它是驱动 Typeless 的唯一办法。
-        #expect(VoiceFunctionKeyTapApplicability.isApplicable(model: .rc003))
-        #expect(VoiceFunctionKeyTapApplicability.isApplicable(model: .rc001))
-        #expect(VoiceFunctionKeyTapApplicability.isApplicable(model: .appleSiriRemoteA2854))
-        // 型号未知时保守保留，避免升级后入口突然消失。
-        #expect(VoiceFunctionKeyTapApplicability.isApplicable(model: nil))
+        for model in [XiaomiRemoteModel.rc003, .rc001, .appleSiriRemoteA2854] {
+            let resolved = RemoteVoiceCapabilities.resolve(model: model, declared: [])
+            #expect(VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
+        }
     }
 
     @Test func touchControlsNeverAppearWithoutATouchSurface() {
-        // 页面即使请求触摸类控件，没有触摸面的型号也不显示。
+        let siri = RemoteVoiceCapabilities.resolve(model: .appleSiriRemoteA2854, declared: [])
         #expect(
             TouchSurfaceControlApplicability.isApplicable(
-                model: .appleSiriRemoteA2854,
+                capabilities: siri,
                 pageRequestsControl: true
             )
         )
+        let xiaomi = RemoteVoiceCapabilities.resolve(model: .rc003, declared: [])
         #expect(
             !TouchSurfaceControlApplicability.isApplicable(
-                model: .rc003,
+                capabilities: xiaomi,
                 pageRequestsControl: true
             )
         )
+        let chromecase = RemoteVoiceCapabilities.resolve(model: .chromecaseVoiceRemote, declared: [])
         #expect(
             !TouchSurfaceControlApplicability.isApplicable(
-                model: .chromecaseVoiceRemote,
+                capabilities: chromecase,
                 pageRequestsControl: true
             )
         )
         // 页面没请求就不显示（默认路径）。
         #expect(
             !TouchSurfaceControlApplicability.isApplicable(
-                model: .appleSiriRemoteA2854,
+                capabilities: siri,
                 pageRequestsControl: false
-            )
-        )
-        #expect(
-            !TouchSurfaceControlApplicability.isApplicable(
-                model: nil,
-                pageRequestsControl: true
             )
         )
     }

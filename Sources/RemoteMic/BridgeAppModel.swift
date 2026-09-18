@@ -670,6 +670,10 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 设置页展示用。私有包缺失时恒为 `.unavailable`，界面据此隐藏整块内容。
     @Published private(set) var chromecaseStatus: ChromecaseLinkStatus =
         ChromecaseFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
+    /// 遥控器**自报**的能力位；链路不可用时为空集合。
+    ///
+    /// 界面与语音键驱动都读它（经 `RemoteVoiceCapabilities.resolve`），宿主不再维护第二份型号能力表。
+    @Published private(set) var chromecaseDeclaredCapabilities: ChromecaseDeclaredCapabilities = []
     /// 当前是否有活跃的 Chromecase 收音会话（按键页用它点亮固定的语音键卡片）。
     @Published private(set) var isChromecaseVoiceActive = false
     /// Chromecase 遥控器对应的设备档案。按型号识别，不存设备标识。
@@ -796,6 +800,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         // 否则最早几帧会落在还没有出口的时刻（首字丢失）。
         chromecaseFeature.onStatusChange = { [weak self] status in
             self?.handleChromecaseStatusChange(status)
+        }
+        chromecaseFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
+            guard let self else { return }
+            guard self.chromecaseDeclaredCapabilities != declared else { return }
+            self.chromecaseDeclaredCapabilities = declared
+            // 能力变化会改变「按一次说话」这类选项的可用性，必须立即同步到运行时与界面。
+            AppLogger.shared.write(
+                "CHROMECASE CAPABILITIES declared=\(Self.describe(declared))"
+            )
+            self.syncChromecaseRuntimeState()
         }
         chromecaseFeature.onVoiceStart = { [weak self] in
             self?.beginChromecaseVoice()
@@ -5781,7 +5795,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
     private func syncChromecaseRuntimeState() {
         guard started else { return }
-        chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)
+        chromecaseFeature.setVoiceMode(effectiveChromecaseVoiceMode)
         // 映射总开关决定 HID 通道是否独占设备：它必须即时生效，否则界面上「已开启映射」
         // 而系统仍在消费这些按键，用户会以为映射没生效。
         chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)
@@ -5851,10 +5865,39 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 当前应使用的驱动方式：由遥控器自己的语音模式 + 目标工具是否支持长按推导（见能力矩阵）。
     private var chromecaseFunctionKeyDrive: ChromecaseFunctionKeyDrive {
         .resolve(
-            voiceMode: settings.chromecaseVoiceMode,
+            voiceMode: effectiveChromecaseVoiceMode,
             toolSupportsHoldVoiceRecording: settings.onboardingVoiceTool
                 .supportsHoldVoiceRecording
         )
+    }
+
+    /// 生效的语音模式：设备**自报**不支持「按一次收音」时，即使设置里存着 toggle 也按「按住说话」执行。
+    /// 这样能力不足的型号不会因为一份历史设置而走进它做不到的路径（设置里的原值保留，不静默改写）。
+    var effectiveChromecaseVoiceMode: ChromecaseVoiceMode {
+        let declared = chromecaseDeclaredCapabilities
+        guard !declared.isEmpty, !declared.contains(.toggleVoiceGesture) else {
+            return settings.chromecaseVoiceMode
+        }
+        return .hold
+    }
+
+    /// 当前选中遥控器档案的语音能力：链路自报优先，自报缺失时回退型号默认表。
+    var selectedRemoteVoiceCapabilities: RemoteVoiceCapabilities {
+        .resolve(
+            model: settings.selectedRemoteProfile?.model,
+            declared: chromecaseDeclaredCapabilities
+        )
+    }
+
+    /// 自报能力的日志标记（真机核对用）。
+    private static func describe(_ declared: ChromecaseDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.battery) { names.append("battery") }
+        if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 
     /// 开始收音时驱动语音键。返回 false 表示按下失败（调用方按既有逻辑报失败）。
@@ -5964,7 +6007,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         AppLogger.shared.write(
             "CHROMECASE VOICE phase=started result=triggered " +
                 "audio_source=chromecase_microphone route=MiRemoteV_2ch " +
-                "mode=\(settings.chromecaseVoiceMode.rawValue)"
+                "mode=\(effectiveChromecaseVoiceMode.rawValue)"
         )
     }
 

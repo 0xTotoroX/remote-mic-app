@@ -881,20 +881,25 @@ struct SettingsView: View {
     /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecase 档案的按键页显示）；
     /// 从连接设置页迁移过来，避免同一控件出现在两处。
     private var chromecaseVoiceModeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // 选项只列设备**自报**支持的模式：自报不支持「按一次说话」时，这个选项根本不出现。
+        let capabilities = model.selectedRemoteVoiceCapabilities
+        let offeredModes = ChromecaseVoiceMode.allCases.filter { mode in
+            mode != .toggle || capabilities.supportsToggleVoiceRecording
+        }
+        return VStack(alignment: .leading, spacing: 10) {
             Divider()
 
             Text("chromecase.mode.title")
                 .font(.system(size: 13, weight: .medium))
 
             Picker("", selection: Binding(
-                get: { settings.chromecaseVoiceMode },
+                get: { model.effectiveChromecaseVoiceMode },
                 set: { newValue in
                     settings.chromecaseVoiceMode = newValue
                     model.applyChromecaseSettings()
                 }
             )) {
-                ForEach(ChromecaseVoiceMode.allCases) { mode in
+                ForEach(offeredModes) { mode in
                     Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
                 }
             }
@@ -902,7 +907,7 @@ struct SettingsView: View {
             .labelsHidden()
             .disabled(!settings.chromecaseEnabled)
 
-            Text(LocalizedStringKey(settings.chromecaseVoiceMode.detailLocalizationKey))
+            Text(LocalizedStringKey(model.effectiveChromecaseVoiceMode.detailLocalizationKey))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1662,7 +1667,9 @@ struct SettingsView: View {
     }
 
     private func mappingFooter(includeSiriScrollArrow: Bool = false) -> some View {
-        GlassPanel {
+        // 能力一律取自「链路自报优先、型号默认兜底」的判定结果（见 RemoteVoiceCapabilities）。
+        let capabilities = model.selectedRemoteVoiceCapabilities
+        return GlassPanel {
             VStack(alignment: .leading, spacing: 12) {
                 mappingHIDStatus
                 Divider()
@@ -1672,15 +1679,13 @@ struct SettingsView: View {
                 // 「语音键模拟 Fn 点按」只对「不会按一次收音」的遥控器有意义：
                 // 它把按住模拟成点按，用来驱动只认点按的工具。Chromecase 自己能按一次收音，
                 // 驱动方式由语音模式直接决定，页面不出现该开关（见能力矩阵文档）。
-                if VoiceFunctionKeyTapApplicability.isApplicable(
-                    model: settings.selectedRemoteProfile?.model
-                ) {
+                if VoiceFunctionKeyTapApplicability.isApplicable(capabilities: capabilities) {
                     Divider()
                     mappingVoiceFnTapControl
                 }
-                // 触摸面（滑动箭头/光标）只有具备触摸面的遥控器才显示，页面请求之外再加一道型号门禁。
+                // 触摸面（滑动箭头/光标）只有具备触摸面的遥控器才显示，页面请求之外再加一道能力门禁。
                 if TouchSurfaceControlApplicability.isApplicable(
-                    model: settings.selectedRemoteProfile?.model,
+                    capabilities: capabilities,
                     pageRequestsControl: includeSiriScrollArrow
                 ) {
                     Divider()

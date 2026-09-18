@@ -32,15 +32,50 @@ struct ChromecaseCapabilityContractTests {
         )
     }
 
-    @Test func hostCapabilityTableMatchesTheDeclaration() {
-        #expect(
-            XiaomiRemoteModel.chromecaseVoiceRemote.supportsToggleVoiceRecording
-                == declared.contains(.toggleVoiceGesture)
+    /// 集成层做的事情：把私有包的位域原样映射到宿主镜像。
+    private var mappedToHost: ChromecaseDeclaredCapabilities {
+        ChromecaseDeclaredCapabilities(rawValue: declared.rawValue)
+    }
+
+    @Test func hostResolvesTheDeclaredCapabilities() {
+        // 端到端：设备报什么，宿主就按什么判定（不再查型号）。
+        let resolved = RemoteVoiceCapabilities.resolve(
+            model: .chromecaseVoiceRemote,
+            declared: mappedToHost
         )
+        #expect(resolved.supportsToggleVoiceRecording == declared.contains(.toggleVoiceGesture))
+        #expect(resolved.supportsTouchSurface == declared.contains(.touchSurface))
+        // 与文档一致：会按一次收音 → 页面不出现「Fn 点按」开关；无触摸面 → 触摸类设置不出现。
+        #expect(!VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
         #expect(
-            XiaomiRemoteModel.chromecaseVoiceRemote.supportsTouchSurface
-                == declared.contains(.touchSurface)
+            !TouchSurfaceControlApplicability.isApplicable(
+                capabilities: resolved,
+                pageRequestsControl: true
+            )
         )
+    }
+
+    @Test func hostMirrorCoversEveryDeclaredBit() {
+        // 宿主镜像必须覆盖私有包的每一个能力位，否则新位会被静默丢掉。
+        let all: ChromecaseCapabilityFlags = [
+            .controlEdges, .voiceStream, .touchSurface, .battery, .toggleVoiceGesture,
+        ]
+        let mirror = ChromecaseDeclaredCapabilities(rawValue: all.rawValue)
+        #expect(mirror.contains(.controlEdges))
+        #expect(mirror.contains(.voiceStream))
+        #expect(mirror.contains(.touchSurface))
+        #expect(mirror.contains(.battery))
+        #expect(mirror.contains(.toggleVoiceGesture))
+    }
+
+    @Test func fallbackTableMatchesTheDeclaration() {
+        // 未连接时的兜底表必须与自报值等价，否则断线期间界面会失真。
+        let fallback = RemoteVoiceCapabilities.resolve(
+            model: .chromecaseVoiceRemote,
+            declared: []
+        )
+        #expect(fallback.supportsToggleVoiceRecording == declared.contains(.toggleVoiceGesture))
+        #expect(fallback.supportsTouchSurface == declared.contains(.touchSurface))
     }
 
     @Test func hostBatteryPolicyMatchesTheDeclaration() {
@@ -52,15 +87,6 @@ struct ChromecaseCapabilityContractTests {
                 level: 87,
                 powerState: .onBattery
             ) == declared.contains(.battery)
-        )
-    }
-
-    @Test func tapOnceSupportDrivesTheSwitchVisibility() {
-        // 不会按一次收音的型号才需要「语音键模拟 Fn 点按」；Chromecase 会，因此不显示。
-        #expect(!VoiceFunctionKeyTapApplicability.isApplicable(model: .chromecaseVoiceRemote))
-        #expect(
-            VoiceFunctionKeyTapApplicability.isApplicable(model: .chromecaseVoiceRemote)
-                == !declared.contains(.toggleVoiceGesture)
         )
     }
 }
