@@ -5837,6 +5837,84 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         )
     }
 
+    // MARK: 语音键驱动（长按式 vs 点按式目标工具）
+    //
+    // 目标工具分两类，语音键的语义必须跟着分（见 `ChromecaseFunctionKeyDrive`）：
+    // 长按式（豆包「长按模式」）按住—松开；点按式（豆包「免按模式」、Typeless）只认按下，
+    // 必须「开始一次点按、结束再一次点按」。真机实测见 `Testing/VoiceKeyFnPanelProbe.swift`。
+
+    /// 「开始那次点按」的延迟松开（仅点按式驱动使用）。
+    private var chromecaseFunctionKeyTapRelease: DispatchWorkItem?
+    /// 一次点按的按下时长：与小米蓝牙链路的 `VoiceFnTapSessionController` 保持一致。
+    private static let chromecaseFunctionKeyTapDuration: TimeInterval = 0.12
+
+    /// 当前应使用的驱动方式（由「语音键模拟 Fn 点按」开关与 Fn 模式决定）。
+    private var chromecaseFunctionKeyDrive: ChromecaseFunctionKeyDrive {
+        .resolve(
+            fnTapModeEnabled: settings.voiceFnTapModeEnabled,
+            voiceKeyMode: settings.voiceKeyMode
+        )
+    }
+
+    /// 开始收音时驱动语音键。返回 false 表示按下失败（调用方按既有逻辑报失败）。
+    @discardableResult
+    private func beginChromecaseFunctionKeyDrive() -> Bool {
+        let drive = chromecaseFunctionKeyDrive
+        if drive.startEvents.contains(.press) {
+            guard updateVoiceKeyState(
+                streaming: true,
+                forceSoftware: true,
+                owner: .chromecase
+            ) else { return false }
+        }
+        guard drive.startEvents.contains(.release) else { return true }
+        // 点按式：延迟一个按下时长后松开，把「长按」变成一次点按。
+        // 不这样做的话 Fn 修饰位会在整个会话期间被按住，用户此时打字会变成 Fn 组合键。
+        AppLogger.shared.write(
+            "CHROMECASE VOICE fn_drive=taps phase=start_tap release_after_ms="
+                + "\(Int(Self.chromecaseFunctionKeyTapDuration * 1_000))"
+        )
+        scheduleChromecaseFunctionKeyTapRelease()
+        return true
+    }
+
+    /// 结束收音时驱动语音键。点按式工具必须再收到一次**按下 + 松开**才结束（松开对它是空操作）。
+    /// 返回值沿用既有判据：松开是否成功（`phase=completed result=stopped|release_failed`）。
+    @discardableResult
+    private func finishChromecaseFunctionKeyDrive() -> Bool {
+        let drive = chromecaseFunctionKeyDrive
+        chromecaseFunctionKeyTapRelease?.cancel()
+        chromecaseFunctionKeyTapRelease = nil
+        if drive.stopEvents.contains(.press) {
+            let pressed = updateVoiceKeyState(
+                streaming: true,
+                forceSoftware: true,
+                owner: .chromecase
+            )
+            AppLogger.shared.write(
+                "CHROMECASE VOICE fn_drive=taps phase=stop_tap pressed=\(pressed)"
+            )
+        }
+        return releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+    }
+
+    private func scheduleChromecaseFunctionKeyTapRelease() {
+        chromecaseFunctionKeyTapRelease?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.chromecaseVoiceActive || self.chromecaseVoiceStopping
+            else { return }
+            self.chromecaseFunctionKeyTapRelease = nil
+            _ = self.releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+            AppLogger.shared.write("CHROMECASE VOICE fn_drive=taps phase=start_released")
+        }
+        chromecaseFunctionKeyTapRelease = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.chromecaseFunctionKeyTapDuration,
+            execute: work
+        )
+    }
+
     /// 预卷缓冲：会话开头 prerollDelay 秒的音频先攒后灌（见 receiveChromecaseAudio 注释）。
     private var chromecaseAudioPrerollOpenedAt: TimeInterval?
     private var chromecaseAudioPrerollBatches: [[Int16]] = []
@@ -5873,11 +5951,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             )
             return
         }
-        guard updateVoiceKeyState(
-            streaming: true,
-            forceSoftware: true,
-            owner: .chromecase
-        ) else {
+        guard beginChromecaseFunctionKeyDrive() else {
             AppLogger.shared.write(
                 "CHROMECASE VOICE phase=failed result=voice_key_press_failed"
             )
@@ -5935,7 +6009,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         reason: ChromecaseVoiceEndReason
     ) {
         guard chromecaseVoiceStopping, chromecaseVoiceStopOperation == operation else { return }
-        let released = releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+        let released = finishChromecaseFunctionKeyDrive()
         chromecaseVoiceStopping = false
         endVoiceSessionIfNeeded(flushAudio: false)
         let outputAfterStop = audioOutput.diagnosticSnapshot(

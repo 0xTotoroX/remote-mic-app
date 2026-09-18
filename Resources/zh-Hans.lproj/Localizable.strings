@@ -275,8 +275,8 @@
 "common.status.ready" = "已就绪";
 "connection.status.voice_trigger" = "语音触发";
 "connection.voice_fn_tap.enabled" = "语音键模拟 Fn 点按";
-"connection.voice_fn_tap.hint" = "适配点按式语音输入（如 Typeless）：按下语音键注入一次 Fn 开始，松开再注入一次结束，音频在按住期间照常传输。需要辅助功能权限；开启后语音键不再直接发 Fn。";
-"connection.voice_fn_tap.hint_short" = "用于需要点按 Fn 开始和结束的语音工具；遥控器仍需按住说话。";
+"connection.voice_fn_tap.hint" = "适配点按式语音输入（豆包「免按模式」、Typeless 等）：这类工具只在按键按下时切换状态，松开无效。开启后每次开始收音注入一次 Fn 点按、结束时再注入一次；长按式工具（豆包「长按模式」）请保持关闭。需要辅助功能权限。";
+"connection.voice_fn_tap.hint_short" = "用于需要点按 Fn 开始和结束的语音工具（如豆包「免按模式」）。";
 "connection.voice_key_mode.title" = "语音触发键";
 "connection.voice_key.mode.fn" = "Fn/地球键";
 "connection.voice_key.mode.left_command" = "左 Command";

@@ -275,8 +275,8 @@
 "common.status.ready" = "Ready";
 "connection.status.voice_trigger" = "Voice trigger";
 "connection.voice_fn_tap.enabled" = "Simulate Fn Tap on Voice Key";
-"connection.voice_fn_tap.hint" = "For tap-to-toggle voice apps (e.g. Typeless): pressing the voice key injects one Fn tap to start, releasing injects another to stop, while audio streams as usual. Requires Accessibility permission; the voice key no longer emits Fn directly.";
-"connection.voice_fn_tap.hint_short" = "For voice tools that use Fn taps to start and stop. Keep holding the remote button while speaking.";
+"connection.voice_fn_tap.hint" = "For tap-to-toggle voice apps (e.g. Doubao Hands-Free mode, Typeless): these tools only react to the key press, never the release. When on, every voice session injects one Fn tap to start and one more to stop; leave it off for hold-to-talk tools (Doubao Hold mode). Requires Accessibility permission.";
+"connection.voice_fn_tap.hint_short" = "For voice tools that start and stop on Fn taps (e.g. Doubao Hands-Free mode).";
 "connection.voice_key_mode.title" = "Voice Trigger Key";
 "connection.voice_key.mode.fn" = "Fn/Globe";
 "connection.voice_key.mode.left_command" = "Left Command";
