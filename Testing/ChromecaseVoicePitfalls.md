@@ -230,3 +230,33 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 - **若重试仍无流** → 判定该硬件为 **HTT-only（不响应宿主 `MIC_OPEN`）**，
   「按一次持续收音」在协议层无法实现 → 应改为对该型号隐藏/禁用 toggle，只保留「按住说话」。
   判据就是日志里有没有 `origin=hostRequested` 的 `STREAM START`。
+
+#### 结论：该型号 HTT-only，toggle 改为不提供（2026-09-18，build 199 验证 → build 200 落地）
+
+build 199（延迟 0.25s + 超时重发）实测两次，用户按正确方式操作（短按一次、松手后立即说话、
+8 秒内不再按键）：
+
+```
+04:57:04.493 ATVV MIC_OPEN written attempt=1 bytes=0c00
+04:57:04.911 ATVV MIC_OPEN retry=2 reason=no_stream
+04:57:05.327 ATVV MIC_OPEN retry=3 reason=no_stream
+04:57:05.747 ATVV MIC_OPEN no_response attempts=3          ← 远端一次都没回
+latch 期间 ATVV AUDIO notify = 1 条；audio_batches=24/11520 ≈ 0.36s（会话 9.5s）
+全天 STREAM START 全部 reason=0x03 origin=remoteInitiated   ← 0 条 hostRequested
+```
+
+用户观感：「豆包电平图起来了（合成语音键 + 虚拟麦已打开），但一个字都没有」——电平图来自
+宿主的合成语音键，文字要靠远端推流，而远端在松键后不推流。
+
+- **判定**：本遥控器 `interaction=0x03`（HTT），规范 4.5.2 / 4.7.5 下宿主 `MIC_OPEN` 属于被
+  禁止的打断，正品**直接忽略**（连 `MIC_OPEN_ERROR` 都不回）。**「按一次持续收音」在协议层
+  无法实现**；按住期间音频正常（远端自行推流）。
+- **产品处理（build 200）**：按键页不再显示「语音键模式」选择器；运行时固定
+  `chromecaseFeature.setVoiceMode(.hold)`（日志 `VOICE MODE mode=hold`），
+  不再下发设置里的旧值——避免「界面显示持续收音中、远端却没推流」的假状态。
+  设置键 `chromecase.voiceMode` 保留但不再生效（将来若遇到支持宿主开流的型号可复用）。
+- **保留的能力**：build 199 的「延迟 0.25s + 超时重发 3 次」留在协议层——它对任何
+  On-request 链路仍然必要，且 `ATVV MIC_OPEN no_response` 是判定「该设备是否支持宿主开流」
+  的唯一判据。
+- 注：本文档早前记录的假冒品 **54 次 `hostRequested` 流**说明「非同型号固件行为不可互推」——
+  假冒品容忍了违规 `MIC_OPEN`，正品按规范拒绝。

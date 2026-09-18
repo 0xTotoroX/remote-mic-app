@@ -5781,7 +5781,13 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
     private func syncChromecaseRuntimeState() {
         guard started else { return }
-        chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)
+        // 该型号固定「按住说话」。实测（2026-09-18 正品）：远端按下即自行开麦、松键即停流
+        // （HTT，`interaction=0x03`），且**从不响应**宿主 `MIC_OPEN`——三次重试全部
+        // `no_response`，当天 0 条 `hostRequested` 流，latch 期间音频批次≈0，
+        // 表现为「豆包电平图起来但一个字都没有」。因此设置里的 toggle 不再下发，
+        // 避免出现「界面显示持续收音中、远端却没推流」的假状态。
+        // 详见 Testing/ChromecaseVoicePitfalls.md。
+        chromecaseFeature.setVoiceMode(.hold)
         // 映射总开关决定 HID 通道是否独占设备：它必须即时生效，否则界面上「已开启映射」
         // 而系统仍在消费这些按键，用户会以为映射没生效。
         chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)
@@ -5889,7 +5895,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         AppLogger.shared.write(
             "CHROMECASE VOICE phase=started result=triggered " +
                 "audio_source=chromecase_microphone route=MiRemoteV_2ch " +
-                "mode=\(settings.chromecaseVoiceMode.rawValue)"
+                "mode=\(ChromecaseVoiceMode.hold.rawValue)"
         )
     }
 
