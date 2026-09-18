@@ -236,7 +236,8 @@ final class XiaomiBluetoothBridge: NSObject {
         }
         let centralState = central.map { String($0.state.rawValue) } ?? "none"
         AppLogger.shared.write(
-            "BLE WAKE recovery_requested lifecycle=\(String(describing: lifecycle)) " +
+            "BLE WAKE recovery_requested state=\(String(describing: state)) " +
+                "lifecycle=\(String(describing: lifecycle)) " +
                 "central_state=\(centralState) " +
                 "generation=\(generationCounter)"
         )
@@ -345,11 +346,22 @@ final class XiaomiBluetoothBridge: NSObject {
             return
         }
 
-        if targetIdentifier == nil,
-           let connected = central.retrieveConnectedPeripherals(withServices: [serviceUUID])
-            .first(where: { !excludedIdentifiers().contains($0.identifier) }) {
-            connect(connected, using: central, generation: generation, source: "connected_peripheral")
-            return
+        if targetIdentifier == nil {
+            // ATVV 服务是通用服务，可能同时命中多台遥控器。这里把候选连名字一起记一行：
+            // 否则「取回了候选但名字不符」与「根本没取回候选」在日志里完全一样，无法二分。
+            let connectedCandidates = central.retrieveConnectedPeripherals(withServices: [serviceUUID])
+            if !connectedCandidates.isEmpty {
+                AppLogger.shared.write(
+                    "BLE SYSTEM CONNECTED CANDIDATES count=\(connectedCandidates.count) "
+                        + "names="
+                        + connectedCandidates.map { $0.name ?? "unknown" }.joined(separator: ",")
+                )
+            }
+            if let connected = connectedCandidates
+                .first(where: { !excludedIdentifiers().contains($0.identifier) }) {
+                connect(connected, using: central, generation: generation, source: "connected_peripheral")
+                return
+            }
         }
 
         state = .scanning
@@ -382,7 +394,7 @@ final class XiaomiBluetoothBridge: NSObject {
         state = .connecting
         startConnectionTimeout(generation: generation)
         central.connect(candidate, options: nil)
-        AppLogger.shared.write("BLE CONNECTING source=\(source)")
+        AppLogger.shared.write("BLE CONNECTING source=\(source) name=\(candidate.name ?? "unknown")")
     }
 
     private func resetPeripheral() {
@@ -557,7 +569,7 @@ final class XiaomiBluetoothBridge: NSObject {
         write(ATVVProtocol.getCapabilitiesV10)
         lifecycle = .awaitingCapabilities(generation)
         state = .discovering
-        AppLogger.shared.write("ATVV CAPABILITIES requested")
+        AppLogger.shared.write("ATVV CAPABILITIES requested name=\(peripheral.name ?? "MI RC")")
     }
 
     private func handleControl(_ data: Data) {
@@ -592,7 +604,7 @@ final class XiaomiBluetoothBridge: NSObject {
             lifecycle = .ready(generation)
             if let peripheral {
                 state = .ready(peripheral.name ?? "MI RC")
-                AppLogger.shared.write("BLE READY")
+                AppLogger.shared.write("BLE READY name=\(peripheral.name ?? "MI RC")")
             }
         case 0x08:
             guard requestMicrophoneOpen() else {
@@ -909,7 +921,7 @@ extension XiaomiBluetoothBridge: CBCentralManagerDelegate {
             batteryServiceUUID,
             deviceInformationServiceUUID,
         ])
-        AppLogger.shared.write("BLE CONNECTED")
+        AppLogger.shared.write("BLE CONNECTED name=\(peripheral.name ?? "unknown")")
     }
 
     func centralManager(
