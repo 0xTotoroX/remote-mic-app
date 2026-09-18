@@ -393,3 +393,32 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
   第 2 次按下必须立刻结束、关流必须用精确 id。
 - 复测判据：结束那次按下应直接出现 `action=stop`（前面不再夹一条 `action=debounced`），
   且 `MIC_CLOSE written … origin=host_requested` 里的 stream id 与宿主流一致。
+
+#### 遗留远端流会让按键「失灵」——必须清干净（2026-09-18，build 216）
+
+现象：用户反馈「开始要按 2 次、结束也要按 2 次」；而同一时段的日志里，6 次会话**全部是「一次按下
+即生效」**——说明问题发生在日志之外的那段时间。
+
+根因链（build 215 新补的诊断抓到）：
+
+- 上一实例被关闭时若**没有关远端流**，遥控器会把麦继续开着推流。实测：新实例就绪后 **30ms** 即收到
+  240 字节音频帧，**持续 4 分 39 秒 / 9284 帧**（30ms 一帧，`ATVV AUDIO dropped_stream_absent`），
+  直到用户第一次按下才停。该实例之前的一次会话（gen8）**开了就没结束**，遥控器在宿主未运行期间
+  空推约 **14 分钟**（跨 App 存活）。
+- 这种「助手键已按下 + 正在推流」的残留状态会让按键上报行为异常（用户感知的「要按 2 次」正出现在
+  这段时间），同时浪费电量、且意味着无人使用时麦克风是开着的。
+
+修复（build 216）：
+
+- 断开链路**之前**先关远端麦（日志 `origin=host_shutdown`）；
+- **持久化最后一个远端 stream id**（`UserDefaults`，键 `chromecase.lastRemoteStreamID`）：本固件只认
+  精确 id（`0x00`/`0xFF` 都关不掉），App 重启后必须能拿回它才能关掉遗留流；
+- 启动/连接后若检测到「宿主无会话却在推流」，用该 id 关闭一次并留证（`origin=stale_stream_cleanup`）；
+- 该丢弃路径的日志改为节流（首 3 条 + 每 500 条），不再刷屏。
+
+验证（build 216，用户连续 16 次会话）：全部「一次按下开始 + 一次按下结束」；
+`dropped_stream_absent=0`（每轮结束后远端确实停流）、`down_deduped=0`、`down_no_intent=0`、
+`gesture unmatched=0`、`small_notify=0`、`dropped_decode_empty=0`。
+
+**排查教训**：遇到「按键反应不正常」，先看有没有 `ATVV AUDIO dropped_stream_absent` ——
+它意味着远端有遗留流、状态不干净，此时任何按键现象的结论都不可靠；先清干净再测。
