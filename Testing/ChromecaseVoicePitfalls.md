@@ -273,3 +273,30 @@ latch 期间 ATVV AUDIO notify = 1 条；audio_batches=24/11520 ≈ 0.36s（会�
   的唯一判据。
 - 注：本文档早前记录的假冒品 **54 次 `hostRequested` 流**说明「非同型号固件行为不可互推」——
   假冒品容忍了违规 `MIC_OPEN`，正品按规范拒绝。
+
+#### 声明值可测：`/tmp/chromecase_declared_models`（2026-09-18，build 208→209）
+
+规范 3：`GET_CAPS` 末字节是**宿主声明支持的交互模型**（`0x00` 仅 On-request、`0x01` PTT+On-request、
+`0x03` HTT+PTT+On-request），远端在 `CAPS_RESP` 里回报它**实际采用**的模型——即模型由宿主声明、
+远端选一个。这是唯一可能让远端离开 HTT 的入口，而「按一次持续收音」在 HTT 下不可能实现
+（规范 4.5.3：HTT 松键即 `AUDIO_STOP`）。
+
+**已证伪、不要重复的两条路径**：
+
+1. **「跳过能力协商，让远端留在默认模型」**（build 208）：不发 `GET_CAPS` 时远端仍按 HTT 运行
+   （`AUDIO_START reason=0x03`、松键 `AUDIO_STOP reason=0x02`），且拒绝 `MIC_OPEN`——说明它默认就是
+   HTT，而不是规范 4.5 所述「连接后默认 On-request」。同期音频上行只覆盖两次按压窗口
+   （stream 11/12/13 共 ≈1.75 s，按压之间的 5.15 s 零音频），与「松手后说话没有字」完全一致。
+2. **「HTT 流进行中补发 `MIC_OPEN`」**：规范 4.7.4/4.7.5 规定远端只应回 `MIC_OPEN_ERROR(0x0F80)`，
+   且**不得打断正在进行的流**——即便回的是错误码，也拿不到持续流。
+
+**诊断开关**：`/tmp/chromecase_declared_models` 内容为 `00`/`01`/`03` 时覆盖声明值（默认 `0x03`）；
+覆盖期间不再发 0x00 重协商探针（两条冲突声明会污染实验）。声明值同时进入**回退能力**——
+远端在声明非 HTT 时完全不回 `CAPS_RESP`（实测），若回退退回 HTT，客户端就永远按 HTT 处理，
+「声明 PTT 后按键会怎样」根本走不到。
+
+**客户端已实现 PTT 语义（build 209）**：`AUDIO_START reason=0x01` 视为「语音键按下」→ 远端持续推流
+（宿主每 4 s `MIC_EXTEND` 续期，规范 4.6.1 的音频传输超时 15 s~1 min）；**结束收音由宿主
+`MIC_CLOSE(0xFF = 任意当前流)` 收尾**（规范 4.4：`0xFF` 可关任意流），因为 PTT 下远端不会因松键停流；
+PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_START reason`：`0x01`=PTT（松键不停流）、
+`0x03`=HTT（松键即停流）。
