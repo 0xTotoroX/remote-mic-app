@@ -17,20 +17,6 @@ private func keyboardEventSuppressorCallback(
         : Unmanaged.passUnretained(event)
 }
 
-private func keyboardEventSuppressorProbeCallback(
-    proxy: CGEventTapProxy,
-    type: CGEventType,
-    event: CGEvent,
-    userInfo: UnsafeMutableRawPointer?
-) -> Unmanaged<CGEvent>? {
-    guard let userInfo else { return Unmanaged.passUnretained(event) }
-    Unmanaged<KeyboardEventSuppressor>
-        .fromOpaque(userInfo)
-        .takeUnretainedValue()
-        .handleProbe(type: type, event: event)
-    return Unmanaged.passUnretained(event)
-}
-
 final class KeyboardEventSuppressor {
     private static let systemDefinedEventTypeRawValue: UInt32 = 14
 
@@ -151,71 +137,6 @@ final class KeyboardEventSuppressor {
             pendingEvents.removeFirst(pendingEvents.count - 32)
         }
         lock.unlock()
-    }
-
-    /// 诊断探针：在 HID 层（`cghidEventTap`，早于 suppressor 所在的 session 层）挂一个
-    /// **只读**事件 tap。用于判断「媒体事件是否在更早的层就出现」——若 session 层看不到、
-    /// HID 层能看到，说明事件被系统在两层之间消费（例如系统遥控器/媒体服务），
-    /// 需要把抑制前移到 HID 层；若两层都看不到，则事件完全不走 CGEvent 路径。
-    private var probeTap: CFMachPort?
-    private var probeRunLoopSource: CFRunLoopSource?
-    private var probeLogCount = 0
-
-    /// 启动 HID 层探针（只观察，不吞事件）。幂等。
-    func startHIDLayerProbe() {
-        guard probeTap == nil else { return }
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue) |
-            CGEventMask(1 << CGEventType.keyUp.rawValue) |
-            CGEventMask(1 << Self.systemDefinedEventTypeRawValue)
-        guard let tap = CGEvent.tapCreate(
-            tap: .cghidEventTap,
-            place: .tailAppendEventTap,
-            options: .listenOnly,
-            eventsOfInterest: mask,
-            callback: keyboardEventSuppressorProbeCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
-            AppLogger.shared.write("HID PROBE result=create_failed")
-            return
-        }
-        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            AppLogger.shared.write("HID PROBE result=source_failed")
-            return
-        }
-        probeTap = tap
-        probeRunLoopSource = source
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        AppLogger.shared.write("HID PROBE result=ready layer=cghid")
-    }
-
-    func stopHIDLayerProbe() {
-        if let source = probeRunLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-        }
-        if let tap = probeTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        probeRunLoopSource = nil
-        probeTap = nil
-    }
-
-    /// 探针记录：媒体类事件（systemDefined）与 arm 窗口内的按键事件都要留证。
-    fileprivate func handleProbe(type: CGEventType, event: CGEvent) {
-        guard let descriptor = descriptor(type: type, event: event) else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        lock.lock()
-        let armedExactly = recentArmed.contains { $0.event == descriptor.event && $0.until > now }
-        let withinArmedWindow = !recentArmed.isEmpty
-        lock.unlock()
-        let isSystemDefined = type.rawValue == Self.systemDefinedEventTypeRawValue
-        guard isSystemDefined || armedExactly || withinArmedWindow else { return }
-        probeLogCount += 1
-        guard probeLogCount <= 40 || probeLogCount % 50 == 0 else { return }
-        AppLogger.shared.write(
-            "HID PROBE type=\(type.rawValue) event=\(Self.logToken(descriptor.event)) "
-                + "edge=\(descriptor.edge == .down ? "down" : "up") armed=\(armedExactly)"
-        )
     }
 
     func handle(type: CGEventType, event: CGEvent) -> Bool {
