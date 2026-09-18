@@ -111,6 +111,8 @@ final class XiaomiBluetoothBridge: NSObject {
     private weak var delegate: XiaomiBluetoothBridgeDelegate?
     private let targetIdentifier: UUID?
     private let excludedIdentifiers: () -> Set<UUID>
+    /// 已被判定为「别的产品」的标识；本桥此后一律不再连接，也不再走扫描回退。
+    private var rejectedIdentifiers = Set<UUID>()
     private var central: CBCentralManager?
     private var centralGeneration: UInt64?
     private var peripheral: CBPeripheral?
@@ -336,14 +338,21 @@ final class XiaomiBluetoothBridge: NSObject {
         if reconnectPolicy.allowsCachedTargetRetrieval,
            let identifier = targetIdentifier,
            let saved = central.retrievePeripherals(withIdentifiers: [identifier]).first {
-            connect(
-                saved,
-                using: central,
-                generation: generation,
-                source: "target_identifier",
-                usesCachedTarget: true
-            )
-            return
+            // 已保存身份不再无条件采纳：早先版本把别的产品（Chromecast Remote）误存成 Xiaomi
+            // 档案后，只按 UUID 连接会让这个错误一直重连、并且和私有 Chromecase 包抢同一台设备。
+            if ForeignVoiceRemoteProduct.isRejected(name: saved.name) {
+                // 只记一次，然后按「设备不在」继续走既有扫描/重试路径，不新增状态分支。
+                rejectForeignProduct(saved, source: "target_identifier")
+            } else {
+                connect(
+                    saved,
+                    using: central,
+                    generation: generation,
+                    source: "target_identifier",
+                    usesCachedTarget: true
+                )
+                return
+            }
         }
 
         if targetIdentifier == nil {
@@ -357,8 +366,11 @@ final class XiaomiBluetoothBridge: NSObject {
                         + connectedCandidates.map { $0.name ?? "unknown" }.joined(separator: ",")
                 )
             }
-            if let connected = connectedCandidates
-                .first(where: { !excludedIdentifiers().contains($0.identifier) }) {
+            if let connected = connectedCandidates.first(where: { candidate in
+                !excludedIdentifiers().contains(candidate.identifier)
+                    && !rejectedIdentifiers.contains(candidate.identifier)
+                    && !ForeignVoiceRemoteProduct.isRejected(name: candidate.name)
+            }) {
                 connect(connected, using: central, generation: generation, source: "connected_peripheral")
                 return
             }
@@ -395,6 +407,16 @@ final class XiaomiBluetoothBridge: NSObject {
         startConnectionTimeout(generation: generation)
         central.connect(candidate, options: nil)
         AppLogger.shared.write("BLE CONNECTING source=\(source) name=\(candidate.name ?? "unknown")")
+    }
+
+    /// 明确记录并拒绝「别的产品」，此后本桥不再尝试连接它。
+    ///
+    /// 必须是显式日志：设备名对不上与「根本没扫到」在日志里长得一样，没有这行就无从二分。
+    private func rejectForeignProduct(_ candidate: CBPeripheral, source: String) {
+        guard rejectedIdentifiers.insert(candidate.identifier).inserted else { return }
+        AppLogger.shared.write(
+            "BLE REJECTED reason=foreign_product source=\(source) name=\(candidate.name ?? "unknown")"
+        )
     }
 
     private func resetPeripheral() {
@@ -890,6 +912,7 @@ extension XiaomiBluetoothBridge: CBCentralManagerDelegate {
               lifecycle == .scanning(generation),
               self.peripheral == nil,
               !excludedIdentifiers().contains(peripheral.identifier),
+              !rejectedIdentifiers.contains(peripheral.identifier),
               BluetoothDiscoveryPolicy.accepts(
                   identifier: peripheral.identifier,
                   targetIdentifier: targetIdentifier,
@@ -904,6 +927,13 @@ extension XiaomiBluetoothBridge: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard self.central === central else { return }
         guard shouldRun else {
+            central.cancelPeripheralConnection(peripheral)
+            return
+        }
+        // 最后一道闸：无论从哪条路径连上来的，只要名字说明它是别的产品就立刻断开。
+        // 前面几处判定可能因为「当时拿不到名字」而放行，这一层保证不会真的接管它。
+        if ForeignVoiceRemoteProduct.isRejected(name: peripheral.name) {
+            rejectForeignProduct(peripheral, source: "did_connect")
             central.cancelPeripheralConnection(peripheral)
             return
         }

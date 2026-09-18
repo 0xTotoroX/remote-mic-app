@@ -20,6 +20,38 @@ enum XiaomiVoiceRemoteNameMatcher {
     }
 }
 
+/// 别的产品也会用同一个通用 ATVV 服务。它们是私有 Chromecase 适配包的目标，
+/// **宿主的 Xiaomi 桥必须一律拒绝**——否则会出现「连上了 Chromecast Remote、界面显示
+/// Xiaomi 遥控器已连接、按键与语音键全无反应」，而且两条链路会互相抢同一台设备。
+///
+/// 名单与私有包 `ChromecaseRemoteModel.advertisedNameHints`（含 RemoteG10 样机）保持一致；
+/// 归一化规则也与 `ChromecaseRemoteModelMatcher` 一致（大小写、下划线、连字符、连续空格）。
+enum ForeignVoiceRemoteProduct {
+    private static let rejectedNames: Set<String> = [
+        "chromecast remote",
+        "chromecast 遥控器",
+        "remote g10",
+        "remoteg10",
+        "g10",
+    ]
+
+    static func isRejected(name: String?) -> Bool {
+        guard let normalized = normalized(name) else { return false }
+        return rejectedNames.contains(normalized)
+    }
+
+    private static func normalized(_ name: String?) -> String? {
+        guard let name else { return nil }
+        let trimmed = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        let collapsed = trimmed.split(separator: " ").joined(separator: " ")
+        return collapsed.isEmpty ? nil : collapsed
+    }
+}
+
 enum BluetoothDiscoveryPolicy {
     static func accepts(
         identifier: UUID,
@@ -28,6 +60,9 @@ enum BluetoothDiscoveryPolicy {
         name: String?,
         advertisedName: String?
     ) -> Bool {
+        // 别的产品优先否决，且**优先于已保存身份**：早先版本误把 Chromecast Remote 存成
+        // Xiaomi 档案的情况真实发生过，只按 UUID 采纳会让这个错误一直重连下去。
+        if ForeignVoiceRemoteProduct.isRejected(name: advertisedName ?? name) { return false }
         // A saved identity survives renaming, including scan fallback after cached retrieval fails.
         if let targetIdentifier { return identifier == targetIdentifier }
         return advertisesVoiceService

@@ -561,6 +561,42 @@ check(
     "Typeless Fn tap session buffers pre-roll and stops after drain"
 )
 
+let foreignProductNames = [
+    "Chromecast Remote", "CHROMECAST-REMOTE", "  Chromecast   Remote  ",
+    "chromecast 遥控器", "Remote-G10", "G10",
+]
+check(
+    foreignProductNames.allSatisfy { ForeignVoiceRemoteProduct.isRejected(name: $0) },
+    "other product names are rejected by the Xiaomi bridge"
+)
+
+let ownProductNames: [String?] = [nil, "", "   ", "MI RC", "小米蓝牙语音遥控器", "ARN9"]
+check(
+    ownProductNames.allSatisfy { !ForeignVoiceRemoteProduct.isRejected(name: $0) },
+    "missing or Xiaomi names are not rejected"
+)
+
+let savedForeignIdentifier = UUID()
+let savedForeignAccepted = BluetoothDiscoveryPolicy.accepts(
+    identifier: savedForeignIdentifier,
+    targetIdentifier: savedForeignIdentifier,
+    advertisesVoiceService: true,
+    name: "Chromecast Remote",
+    advertisedName: nil
+)
+let savedOwnIdentifier = UUID()
+let savedOwnAccepted = BluetoothDiscoveryPolicy.accepts(
+    identifier: savedOwnIdentifier,
+    targetIdentifier: savedOwnIdentifier,
+    advertisesVoiceService: false,
+    name: "客厅遥控器",
+    advertisedName: nil
+)
+check(
+    !savedForeignAccepted && savedOwnAccepted,
+    "saved identity does not override the other product veto"
+)
+
 print("RESULT passed=\(passed) failed=\(failed)")
 if failed > 0 {
     exit(1)
