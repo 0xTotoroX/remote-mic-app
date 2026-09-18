@@ -70,8 +70,9 @@ struct RemoteVoiceCapabilities: Equatable {
                 supportsTouchSurface: false
             )
         }
-        // 只有 Chromecase 走私有包链路，也只有它会自报能力；小米/苹果没有自报通道，用型号默认表。
-        if model.isChromecaseRemote, !declared.isEmpty {
+        // 自报非空即优先（调用方按型号路由到该遥控器所在链路的那份自报，不会串用）；
+        // 小米等没有自报通道的遥控器自然落到下面的型号默认表。
+        if !declared.isEmpty {
             return RemoteVoiceCapabilities(
                 supportsToggleVoiceRecording: declared.contains(.toggleVoiceGesture),
                 supportsTouchSurface: declared.contains(.touchSurface)

@@ -674,6 +674,25 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     ///
     /// 界面与语音键驱动都读它（经 `RemoteVoiceCapabilities.resolve`），宿主不再维护第二份型号能力表。
     @Published private(set) var chromecaseDeclaredCapabilities: ChromecaseDeclaredCapabilities = []
+    /// 苹果遥控器**自报**的能力位；链路不可用时为空集合（同上）。
+    @Published private(set) var siriDeclaredCapabilities: SiriRemoteDeclaredCapabilities = []
+
+    /// 当前选中遥控器档案的语音能力：**该遥控器所在链路的自报**优先，自报缺失才回退型号默认表。
+    ///
+    /// 两条链路各自上报（Chromecase 走 ATVV、苹果遥控器走 HID），必须按型号取对应的那一份，
+    /// 不能混用——串用会让不具备该能力的遥控器凭空多出功能入口。
+    var selectedRemoteVoiceCapabilities: RemoteVoiceCapabilities {
+        let model = settings.selectedRemoteProfile?.model
+        var declared: ChromecaseDeclaredCapabilities = []
+        if let model {
+            if model.isChromecaseRemote {
+                declared = chromecaseDeclaredCapabilities
+            } else if model.isAppleSiriRemote {
+                declared = siriDeclaredCapabilities.asDeclaredVoiceCapabilities
+            }
+        }
+        return .resolve(model: model, declared: declared)
+    }
     /// 当前是否有活跃的 Chromecase 收音会话（按键页用它点亮固定的语音键卡片）。
     @Published private(set) var isChromecaseVoiceActive = false
     /// Chromecase 遥控器对应的设备档案。按型号识别，不存设备标识。
@@ -756,6 +775,12 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 #if SAYALL_SIRI_REMOTE_ENABLED
         siriRemoteFeature.onConnection = { [weak self] connection in
             self?.handleAppleRemoteConnection(connection)
+        }
+        siriRemoteFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
+            guard let self, self.siriDeclaredCapabilities != declared else { return }
+            self.siriDeclaredCapabilities = declared
+            // 触摸类设置是否出现取决于设备自报，必须跟着变。
+            AppLogger.shared.write("SIRI CAPABILITIES declared=\(Self.describeSiri(declared))")
         }
         siriRemoteFeature.onControlEvent = { [weak self] event in
             self?.handleAppleRemoteControlEvent(event)
@@ -5881,14 +5906,6 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return .hold
     }
 
-    /// 当前选中遥控器档案的语音能力：链路自报优先，自报缺失时回退型号默认表。
-    var selectedRemoteVoiceCapabilities: RemoteVoiceCapabilities {
-        .resolve(
-            model: settings.selectedRemoteProfile?.model,
-            declared: chromecaseDeclaredCapabilities
-        )
-    }
-
     /// 自报能力的日志标记（真机核对用）。
     private static func describe(_ declared: ChromecaseDeclaredCapabilities) -> String {
         var names: [String] = []
@@ -5897,6 +5914,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if declared.contains(.touchSurface) { names.append("touch_surface") }
         if declared.contains(.battery) { names.append("battery") }
         if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+
+    /// 自报能力的日志标记（真机核对用，苹果遥控器链路）。
+    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.batteryLevel) { names.append("battery_level") }
+        if declared.contains(.powerState) { names.append("power_state") }
         return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 

@@ -9,6 +9,39 @@ struct SiriRemoteDeviceIdentity: Hashable {
     let instanceToken: String
 }
 
+/// 苹果遥控器**自报**的能力位（宿主镜像，rawValue 与私有包的 `RemoteHardwareCapability` 无关，
+/// 只按顺序对应：controlEdges / touchSurface / continuousScroll / voiceStream / batteryLevel / powerState）。
+///
+/// 界面（是否出现触摸类设置）与策略只读这里，**宿主不再为苹果遥控器维护第二份型号能力表**；
+/// 链路不可用时为空集合，此时才回退到 `RemoteVoiceCapabilities` 里那份与自报值等价的默认表。
+struct SiriRemoteDeclaredCapabilities: OptionSet, Equatable {
+    let rawValue: Int
+
+    static let controlEdges = SiriRemoteDeclaredCapabilities(rawValue: 1 << 0)
+    static let touchSurface = SiriRemoteDeclaredCapabilities(rawValue: 1 << 1)
+    static let continuousScroll = SiriRemoteDeclaredCapabilities(rawValue: 1 << 2)
+    static let voiceStream = SiriRemoteDeclaredCapabilities(rawValue: 1 << 3)
+    static let batteryLevel = SiriRemoteDeclaredCapabilities(rawValue: 1 << 4)
+    static let powerState = SiriRemoteDeclaredCapabilities(rawValue: 1 << 5)
+}
+
+extension SiriRemoteDeclaredCapabilities {
+    /// 投影到宿主通用的能力位集合。
+    ///
+    /// **必须逐个具名映射**：苹果遥控器链路（`RemoteHardwareCapability`）与 Chromecase 链路
+    /// （`ChromecaseCapabilityFlags`）的位序不同，按 `rawValue` 直接复制会把「触摸面」读成
+    /// 「语音流」这类错值。将来任一侧新增能力位，这里会因为漏写而容易被 review 发现。
+    var asDeclaredVoiceCapabilities: ChromecaseDeclaredCapabilities {
+        var common: ChromecaseDeclaredCapabilities = []
+        if contains(.controlEdges) { common.insert(.controlEdges) }
+        if contains(.touchSurface) { common.insert(.touchSurface) }
+        if contains(.voiceStream) { common.insert(.voiceStream) }
+        if contains(.batteryLevel) { common.insert(.battery) }
+        // continuousScroll 与 powerState 不影响宿主的能力判定（无对应位），此处不投影。
+        return common
+    }
+}
+
 struct SiriRemoteConnection: Equatable {
     let device: SiriRemoteDeviceIdentity
     let model: XiaomiRemoteModel
@@ -105,6 +138,8 @@ enum SiriRemoteTouchRoutingMode: String, Equatable {
 
 final class SiriRemoteFeatureIntegration {
     var onConnection: ((SiriRemoteConnection) -> Void)?
+    /// 遥控器自报的能力（连接可用时给出位域，链路不可用时给出空集合）。
+    var onDeclaredCapabilitiesChange: ((SiriRemoteDeclaredCapabilities) -> Void)?
     var onControlEvent: ((SiriRemoteControlEvent) -> Void)?
     var onSamples: (([Int16]) -> Void)?
     var onStatus: ((String) -> Void)?
@@ -128,6 +163,13 @@ final class SiriRemoteFeatureIntegration {
                 fingerprint: connection.fingerprint,
                 isConnected: connection.isConnected
             ))
+            // 型号自己的代码声明它有什么能力；宿主照着这份数据决定触摸类设置是否出现。
+            self?.onDeclaredCapabilitiesChange?(
+                Self.hostCapabilities(
+                    connection.capabilities,
+                    isConnected: connection.isConnected
+                )
+            )
         }
         feature.onControlEvent = { [weak self] event in
             guard let control = SiriRemoteControl(rawValue: event.control.rawValue),
@@ -185,6 +227,31 @@ final class SiriRemoteFeatureIntegration {
         }
         #endif
     }
+
+    /// 把私有包的能力集合映射为宿主镜像。
+    ///
+    /// 未连接时给出空集合（上层据此回退到型号默认表）；能力位**全量**映射，
+    /// 私有包将来新增能力位时这里会因 switch 不穷尽而编译报错，不会被静默丢掉。
+    #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
+    private static func hostCapabilities(
+        _ capabilities: Set<SayAllSiriRemote.RemoteHardwareCapability>,
+        isConnected: Bool
+    ) -> SiriRemoteDeclaredCapabilities {
+        guard isConnected else { return [] }
+        var declared: SiriRemoteDeclaredCapabilities = []
+        for capability in capabilities {
+            switch capability {
+            case .controlEdges: declared.insert(.controlEdges)
+            case .touchSurface: declared.insert(.touchSurface)
+            case .continuousScroll: declared.insert(.continuousScroll)
+            case .voiceStream: declared.insert(.voiceStream)
+            case .batteryLevel: declared.insert(.batteryLevel)
+            case .powerState: declared.insert(.powerState)
+            }
+        }
+        return declared
+    }
+    #endif
 
     func start() {
         #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
