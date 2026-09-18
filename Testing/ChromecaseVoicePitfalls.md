@@ -356,3 +356,40 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
 
 **遗留的 A/B（未做，不影响功能）**：`MIC_OPEN` 的 mic mode 同时从播放（`0x00`）改成了采集（`0x01`），
 两者在本机「未关流」状态下都被忽略；关流修好后是哪个模式在起作用尚未单独验证，当前取采集模式。
+
+#### 「说完之后结束收音困难」＝宿主流的开通被误判成物理按下（2026-09-18，build 214）
+
+现象（用户实测 build 213）：唤起、收音都顺利，但**说完后要按好几次才停得下来**。
+
+日志（同一会话内两次「结束」各按了两次）：
+
+```
+10:39:10.827  STREAM START reason=0x03 stream=65 origin=remoteInitiated   ← 宿主 latch 的 MIC_OPEN 换来的持续流
+10:39:13.692  STREAM START reason=0x03 stream=66                          ← 用户第 2 次按下（远端另起一条流）
+10:39:13.917  MIC_CLOSE(66) + gesture duration_ms=3090 action=debounced   ← 被判成连按防抖 → 不结束 ✗
+10:39:15.417  STREAM START reason=0x03 stream=67                          ← 用户第 3 次按下
+10:39:15.597  MIC_CLOSE(67) + action=stop                                 ← 这一次才结束 ✓
+```
+
+另一次会话更极端：`gesture duration_ms=3181134`（53 分钟）——那条「过期的手势」从上一次 latch 一直挂到第二次按下。
+
+**机制（两个缺陷叠加）**
+
+1. 本固件把宿主 `MIC_OPEN` 换来的流**同样用 `reason=0x03` 上报**（与物理按下在字节上完全一致），
+   客户端据此把它当成「一次新的物理按下」，创建了一个**永远等不到松键的手势**（这条流不会 `AUDIO_STOP`）；
+2. 用户第 2 次按下时该手势仍在 → `gesture != nil` 让新按下被忽略，松键时沿用**旧手势**（其按下时刻
+   就在 latch 前后 0.3 秒内）→ 落入连按防抖窗口 → `action=debounced`，会话保持；
+3. 直到第 3 次按下（旧手势已被松键清空）才正常结束。
+
+**修复（build 214）**
+
+- `consumeHostStreamGrant()`：`MIC_OPEN` 写出后 `hostStreamGrantWindow`（1.5 s；实测远端回帧约 40 ms）
+  内到达的 `AUDIO_START` 认作**宿主流的开通**，不派发 `physicalDown`。一次请求只消费一次，因此
+  紧随其后的用户第 2 次按下仍按物理按下处理。日志新增 `ATVV MIC_OPEN accepted host_stream_granted`，
+  该流的 `STREAM START` 记为 `origin=hostRequested`（不再伪装成 user press 的 `remoteInitiated`）。
+- **结束收音的关流目标改为远端为宿主流分配的精确 id**（`hostRequestedStreamID`），不再用 `0x00`：
+  本固件只认精确 id，`0d00` 发出去远端仍继续推流（用户观感「收音停不下来」）。
+- 回归：`testHostRequestedStreamOnHTTReasonDoesNotSwallowTheEndingPress`——宿主流开通不得产生新手势、
+  第 2 次按下必须立刻结束、关流必须用精确 id。
+- 复测判据：结束那次按下应直接出现 `action=stop`（前面不再夹一条 `action=debounced`），
+  且 `MIC_CLOSE written … origin=host_requested` 里的 stream id 与宿主流一致。
