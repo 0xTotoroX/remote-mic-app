@@ -39,16 +39,20 @@ struct ChromecaseFunctionKeyDrive: Equatable {
         stopEvents: [.press, .release]
     )
 
-    /// 由设置决定驱动方式：仅 Fn/地球键模式支持「语音键模拟 Fn 点按」。
+    /// 由「遥控器自己的收音方式」与「目标工具是否支持长按」推导驱动方式。
     ///
-    /// 注意：这里只看设置本身，不看「Fn 点按硬件映射是否已生效」（启动日志里的
-    /// `VOICE FN TAP mode_pending_mapping`）。那条门禁是为**硬件语音键**（RC003 的 F5 类按键）准备的——
-    /// 中和未生效时若再发软件 Fn 会出现双份事件。Chromecase 的语音键走 ATVV 语音通道、
-    /// 不产生任何 HID Fn（启动日志 `VOICE FN MAPPING matched=0`），因此不受该门禁约束。
+    /// 规则来自能力矩阵（`VoiceInputCapabilityMatrix.swift` / 公开仓 `remote/遥控器与输入工具能力矩阵.md`）：
+    /// - 工具不支持长按（Typeless 一类，只认点按）：无论遥控器怎么按，都只能靠成对点按把开关交到工具手里；
+    /// - 工具支持长按：跟随遥控器的语音模式——「按一次说话」用成对点按（与豆包「免按模式」同构），
+    ///   「按住说话」用按住—松开（与豆包「长按模式」同构）。
+    ///
+    /// 注意：这里**不再读**「语音键模拟 Fn 点按」开关。那个开关是为「只会按住收音」的遥控器准备的
+    /// （界面也只在那些遥控器上显示），Chromecase 自己就能按一次收音，不需要它。
     static func resolve(
-        fnTapModeEnabled: Bool,
-        voiceKeyMode: VoiceKeyMode
+        voiceMode: ChromecaseVoiceMode,
+        toolSupportsHoldVoiceRecording: Bool
     ) -> ChromecaseFunctionKeyDrive {
-        fnTapModeEnabled && voiceKeyMode == .function ? .taps : .hold
+        guard toolSupportsHoldVoiceRecording else { return .taps }
+        return voiceMode == .toggle ? .taps : .hold
     }
 }

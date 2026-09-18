@@ -504,16 +504,20 @@ Fn 松开（等 2.5s） → 面板仍在        ← 免按模式忽略松开
 才翻转一次——第 2 次按键（我们判定的「结束」）被忽略，第 3 次按键（下一次开始）才让它关闭。
 ⇒ 用户看到的「必须再按一下」就是下一次开始；同一机制还让豆包只录到**隔一个**的会话。
 
-**修复（build 220）**：`ChromecaseFunctionKeyDrive` 把语音键驱动分成两态，并由既有的
-**「语音键模拟 Fn 点按」**开关选择（Fn 模式）：
-- `hold`（开关关闭，默认）：开始按下、结束松开——长按式工具（豆包「长按模式」）；
-- `taps`（开关开启）：开始一次点按、结束再一次点按——点按式工具（豆包「免按模式」、Typeless）。
-  开始的点按必须自己松开，否则 Fn 修饰位在整个会话期间被按住（用户此时打字会变 Fn 组合键）。
+**修复（build 220/221）**：`ChromecaseFunctionKeyDrive` 把语音键驱动分成两态，驱动方式由
+**遥控器自己的语音模式 + 目标工具是否支持长按**推导（单一事实源：
+`Sources/RemoteMic/VoiceInputCapabilityMatrix.swift` 与公开仓 `remote/遥控器与输入工具能力矩阵.md`）：
+- `taps`：遥控器「按一次说话」；或工具根本不吃长按（Typeless）——开始一次点按、结束再一次点按；
+- `hold`：遥控器「按住说话」且工具支持长按——开始按下、结束松开。
+Chromecase 页面**不再出现**「语音键模拟 Fn 点按」：那个开关只为「只能按住收音」的遥控器
+（小米/苹果 + Typeless 这类工具）存在。开始的点按必须自己松开，否则 Fn 修饰位在整个会话期间被按住
+（用户此时打字会变 Fn 组合键）。
 
-**接线盲区（本次一并补上）**：该开关此前只接在**小米蓝牙**链路（`VoiceFnTapSessionController` 的调用点
+**接线盲区（build 220 一并补上）**：该开关此前只接在**小米蓝牙**链路（`VoiceFnTapSessionController` 的调用点
 全在 `bluetoothVoice*`），Chromecase 的 ATVV 语音链路**从未读取它**——所以开关开着也不生效。
 现在 `beginChromecaseVoice` / `completeChromecaseVoiceStop` 走同一套驱动决策，日志留痕
-`CHROMECASE VOICE fn_drive=taps phase=start_tap|start_released|stop_tap`。
+`CHROMECASE VOICE fn_drive=taps phase=start_tap|start_released|stop_tap`。build 221 起该驱动
+不再读那个开关，改由能力矩阵推导（界面对应地不再在 Chromecase 页面显示它）。
 
 **排查纪律**：报告「结束不生效」时，先问目标工具当前是哪一种模式（豆包设置里就是这两个开关），
 再用探针量三态，最后才动代码——本次若先猜「关流/排空/防抖」都会改错地方。

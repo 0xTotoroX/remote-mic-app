@@ -30,28 +30,37 @@ struct ChromecaseFunctionKeyDriveTests {
         #expect(ChromecaseFunctionKeyDrive.taps.stopEvents.first == .press)
     }
 
-    // MARK: - 设置解析
+    // MARK: - 驱动推导（能力矩阵）
 
-    @Test func tapModeResolvesToTapsOnlyInFunctionKeyMode() {
+    @Test func resolveFollowsTheRemoteVoiceModeWhenToolSupportsHold() {
+        // 工具支持长按（豆包长按模式/微信/Vokie/ChatterFly）：跟随遥控器自己的收音方式。
         #expect(
             ChromecaseFunctionKeyDrive.resolve(
-                fnTapModeEnabled: true,
-                voiceKeyMode: .function
+                voiceMode: .toggle,
+                toolSupportsHoldVoiceRecording: true
             ) == .taps
         )
-        // 开关关闭（含豆包「长按模式」这类按既有建议配置的场景）：保持按住—松开。
         #expect(
             ChromecaseFunctionKeyDrive.resolve(
-                fnTapModeEnabled: false,
-                voiceKeyMode: .function
+                voiceMode: .hold,
+                toolSupportsHoldVoiceRecording: true
             ) == .hold
         )
-        // 点按兼容只对 Fn 模式开放（Command 等模式沿用既有长按语义）。
+    }
+
+    @Test func resolveUsesTapsForToolsWithoutHoldToTalk() {
+        // Typeless 一类只认点按：遥控器怎么按都得靠成对点按把开关交出去。
         #expect(
             ChromecaseFunctionKeyDrive.resolve(
-                fnTapModeEnabled: true,
-                voiceKeyMode: .rightCommand
-            ) == .hold
+                voiceMode: .hold,
+                toolSupportsHoldVoiceRecording: false
+            ) == .taps
+        )
+        #expect(
+            ChromecaseFunctionKeyDrive.resolve(
+                voiceMode: .toggle,
+                toolSupportsHoldVoiceRecording: false
+            ) == .taps
         )
     }
 }

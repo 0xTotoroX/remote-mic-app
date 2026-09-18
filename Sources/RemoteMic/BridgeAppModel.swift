@@ -5848,11 +5848,12 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 一次点按的按下时长：与小米蓝牙链路的 `VoiceFnTapSessionController` 保持一致。
     private static let chromecaseFunctionKeyTapDuration: TimeInterval = 0.12
 
-    /// 当前应使用的驱动方式（由「语音键模拟 Fn 点按」开关与 Fn 模式决定）。
+    /// 当前应使用的驱动方式：由遥控器自己的语音模式 + 目标工具是否支持长按推导（见能力矩阵）。
     private var chromecaseFunctionKeyDrive: ChromecaseFunctionKeyDrive {
         .resolve(
-            fnTapModeEnabled: settings.voiceFnTapModeEnabled,
-            voiceKeyMode: settings.voiceKeyMode
+            voiceMode: settings.chromecaseVoiceMode,
+            toolSupportsHoldVoiceRecording: settings.onboardingVoiceTool
+                .supportsHoldVoiceRecording
         )
     }
 

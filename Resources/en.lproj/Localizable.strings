@@ -128,8 +128,8 @@
 "chromecase.mode.title" = "Voice key mode";
 "chromecase.mode.toggle" = "Tap once to talk";
 "chromecase.mode.hold" = "Hold to talk";
-"chromecase.mode.toggle.detail" = "Tap once to start listening, tap once more to stop. Only this remote supports it; every other remote is hold-to-talk only.";
-"chromecase.mode.hold.detail" = "Listen while the voice key is held, stop on release. Matches the Siri Remote feel.";
+"chromecase.mode.toggle.detail" = "Tap once to start listening, tap once more to stop. Only this remote supports it; every other remote is hold-to-talk only. Set your voice tool to its tap-to-toggle mode (Doubao: Hands-Free mode).";
+"chromecase.mode.hold.detail" = "Listen while the voice key is held, stop on release. Matches the Siri Remote feel. Set your voice tool to its hold-to-talk mode (Doubao: Hold mode).";
 "chromecase.action.reconnect" = "Reconnect";
 "chromecase.help.plain" = "Audio is captured by the remote microphone and routed to MiRemoteV 2ch; the computer microphone is not used.";
 "chromecase.mapping.voice.title" = "Voice key";
@@ -276,7 +276,7 @@
 "connection.status.voice_trigger" = "Voice trigger";
 "connection.voice_fn_tap.enabled" = "Simulate Fn Tap on Voice Key";
 "connection.voice_fn_tap.hint" = "For tap-to-toggle voice apps (e.g. Doubao Hands-Free mode, Typeless): these tools only react to the key press, never the release. When on, every voice session injects one Fn tap to start and one more to stop; leave it off for hold-to-talk tools (Doubao Hold mode). Requires Accessibility permission.";
-"connection.voice_fn_tap.hint_short" = "For voice tools that start and stop on Fn taps (e.g. Doubao Hands-Free mode).";
+"connection.voice_fn_tap.hint_short" = "Only needed for hold-to-talk-only remotes, to drive tools without hold-to-talk (e.g. Typeless).";
 "connection.voice_key_mode.title" = "Voice Trigger Key";
 "connection.voice_key.mode.fn" = "Fn/Globe";
 "connection.voice_key.mode.left_command" = "Left Command";
