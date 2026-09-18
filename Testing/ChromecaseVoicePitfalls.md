@@ -251,10 +251,23 @@ latch 期间 ATVV AUDIO notify = 1 条；audio_batches=24/11520 ≈ 0.36s（会�
 - **判定**：本遥控器 `interaction=0x03`（HTT），规范 4.5.2 / 4.7.5 下宿主 `MIC_OPEN` 属于被
   禁止的打断，正品**直接忽略**（连 `MIC_OPEN_ERROR` 都不回）。**「按一次持续收音」在协议层
   无法实现**；按住期间音频正常（远端自行推流）。
-- **产品处理（build 200）**：按键页不再显示「语音键模式」选择器；运行时固定
-  `chromecaseFeature.setVoiceMode(.hold)`（日志 `VOICE MODE mode=hold`），
-  不再下发设置里的旧值——避免「界面显示持续收音中、远端却没推流」的假状态。
-  设置键 `chromecase.voiceMode` 保留但不再生效（将来若遇到支持宿主开流的型号可复用）。
+- **产品处理：build 200 曾把「语音键模式」选择器摘掉、运行时钉死按住——这是错误的，已回退**
+  （用户明确要求「按一次说话」是必须实现的功能，不得删除入口）。当前界面与设置照旧，
+  模式仍由用户选择；未实现的是该硬件上的持续收音。
+- **后续尝试（build 202~205）**：按规范用 `GET_CAPS` 的「宿主支持的交互模型」字段把模型切到
+  On-request / PTT（二者都由宿主 `MIC_OPEN`/`MIC_CLOSE` 掌控麦克风，正是「按一次持续收音」）：
+  - 声明 `0x00`（仅 On-request）→ 远端**不回应** `GET_CAPS`（两次尝试后回退 caps-less）；
+  - 声明 `0x01`（PTT + On-request）→ 同样**不回应**；
+  - 声明 `0x03`（含 HTT）→ 立刻应答 `CAPS_RESP raw=0b0100020300f001001a`，采用 HTT。
+  **A/B 结论：该固件只在声明包含 HTT 时才完成能力协商**，即它拒绝离开 HTT；
+  单方向切换模型的路走不通。On-request 的客户端语义已实现并保留（第 1 次按下开麦、
+  第 2 次按下关麦），换到支持 On-request/PTT 的遥控器或固件即可直接生效。
+- **与参考实现（vRemoter）的对照**：把同一台正品接到 vRemoter 上、用它的 Mac 端触发键
+  （右 Option）发起开麦，日志为
+  `TX micOpen requested by gesture` → `MIC_OPEN sent attempt=1/2/3` →
+  `MIC_OPEN confirmation timeout` ×3 → `MIC_OPEN retries exhausted`。
+  **vRemoter 的「短按切换」在这台正品上同样失败**（它的成功记录是 2026-09-14 的假冒品，
+  设备 UUID `5B693D81…`；正品为 `CB1FC712…`）。→ 不是本仓库实现缺陷。
 - **保留的能力**：build 199 的「延迟 0.25s + 超时重发 3 次」留在协议层——它对任何
   On-request 链路仍然必要，且 `ATVV MIC_OPEN no_response` 是判定「该设备是否支持宿主开流」
   的唯一判据。

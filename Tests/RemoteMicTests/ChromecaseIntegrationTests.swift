@@ -134,7 +134,7 @@ struct ChromecaseIntegrationTests {
         #expect(!packageSource.contains("fatalError(\"SAYALL_CHROMECASE"))
     }
 
-    @Test func chromecaseVoiceModeIsFixedToHoldAtRuntime() throws {
+    @Test func chromecasePanelChangesReachTheRuntimeWithoutRestart() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -148,14 +148,11 @@ struct ChromecaseIntegrationTests {
             encoding: .utf8
         )
 
-        // 该型号固定「按住说话」：远端 HTT（按下即自行开麦、松键即停流）且从不响应宿主
-        // `MIC_OPEN`（2026-09-18 实测 3 次重试全 no_response、0 条 hostRequested 流），
-        // 「按一次持续收音」协议层无法实现——模式必须由运行时钉死，不能再从设置推送可变值。
-        #expect(modelSource.contains("chromecaseFeature.setVoiceMode(.hold)"))
-        #expect(!modelSource.contains("chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)"))
+        // 面板里开关与模式选择必须走同一条「立即作用于运行时」的入口。
+        #expect(settingsView.contains("model.applyChromecaseSettings()"))
+        // 模式推送必须真的发生在运行入口里，而不是只写偏好。
+        #expect(modelSource.contains("chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)"))
         #expect(modelSource.contains("func applyChromecaseSettings()"))
-        // 界面上不再提供语音键模式选择器（其余遥控器型号各有自己的模式入口，不受影响）。
-        #expect(!settingsView.contains("chromecaseVoiceModeSection"))
     }
 
     // MARK: - 按键页契约
