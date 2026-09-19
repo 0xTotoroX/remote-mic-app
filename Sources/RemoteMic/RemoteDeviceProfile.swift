@@ -111,6 +111,10 @@ enum VoiceRemoteCatalog {
     /// 本桥会考虑的广播名（设备自报，小写）。**只作连接前的辅助筛选**：
     /// 广播名与型号不是一一对应（真机实测：广播名「小米蓝牙语音遥控器」、DIS 报 RC003），
     /// 型号判定一律以 DIS 为准。
+    ///
+    /// 「小米蓝牙遥控器2」「小米蓝牙遥控器2 pro」「arn9」对应的就是**小米蓝牙遥控器 2 / 2 Pro**
+    /// （硬件型号 ARN9）——这是老版本用户的主力设备，**绝不能从这份名单里移除**，
+    /// 否则老用户升级后遥控器永远无法首次采纳。
     static let adoptedAdvertisedNames: Set<String> = [
         "mi rc",
         "xiaomi bluetooth remote 2",

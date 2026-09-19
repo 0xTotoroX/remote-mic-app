@@ -94,7 +94,19 @@ struct ForeignVoiceRemoteProductTests {
     }
 
     @Test func verifiedXiaomiNameIsAdopted() {
-        for name in ["小米蓝牙语音遥控器", "MI RC", "小米蓝牙遥控器2", "ARN9"] {
+        // 老版本用户的主力设备是小米蓝牙遥控器 2 / 2 Pro（硬件型号 ARN9），
+        // 这 7 个广播名一个都不能少——少一个，对应的老用户升级后就再也连不上。
+        let names = [
+            "mi rc",
+            "xiaomi bluetooth remote 2",
+            "xiaomi bluetooth remote 2 pro",
+            "小米蓝牙语音遥控器",
+            "小米蓝牙遥控器2",
+            "小米蓝牙遥控器2 pro",
+            "arn9",
+        ]
+        #expect(names.count == VoiceRemoteCatalog.adoptedAdvertisedNames.count)
+        for name in names {
             #expect(
                 VoiceRemoteAdmission.decide(
                     identifier: UUID(),
