@@ -47,13 +47,17 @@ struct VoiceRemoteCatalogTests {
         }
     }
 
-    @Test func identificationBehaviorIsUnchanged() {
-        // 与目录化之前的行为逐一对齐，确保重构没有改变识别结果。
+    @Test func identificationMatchesVerifiedHardware() {
+        // 真机证实（2026-09-19，双机实测）：小米蓝牙遥控器 2 报 RC001、2 Pro 报 RC003。
+        // 两台的广播名都是「小米蓝牙语音遥控器」，只有 DIS 能区分。
         #expect(XiaomiRemoteModel.identified(by: "RC001") == .rc001)
         #expect(XiaomiRemoteModel.identified(by: "RC003") == .rc003)
         #expect(XiaomiRemoteModel.identified(by: " rc003 ") == .rc003)
-        #expect(XiaomiRemoteModel.identified(by: "ARN9") == .rc003)
-        #expect(XiaomiRemoteModel.identified(by: "XX-ARN9-XX") == .rc003)
+        // ARN9 从未在任何真机上出现过（历史日志 0 次），归属无证据 → 不映射型号。
+        // 型号不回写只影响展示名；连接（广播名白名单含 "arn9"）与音频解码
+        // （桥里独立的 ADPCM 字节序检测）都不受影响。
+        #expect(XiaomiRemoteModel.identified(by: "ARN9") == nil)
+        #expect(XiaomiRemoteModel.identified(by: "XX-ARN9-XX") == nil)
         // 真机实测的未识别串（别的产品）必须返回 nil——识别不出就不采用。
         #expect(XiaomiRemoteModel.identified(by: "A0") == nil)
         #expect(XiaomiRemoteModel.identified(by: "A3") == nil)

@@ -67,8 +67,7 @@ enum XiaomiRemoteModel: String, Codable, CaseIterable, Identifiable {
     /// 按 DIS 型号串识别型号。规则集中在 `VoiceRemoteCatalog`——这里不再单独写名单。
     static func identified(by modelNumber: String) -> XiaomiRemoteModel? {
         VoiceRemoteCatalog.entry(matchingDISModelNumber: modelNumber)?.model
-    }
-}
+    }}
 
 /// 目录条目：一款被验证过的遥控器。
 ///
@@ -94,20 +93,20 @@ enum VoiceRemoteCatalog {
         VoiceRemoteCatalogEntry(
             model: .rc001,
             photoResource: "RC003-remote-photo",
+            // 真机证实（2026-09-19）：小米蓝牙遥控器 2 的 DIS 报 RC001。
             disModelNumbers: ["RC001"]
         ),
         VoiceRemoteCatalogEntry(
             model: .rc003,
             photoResource: "RC003-remote-photo",
-            // ARN9 是小米蓝牙遥控器 2 的硬件型号串（维护者注释），但既有实现把它归到 .rc003
-            // （2 Pro）——两处矛盾。**用户已确认**：广播名「小米蓝牙语音遥控器」的设备就是
-            // 小米蓝牙遥控器 2 Pro、DIS 报 RC003（真机 `BLE MODEL identified=rc003
-            // modelNumber=RC003`），即 RC003 确属 2 Pro、ARN9 不是 2 Pro 的串。
-            // 因此 `ARN9 → rc003` 大概率是错的，应为 rc001（与维护者注释一致）；
-            // 待连一台「小米蓝牙遥控器 2」看 `BLE MODEL ... modelNumber=` 即可定案。
-            // 影响面有限：ADPCM 字节序由桥按 firmware 单独处理（见 ATVVProtocol.lowNibbleFirst），
-            // 且 rc001/rc003 共用同一张真机图，所以归属若错目前只影响展示名。
-            disModelNumbers: ["RC003", "ARN9"]
+            // 真机证实（2026-09-19）：小米蓝牙遥控器 2 Pro 的 DIS 报 RC003。
+            //
+            // ARN9 **不**列入型号目录：两台真机（2 与 2 Pro）的 DIS 都不是 ARN9，
+            // 全部历史日志里也从未出现过，没有任何证据表明它属于哪一款——型号不猜。
+            // 但 ARN9 的两处功能保留：①广播名白名单里的 "arn9"（连接层，老固件设备
+            // 可能广播这个名字）；②桥里 contains("ARN9") 的 ADPCM low-nibble-first
+            // 翻转（解码层，见 ATVVProtocol.lowNibbleFirst）——两者都不依赖型号归属。
+            disModelNumbers: ["RC003"]
         ),
     ]
 
@@ -128,8 +127,8 @@ enum VoiceRemoteCatalog {
         "arn9",
     ]
 
-    /// 按 DIS 型号串识别型号。`raw` 是设备上报的原始串，子串命中即认
-    /// （与既有 identified(by:) 的行为一致：精确匹配 RC001/RC003，含 ARN9 也算）。
+    /// 按 DIS 型号串识别型号。`raw` 是设备上报的原始串，子串命中即认——
+    /// 只有目录里登记的型号串才会命中，登记之外的（如 ARN9）返回 nil，型号不猜。
     static func entry(matchingDISModelNumber raw: String) -> VoiceRemoteCatalogEntry? {
         let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !normalized.isEmpty else { return nil }
