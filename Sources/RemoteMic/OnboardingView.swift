@@ -167,7 +167,7 @@ struct OnboardingView: View {
                 testedControlButtons.insert(observation.button)
             }
         }
-        .onReceive(model.$isStreaming.removeDuplicates()) { isStreaming in
+        .onReceive(model.$isStreaming) { isStreaming in
             guard selectedControlAcceptsVoice(model.activeVoiceSource) else { return }
             switch settings.onboardingStep {
             case .remote where isStreaming:
