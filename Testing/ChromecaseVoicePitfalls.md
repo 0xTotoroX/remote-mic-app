@@ -142,6 +142,14 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 **结论**：这是 macOS 对 Apple 配件协议遥控器的系统级行为，用户态 App 无法拦截。
 需要产品决策：接受现状，或投入 DriverKit 扩展方案。
 
+**补充（2026-09-19，新款遥控器 + 豁免开关实测后）**：最后一种未试过的用户态手段——
+`hidutil` **UserKeyRemapping**（usage 级重映射，consumer 0x44/0x45/0x41 → F13/14/15）——也已验证无效：
+按 VID/PID、全局、`Transport=BT-AACP` 三种 matching 写入，回读均为 `(null)`，属性根本挂不到
+AACP 侧的虚拟 HID 事件服务上。至此用户态手段全部穷尽（seize / CGEventTap 两层 /
+hidutil 设备属性 / hidutil usage 重映射），结论不变：**要消除三键的系统侧行为只有 DriverKit
+系统扩展（Karabiner 方案）一条路**。三键在 App 内的自定义映射一切正常
+（`CHROMECASE ACTION result=dispatched` 全部命中），系统副作用仅在音乐/视频播放时出现。
+
 ### 补充：参考实现要点与「删除系统配对」实验结论（2026-09-16）
 
 参考文档：私有包 `packages/audio-input-kit/chromecase/Referance/google-tv-remote.md`
