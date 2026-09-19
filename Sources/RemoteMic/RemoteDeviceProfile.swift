@@ -99,9 +99,12 @@ enum VoiceRemoteCatalog {
         VoiceRemoteCatalogEntry(
             model: .rc003,
             photoResource: "RC003-remote-photo",
-            // ARN9 是小米蓝牙遥控器 2 的硬件型号串（既有注释），但既有实现把它归到 .rc003
-            // （2 Pro）——**这两处说法互相矛盾，暂无真机证据可判定**（本机真机 DIS 报 RC003，
-            // 日志里从未出现过 ARN9）。这里沿用既有行为以免改变线上表现，待拿到 ARN9 真机再定。
+            // ARN9 是小米蓝牙遥控器 2 的硬件型号串（维护者注释），但既有实现把它归到 .rc003
+            // （2 Pro）——两处矛盾。**用户已确认**：广播名「小米蓝牙语音遥控器」的设备就是
+            // 小米蓝牙遥控器 2 Pro、DIS 报 RC003（真机 `BLE MODEL identified=rc003
+            // modelNumber=RC003`），即 RC003 确属 2 Pro、ARN9 不是 2 Pro 的串。
+            // 因此 `ARN9 → rc003` 大概率是错的，应为 rc001（与维护者注释一致）；
+            // 待连一台「小米蓝牙遥控器 2」看 `BLE MODEL ... modelNumber=` 即可定案。
             // 影响面有限：ADPCM 字节序由桥按 firmware 单独处理（见 ATVVProtocol.lowNibbleFirst），
             // 且 rc001/rc003 共用同一张真机图，所以归属若错目前只影响展示名。
             disModelNumbers: ["RC003", "ARN9"]
