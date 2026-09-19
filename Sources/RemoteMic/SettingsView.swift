@@ -1391,7 +1391,8 @@ struct SettingsView: View {
                     if let control = ChromecaseRemoteControl(rawValue: controlID),
                        ChromecaseRemoteControl.isSystemManaged(
                            control,
-                           allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys
+                           allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
+                           exceptions: settings.chromecaseSystemReservedExceptions
                        ) {
                         guard trigger == .singleClick else { return "—" }
                         return localization.text("chromecase.mapping.system.\(controlID)")
@@ -1411,8 +1412,11 @@ struct SettingsView: View {
                         trigger: trigger
                     )
                 },
-                // 豁免开关打开时三键不再置灰/禁点（新款遥控器真机验证用），其余情况用包内默认表。
-                systemReservedControlIDs: settings.chromecaseAllowSystemReservedKeys ? [] : nil
+                // 置灰表 = 默认表去掉已放开的键（主开关全放开 / 按键级豁免）。
+                systemReservedControlIDs: ChromecaseRemoteControl.canvasReservedControlIDs(
+                    allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
+                    exceptions: settings.chromecaseSystemReservedExceptions
+                )
             )
         }
     }

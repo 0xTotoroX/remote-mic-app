@@ -148,7 +148,12 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 AACP 侧的虚拟 HID 事件服务上。至此用户态手段全部穷尽（seize / CGEventTap 两层 /
 hidutil 设备属性 / hidutil usage 重映射），结论不变：**要消除三键的系统侧行为只有 DriverKit
 系统扩展（Karabiner 方案）一条路**。三键在 App 内的自定义映射一切正常
-（`CHROMECASE ACTION result=dispatched` 全部命中），系统副作用仅在音乐/视频播放时出现。
+（`CHROMECASE ACTION result=dispatched` 全部命中）。
+
+系统副作用的实际边界（2026-09-19 用户实测更正）：**不只在播放时**——OK 键（Menu Left）被
+AACP 当作播放/暂停，**没有媒体会话时会拉起音乐 App**；左/右（Menu Up/Down → 上一首/下一首）
+只在有播放会话时可感知。因此三键的代价不同：左/右 = 播放时切歌；OK = 任何时候拉起音乐。
+据此把豁免做成按键级（`chromecase.systemReservedExceptions`，CSV），可按键取舍。
 
 ### 补充：参考实现要点与「删除系统配对」实验结论（2026-09-16）
 

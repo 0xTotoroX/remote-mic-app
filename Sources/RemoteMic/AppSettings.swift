@@ -306,6 +306,7 @@ final class AppSettings: ObservableObject {
         static let experimentalContinuousRecordingEnabled = "experimentalContinuousRecordingEnabled"
         static let voiceFnTapModeEnabled = "voiceFnTapModeEnabled"
         static let chromecaseAllowSystemReservedKeys = "chromecase.allowSystemReservedKeys"
+        static let chromecaseSystemReservedExceptions = "chromecase.systemReservedExceptions"
         static let voiceKeyMode = "voiceKeyMode"
         static let siriRemoteScrollArrowReversed = "siriRemote.scrollArrowReversed"
         static let chromecaseEnabled = "chromecase.enabled"
@@ -451,6 +452,19 @@ final class AppSettings: ObservableObject {
             defaults.set(
                 chromecaseAllowSystemReservedKeys,
                 forKey: Keys.chromecaseAllowSystemReservedKeys
+            )
+        }
+    }
+
+    /// 按键级豁免：逐颗放开「系统占用键」（CSV，如 "left,right"）。
+    ///
+    /// 三颗键的系统代价不同（左/右=播放时切歌；OK=任何时候拉起音乐 App），全有全无的开关
+    /// 无法表达这种取舍。与主开关相加生效：任一途径放开的键都由 App 接管。
+    @Published var chromecaseSystemReservedExceptions: Set<String> {
+        didSet {
+            defaults.set(
+                chromecaseSystemReservedExceptions.sorted().joined(separator: ","),
+                forKey: Keys.chromecaseSystemReservedExceptions
             )
         }
     }
@@ -741,6 +755,11 @@ final class AppSettings: ObservableObject {
         voiceFnTapModeEnabled = defaults.bool(forKey: Keys.voiceFnTapModeEnabled)
         chromecaseAllowSystemReservedKeys = defaults.bool(
             forKey: Keys.chromecaseAllowSystemReservedKeys
+        )
+        chromecaseSystemReservedExceptions = Set(
+            (defaults.string(forKey: Keys.chromecaseSystemReservedExceptions) ?? "")
+                .split(separator: ",")
+                .map(String.init)
         )
         voiceKeyMode = VoiceKeyMode(
             rawValue: defaults.string(forKey: Keys.voiceKeyMode) ?? ""

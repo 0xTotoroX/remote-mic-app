@@ -204,6 +204,28 @@ struct ChromecaseIntegrationTests {
         )
     }
 
+    @Test func exceptionsReleaseIndividualKeys() {
+        // 按键级豁免：只放开的键由 App 接管，其余仍归系统（三键代价不同：左/右=播放时切歌，
+        // OK=任何时候拉起音乐 App，需要能单独取舍）。
+        let exceptions: Set<String> = ["left", "right"]
+        #expect(!ChromecaseRemoteControl.isSystemManaged(.left, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(!ChromecaseRemoteControl.isSystemManaged(.right, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(ChromecaseRemoteControl.isSystemManaged(.select, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(
+            ChromecaseRemoteControl.canvasReservedControlIDs(
+                allowSystemReservedKeys: false,
+                exceptions: exceptions
+            ) == ["select"]
+        )
+        // 主开关仍然全放开（两者相加生效）。
+        #expect(
+            ChromecaseRemoteControl.canvasReservedControlIDs(
+                allowSystemReservedKeys: true,
+                exceptions: exceptions
+            ).isEmpty
+        )
+    }
+
     @Test func allowSystemReservedKeysReleasesAllThreeForTesting() {
         for control in ChromecaseRemoteControl.systemReservedControls {
             #expect(

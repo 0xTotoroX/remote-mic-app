@@ -6140,7 +6140,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         // 按产品决策完全不接管：不武装抑制（无效）、不执行自定义动作，按键归系统。
         if ChromecaseRemoteControl.isSystemManaged(
             event.control,
-            allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys
+            allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
+            exceptions: settings.chromecaseSystemReservedExceptions
         ) {
             if isPress {
                 AppLogger.shared.write(
