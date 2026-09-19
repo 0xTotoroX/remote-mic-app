@@ -171,6 +171,27 @@ struct AppleSiriRemoteAdapterTests {
         #expect(AppleSiriRemoteAdapter.isPressed(integerValue: -1))
     }
 
+    @Test func slightMovementWithinTapToleranceStillClicks() {
+        var interpreter = AppleSiriRemoteTouchInterpreter()
+        #expect(interpreter.handle(event(.began, x: 0.5, y: 0.5, time: 1)).isEmpty)
+        #expect(interpreter.handle(event(.changed, x: 0.52, y: 0.51, time: 1.05)).isEmpty)
+        #expect(interpreter.handle(event(.ended, contacts: [], time: 1.12)) == [.click])
+    }
+
+    @Test func multipleRemotesSelectTouchFromTheMostRecentControl() {
+        let first = RemoteHardwareDeviceIdentity(adapterID: "apple_siri_remote", instanceID: "first")
+        let second = RemoteHardwareDeviceIdentity(adapterID: "apple_siri_remote", instanceID: "second")
+        #expect(AppleSiriRemoteAdapter.selectTouchIdentity(
+            available: [first, second], preferred: second, current: nil
+        ) == second)
+        #expect(AppleSiriRemoteAdapter.selectTouchIdentity(
+            available: [first, second], preferred: second, current: first
+        ) == first)
+        #expect(AppleSiriRemoteAdapter.selectTouchIdentity(
+            available: [first, second], preferred: nil, current: nil
+        ) == nil)
+    }
+
     @Test func centralTouchMovesPointer() {
         var interpreter = AppleSiriRemoteTouchInterpreter()
         #expect(interpreter.handle(event(.began, x: 0.5, y: 0.5, time: 1)).isEmpty)

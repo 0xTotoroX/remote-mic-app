@@ -194,6 +194,7 @@ final class AppleSiriRemoteAdapter {
     private var touchSession: OpaquePointer?
     private var touchIsRunning = false
     private var touchDeviceIdentity: RemoteHardwareDeviceIdentity?
+    private var preferredTouchDeviceIdentity: RemoteHardwareDeviceIdentity?
     private var touchContactsWereActive = false
     private var touchSequence: UInt64 = 0
     private var coalescedControlReports: [ControlKey: Int] = [:]
@@ -292,6 +293,7 @@ final class AppleSiriRemoteAdapter {
         interfaceCountByIdentity.removeAll()
         fingerprintByIdentity.removeAll()
         coalescedControlReports.removeAll()
+        preferredTouchDeviceIdentity = nil
         guard let manager else { return }
         IOHIDManagerUnscheduleFromRunLoop(
             manager,
@@ -433,13 +435,16 @@ final class AppleSiriRemoteAdapter {
         ))
         switch result {
         case let .emitted(event):
+            if event.phase == .began {
+                preferredTouchDeviceIdentity = event.device
+            }
             let coalescedEvents = coalescedControlReports.removeValue(forKey: controlKey) ?? 0
             logger(
                 "APPLE REMOTE CONTROL phase=\(event.phase.rawValue) control=\(control.rawValue) " +
                     "sequence=\(event.sequence) coalesced_events=\(coalescedEvents)"
             )
             onControlEvent?(event)
-            if event.phase == .began, !touchIsRunning {
+            if event.phase == .began || !touchIsRunning {
                 updateTouchSessionForConnectedDevices()
             }
         case let .ignored(reason):
@@ -526,20 +531,33 @@ final class AppleSiriRemoteAdapter {
     }
 
     private func updateTouchSessionForConnectedDevices() {
-        guard customMappingEnabled,
-              interfaceCountByIdentity.count == 1,
-              let identity = interfaceCountByIdentity.keys.first
-        else {
+        guard customMappingEnabled, !interfaceCountByIdentity.isEmpty else {
             cancelActiveTouch(reason: .superseded)
             touchLock.lock()
             touchDeviceIdentity = nil
             touchLock.unlock()
             stopTouchSession()
-            if customMappingEnabled, interfaceCountByIdentity.count > 1 {
-                logger("APPLE REMOTE TOUCH unavailable reason=multiple_devices")
-            }
             return
         }
+        let available = Set(interfaceCountByIdentity.keys)
+        guard let identity = Self.selectTouchIdentity(
+            available: available,
+            preferred: preferredTouchDeviceIdentity,
+            current: touchDeviceIdentity
+        ) else {
+            cancelActiveTouch(reason: .superseded)
+            stopTouchSession()
+            logger(
+                "APPLE REMOTE TOUCH unavailable reason=multiple_devices " +
+                    "detail=waiting_for_recent_control"
+            )
+            return
+        }
+        if let current = touchDeviceIdentity, current != identity {
+            cancelActiveTouch(reason: .superseded)
+            stopTouchSession()
+        }
+        preferredTouchDeviceIdentity = identity
         touchLock.lock()
         touchDeviceIdentity = identity
         touchLock.unlock()
@@ -556,9 +574,24 @@ final class AppleSiriRemoteAdapter {
         if !touchIsRunning {
             touchIsRunning = SAYAppleRemoteTouchSessionStart(touchSession)
             logger(
-                "APPLE REMOTE TOUCH phase=start result=\(touchIsRunning ? "attached" : "surface_unavailable")"
+                "APPLE REMOTE TOUCH phase=start selection=recent_control " +
+                    "result=\(touchIsRunning ? "attached" : "surface_unavailable")"
             )
         }
+    }
+
+    static func selectTouchIdentity(
+        available: Set<RemoteHardwareDeviceIdentity>,
+        preferred: RemoteHardwareDeviceIdentity?,
+        current: RemoteHardwareDeviceIdentity?
+    ) -> RemoteHardwareDeviceIdentity? {
+        if let current, available.contains(current) {
+            return current
+        }
+        if let preferred, available.contains(preferred) {
+            return preferred
+        }
+        return available.count == 1 ? available.first : nil
     }
 
     private func stopTouchSession() {
@@ -569,6 +602,10 @@ final class AppleSiriRemoteAdapter {
         touchDeviceIdentity = nil
         touchLock.unlock()
         touchIsRunning = false
+        if let preferredTouchDeviceIdentity,
+           !interfaceCountByIdentity.keys.contains(preferredTouchDeviceIdentity) {
+            self.preferredTouchDeviceIdentity = nil
+        }
     }
 
     private func destroyTouchSession() {
@@ -631,7 +668,7 @@ struct AppleSiriRemoteTouchInterpreter {
     private static let circularLowSpeed = 0.01
     private static let circularHighSpeed = 0.07
     private static let tapMaximumDuration = 0.22
-    private static let tapMaximumDistance = 0.07
+    private static let tapMaximumDistance = 0.03
 
     private let tuning: RemoteHardwareTouchTuning
     private var lastPosition: CGPoint?
@@ -642,6 +679,7 @@ struct AppleSiriRemoteTouchInterpreter {
     private var emittedScroll = 0.0
     private var circularStarted = false
     private var circularEligible = false
+    private var tapCandidate = false
     private var didMoveOrScroll = false
     private var suppressesCurrentContact = false
 
@@ -661,6 +699,7 @@ struct AppleSiriRemoteTouchInterpreter {
             lastPosition = point
             startPosition = point
             startedAt = event.timestampUptime
+            tapCandidate = true
             circularEligible = hypot(point.x - 0.5, point.y - 0.5) >= tuning.minimumCircularRadius
             if circularEligible {
                 lastAngle = atan2(point.y - 0.5, point.x - 0.5)
@@ -672,13 +711,29 @@ struct AppleSiriRemoteTouchInterpreter {
                   let previous = lastPosition
             else { return [] }
             defer { lastPosition = point }
-            if circularEligible {
-                return circularOutput(point: point)
-            }
             let deltaX = point.x - previous.x
             let deltaY = point.y - previous.y
             let speed = hypot(deltaX, deltaY)
-            guard speed >= Self.pointerDeadzone else { return [] }
+            let elapsed = event.timestampUptime - (startedAt ?? event.timestampUptime)
+            let displacement = startPosition.map {
+                hypot(point.x - $0.x, point.y - $0.y)
+            } ?? .infinity
+            if circularEligible {
+                tapCandidate = false
+                return circularOutput(point: point)
+            }
+            if tapCandidate,
+               elapsed <= Self.tapMaximumDuration,
+               displacement <= Self.tapMaximumDistance {
+                return []
+            }
+            guard speed >= Self.pointerDeadzone else {
+                tapCandidate = false
+                return []
+            }
+            let movementX = tapCandidate ? point.x - (startPosition?.x ?? previous.x) : deltaX
+            let movementY = tapCandidate ? point.y - (startPosition?.y ?? previous.y) : deltaY
+            tapCandidate = false
             didMoveOrScroll = true
             let gain = interpolatedGain(
                 speed: speed,
@@ -688,13 +743,14 @@ struct AppleSiriRemoteTouchInterpreter {
                 maximum: Self.pointerMaximumAcceleration
             )
             return [.move(
-                deltaX: deltaX * Self.pointerScale * Self.pointerSpeed * gain,
-                deltaY: -deltaY * Self.pointerScale * Self.pointerSpeed * gain
+                deltaX: movementX * Self.pointerScale * Self.pointerSpeed * gain,
+                deltaY: -movementY * Self.pointerScale * Self.pointerSpeed * gain
             )]
         case .ended:
             defer { reset() }
             guard !suppressesCurrentContact,
                   !didMoveOrScroll,
+                  tapCandidate,
                   let startPosition,
                   let lastPosition,
                   let startedAt,
@@ -778,6 +834,7 @@ struct AppleSiriRemoteTouchInterpreter {
         emittedScroll = 0
         circularStarted = false
         circularEligible = false
+        tapCandidate = false
         didMoveOrScroll = false
         suppressesCurrentContact = false
     }
