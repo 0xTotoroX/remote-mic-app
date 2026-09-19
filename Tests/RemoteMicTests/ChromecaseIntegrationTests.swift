@@ -184,6 +184,37 @@ struct ChromecaseIntegrationTests {
         #expect(Set(ChromecaseRemoteControl.allCases.map(\.remoteButton)).count == expected.count)
     }
 
+    // MARK: - 系统占用键豁免
+
+    @Test func systemReservedKeysStayWithTheSystemByDefault() {
+        for control in ChromecaseRemoteControl.systemReservedControls {
+            #expect(
+                ChromecaseRemoteControl.isSystemManaged(
+                    control,
+                    allowSystemReservedKeys: false
+                )
+            )
+        }
+        // 非系统占用键不受开关影响。
+        #expect(
+            !ChromecaseRemoteControl.isSystemManaged(
+                .volumeUp,
+                allowSystemReservedKeys: false
+            )
+        )
+    }
+
+    @Test func allowSystemReservedKeysReleasesAllThreeForTesting() {
+        for control in ChromecaseRemoteControl.systemReservedControls {
+            #expect(
+                !ChromecaseRemoteControl.isSystemManaged(
+                    control,
+                    allowSystemReservedKeys: true
+                )
+            )
+        }
+    }
+
     @Test func chromecaseOnlyButtonsStayOutOfTheXiaomiLayout() {
         for button in [RemoteButton.youtube, .netflix, .input] {
             #expect(!RemoteButton.xiaomiCases.contains(button))

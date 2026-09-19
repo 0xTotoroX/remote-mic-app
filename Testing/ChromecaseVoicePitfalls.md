@@ -521,3 +521,16 @@ Chromecase 页面**不再出现**「语音键模拟 Fn 点按」：那个开关�
 
 **排查纪律**：报告「结束不生效」时，先问目标工具当前是哪一种模式（豆包设置里就是这两个开关），
 再用探针量三态，最后才动代码——本次若先猜「关流/排空/防抖」都会改错地方。
+
+#### 「left/right/select 被系统占用」的豁免开关（2026-09-19，build 224）
+
+旧款遥控器真机实测：这三颗键的 HID usage 是 Menu Up/Down/Left，macOS 配件服务（BT-AACP）
+在 CGEvent 之外直接消费成媒体控制，用户态无法拦截——因此默认置灰 + 运行时跳过
+（`ChromecaseRemoteControl.systemReservedControls`）。
+
+该结论是**按遥控器型号/固件而定**的，不是协议常态。新款遥控器是否真的被系统占用只能真机验证：
+`defaults write com.hd838a.RemoteMic chromecase.allowSystemReservedKeys -bool YES` 后重启，
+画布三键不再置灰、运行时不再跳过（`CHROMECASE ACTION result=system_reserved` 不再出现）。
+
+判据：若系统仍在消费 → 按一下出现**双执行**（App 自定义动作 + 系统媒体控制各一次），
+此时应关回开关；若无系统反应且自定义动作正常 → 该遥控器可以接管，考虑按能力位放开。

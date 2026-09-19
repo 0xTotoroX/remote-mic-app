@@ -305,6 +305,7 @@ final class AppSettings: ObservableObject {
         static let checksForPreReleaseUpdates = "checksForPreReleaseUpdates"
         static let experimentalContinuousRecordingEnabled = "experimentalContinuousRecordingEnabled"
         static let voiceFnTapModeEnabled = "voiceFnTapModeEnabled"
+        static let chromecaseAllowSystemReservedKeys = "chromecase.allowSystemReservedKeys"
         static let voiceKeyMode = "voiceKeyMode"
         static let siriRemoteScrollArrowReversed = "siriRemote.scrollArrowReversed"
         static let chromecaseEnabled = "chromecase.enabled"
@@ -435,6 +436,21 @@ final class AppSettings: ObservableObject {
             defaults.set(
                 voiceFnTapModeEnabled,
                 forKey: Keys.voiceFnTapModeEnabled
+            )
+        }
+    }
+
+    /// 放开 Chromecase「系统占用键」（left/right/select）的接管限制。
+    ///
+    /// 默认关闭：这三颗键在旧款遥控器上被 macOS 配件服务（BT-AACP）在 CGEvent 之外直接消费成
+    /// 媒体控制，接管只会双执行。新款遥控器是否真的被系统占用只能真机验证——打开此开关后
+    /// 画布不再置灰、运行时不再跳过，若系统仍在消费则会出现「双执行」，这本身就是判据。
+    /// 不进入导入/导出配置：这是针对具体遥控器硬件的临时豁免，不是用户偏好。
+    @Published var chromecaseAllowSystemReservedKeys: Bool {
+        didSet {
+            defaults.set(
+                chromecaseAllowSystemReservedKeys,
+                forKey: Keys.chromecaseAllowSystemReservedKeys
             )
         }
     }
@@ -723,6 +739,9 @@ final class AppSettings: ObservableObject {
             forKey: Keys.experimentalContinuousRecordingEnabled
         )
         voiceFnTapModeEnabled = defaults.bool(forKey: Keys.voiceFnTapModeEnabled)
+        chromecaseAllowSystemReservedKeys = defaults.bool(
+            forKey: Keys.chromecaseAllowSystemReservedKeys
+        )
         voiceKeyMode = VoiceKeyMode(
             rawValue: defaults.string(forKey: Keys.voiceKeyMode) ?? ""
         ) ?? .function

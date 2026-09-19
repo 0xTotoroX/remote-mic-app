@@ -1389,7 +1389,10 @@ struct SettingsView: View {
                     // 在系统侧的实际行为，其余槽位无动作。行为由 macOS 配件服务（BT-AACP）产生，
                     // 详见 Testing/ChromecaseVoicePitfalls.md。
                     if let control = ChromecaseRemoteControl(rawValue: controlID),
-                       ChromecaseRemoteControl.systemReservedControls.contains(control) {
+                       ChromecaseRemoteControl.isSystemManaged(
+                           control,
+                           allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys
+                       ) {
                         guard trigger == .singleClick else { return "—" }
                         return localization.text("chromecase.mapping.system.\(controlID)")
                     }
