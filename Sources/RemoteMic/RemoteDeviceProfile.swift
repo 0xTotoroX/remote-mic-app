@@ -64,15 +64,73 @@ enum XiaomiRemoteModel: String, Codable, CaseIterable, Identifiable {
         isAppleSiriRemote || isChromecaseRemote
     }
 
+    /// 按 DIS 型号串识别型号。规则集中在 `VoiceRemoteCatalog`——这里不再单独写名单。
     static func identified(by modelNumber: String) -> XiaomiRemoteModel? {
-        switch modelNumber.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
-        case "RC001": return .rc001
-        case "RC003": return .rc003
-        // ARN9 is the 蓝牙遥控器 2 hardware reporting its own model string;
-        // treat it as the RC family so the UI badge resolves.
-        case let value where value.contains("ARN9"): return .rc003
-        default: return nil
+        VoiceRemoteCatalog.entry(matchingDISModelNumber: modelNumber)?.model
+    }
+}
+
+/// 目录条目：一款被验证过的遥控器。
+///
+/// App 内置每款遥控器的真机图与按键页，所以「支持 ATVV 桥」不等于「支持这款遥控器」：
+/// 只有目录里有条目的型号才允许被采用，未收录的一律不采用。
+struct VoiceRemoteCatalogEntry {
+    /// 型号。
+    let model: XiaomiRemoteModel
+    /// 真机图资源名（不含扩展名）。每款都必须显式给图；共用必须显式声明，不允许默认套用别款。
+    let photoResource: String
+    /// 该型号的 DIS Model Number（0x180A / 0x2A24），大写、去首尾空白后匹配。
+    let disModelNumbers: [String]
+}
+
+/// 已验证遥控器目录：本 App 支持哪些遥控器的**唯一事实源**。
+///
+/// 准入、型号识别、真机图都必须从这里取，不允许各自另写一份名单——
+/// 写成三份就会出现「某处漏收/误收，且只在特定配对状态下复现」的缺陷。
+enum VoiceRemoteCatalog {
+    static let entries: [VoiceRemoteCatalogEntry] = [
+        // rc001 与 rc003 外观几乎一致，用户确认共用同一份真机素材（2026-09-19）——
+        // 共用是显式声明，不是默认行为。
+        VoiceRemoteCatalogEntry(
+            model: .rc001,
+            photoResource: "RC003-remote-photo",
+            disModelNumbers: ["RC001"]
+        ),
+        VoiceRemoteCatalogEntry(
+            model: .rc003,
+            photoResource: "RC003-remote-photo",
+            // ARN9 是蓝牙遥控器 2 硬件自报的型号串，归入 rc003（与既有 identified(by:) 行为一致）。
+            disModelNumbers: ["RC003", "ARN9"]
+        ),
+    ]
+
+    /// 本桥会考虑的广播名（设备自报，小写）。**只作连接前的辅助筛选**：
+    /// 广播名与型号不是一一对应（真机实测：广播名「小米蓝牙语音遥控器」、DIS 报 RC003），
+    /// 型号判定一律以 DIS 为准。
+    static let adoptedAdvertisedNames: Set<String> = [
+        "mi rc",
+        "xiaomi bluetooth remote 2",
+        "xiaomi bluetooth remote 2 pro",
+        "小米蓝牙语音遥控器",
+        "小米蓝牙遥控器2",
+        "小米蓝牙遥控器2 pro",
+        "arn9",
+    ]
+
+    /// 按 DIS 型号串识别型号。`raw` 是设备上报的原始串，子串命中即认
+    /// （与既有 identified(by:) 的行为一致：精确匹配 RC001/RC003，含 ARN9 也算）。
+    static func entry(matchingDISModelNumber raw: String) -> VoiceRemoteCatalogEntry? {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !normalized.isEmpty else { return nil }
+        return entries.first { entry in
+            entry.disModelNumbers.contains { normalized.contains($0) }
         }
+    }
+
+    /// 该型号应该用的真机图资源名；目录里没有这个型号（包括 `.unknown`）返回 nil，
+    /// 调用方必须显示「未识别」占位，不允许套用任何真机图。
+    static func photoResource(for model: XiaomiRemoteModel) -> String? {
+        entries.first { $0.model == model }?.photoResource
     }
 }
 

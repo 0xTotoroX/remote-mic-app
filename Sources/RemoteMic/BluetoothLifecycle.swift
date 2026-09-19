@@ -1,16 +1,8 @@
 import Foundation
 
 enum XiaomiVoiceRemoteNameMatcher {
-    private static let approvedNames: Set<String> = [
-        "mi rc",
-        "xiaomi bluetooth remote 2",
-        "xiaomi bluetooth remote 2 pro",
-        "小米蓝牙语音遥控器",
-        // 蓝牙遥控器 2 / 2 Pro (model ARN9) advertise under these names.
-        "小米蓝牙遥控器2",
-        "小米蓝牙遥控器2 pro",
-        "arn9",
-    ]
+    /// 白名单集中在 `VoiceRemoteCatalog.adoptedAdvertisedNames`，这里不再单独维护一份。
+    private static let approvedNames: Set<String> = VoiceRemoteCatalog.adoptedAdvertisedNames
 
     static func matches(_ rawName: String?) -> Bool {
         recognizedName(rawName) != nil

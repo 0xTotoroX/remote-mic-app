@@ -1209,18 +1209,26 @@ struct SettingsView: View {
             #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
             SiriRemoteConnectionPhoto()
             #else
-            RC003Photo()
+            UnrecognizedRemotePhoto()
                 .frame(width: 82, height: 166)
             #endif
         } else if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
             #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
             ChromecaseConnectionPhoto()
             #else
-            RC003Photo()
+            UnrecognizedRemotePhoto()
                 .frame(width: 82, height: 166)
             #endif
+        } else if let model = settings.selectedRemoteProfile?.model,
+                  let resource = VoiceRemoteCatalog.photoResource(for: model) {
+            // 型号在目录里 → 用目录指定的那张真机图。
+            RemoteCatalogPhoto(resourceName: resource)
+                .frame(width: 82, height: 166)
         } else {
-            RC003Photo()
+            // 型号目录里没有这个型号（.unknown、或还没选设备）：**不套用任何一款真机图**。
+            // App 里每张图都对应一个验证过的型号，给未识别设备画上 RC003 等于界面声称
+            // 支持一台从未验证过的遥控器。
+            UnrecognizedRemotePhoto()
                 .frame(width: 82, height: 166)
         }
     }
@@ -5020,20 +5028,14 @@ private struct DeviceStatusStep: View {
     }
 }
 
-private enum RC003ImageResource {
-    static let image: NSImage? = {
-        guard let url = Bundle.main.url(
-            forResource: "RC003-remote-photo",
-            withExtension: "png"
-        ) else { return nil }
-        return NSImage(contentsOf: url)
-    }()
-}
+/// 按型号目录给出的资源名加载真机图。资源名来自 `VoiceRemoteCatalog`，不在这里硬编码。
+private struct RemoteCatalogPhoto: View {
+    let resourceName: String
 
-private struct RC003Photo: View {
     var body: some View {
         Group {
-            if let photo = RC003ImageResource.image {
+            if let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
+               let photo = NSImage(contentsOf: url) {
                 Image(nsImage: photo)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -5047,6 +5049,29 @@ private struct RC003Photo: View {
                     }
             }
         }
+    }
+}
+
+/// 型号目录里没有这个型号时的占位。
+///
+/// 关键：这里**不显示任何真机图**。App 内置每款遥控器的真机图与按键页，给未识别设备套上
+/// 别款的图，界面就等于声称一台从未验证过的设备「已连接、能用」。
+private struct UnrecognizedRemotePhoto: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.quaternary)
+            .overlay {
+                VStack(spacing: 6) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    Text("remote.device.model.unrecognized")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(8)
+            }
     }
 }
 
