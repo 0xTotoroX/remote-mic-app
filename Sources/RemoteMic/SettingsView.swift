@@ -1410,7 +1410,9 @@ struct SettingsView: View {
                         button: button,
                         trigger: trigger
                     )
-                }
+                },
+                // 豁免开关打开时三键不再置灰/禁点（新款遥控器真机验证用），其余情况用包内默认表。
+                systemReservedControlIDs: settings.chromecaseAllowSystemReservedKeys ? [] : nil
             )
         }
     }
