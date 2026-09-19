@@ -165,6 +165,13 @@ final class AppleSiriRemoteAdapter {
         let control: AppleSiriRemoteControl
     }
 
+    /// 本文件是**开放仓库的骨架**，不会被实例化：真正驱动苹果遥控器的是私有包
+    /// `SayAllSiriRemote`（`SAYALL_SIRI_REMOTE_ENABLED` 时启用），能力位是那里上报的。
+    ///
+    /// 能力只有一个来源——型号自己的代码 `SayAllSiriRemoteModel.capabilities`。
+    /// **不要把这里那份清单当成事实依据去改**：它与宿主界面无关（宿主从不读它），
+    /// 改了也不会生效，只会制造第二份真相。真正的自报通道见
+    /// `SiriRemoteFeatureIntegration.onDeclaredCapabilitiesChange`。
     static let descriptor = RemoteHardwareDescriptor(
         adapterID: "apple_siri_remote",
         modelID: "a2854",

@@ -867,9 +867,8 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         audioSettingsPanel
                         audioCompatibilityPanel
-                        #if SAYALL_CHROMECASE_ENABLED
-                        chromecasePanel
-                        #endif
+                        // Chromecase 连接卡片已按产品要求移除：启用开关默认常开，
+                        // 语音键模式在按键页底部，状态见侧边栏「连接」的设备列表。
                         phoneConnectionsPanel
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -879,71 +878,28 @@ struct SettingsView: View {
     }
 
     #if SAYALL_CHROMECASE_ENABLED
-    /// Chromecase（ATVV 语音遥控器）面板。私有包缺失时整块内容不会出现在界面上。
-    private var chromecasePanel: some View {
-        GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("chromecase.section_title")
-                            .font(.headline)
-                        Text("chromecase.section_subtitle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 16)
-                    StatusPill(
-                        text: chromecaseStatusText,
-                        tint: chromecaseStatusTint
-                    )
-                }
-
-                if case .unsupported = model.chromecaseStatus {
-                    // 具体原因由包提供且只有中文，按「界面文案归宿主」的约定只写日志，界面用本地化文案。
-                    Text("chromecase.status.unsupported.detail")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Toggle(isOn: Binding(
-                    get: { settings.chromecaseEnabled },
-                    set: { newValue in
-                        settings.chromecaseEnabled = newValue
-                        model.applyChromecaseSettings()
-                    }
-                )) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("chromecase.enabled.title")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("chromecase.enabled.detail")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .toggleStyle(.switch)
-            }
-        }
-    }
-
     /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecase 档案的按键页显示）；
     /// 从连接设置页迁移过来，避免同一控件出现在两处。
     private var chromecaseVoiceModeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // 选项只列设备**自报**支持的模式：自报不支持「按一次说话」时，这个选项根本不出现。
+        let capabilities = model.selectedRemoteVoiceCapabilities
+        let offeredModes = ChromecaseVoiceMode.allCases.filter { mode in
+            mode != .toggle || capabilities.supportsToggleVoiceRecording
+        }
+        return VStack(alignment: .leading, spacing: 10) {
             Divider()
 
             Text("chromecase.mode.title")
                 .font(.system(size: 13, weight: .medium))
 
             Picker("", selection: Binding(
-                get: { settings.chromecaseVoiceMode },
+                get: { model.effectiveChromecaseVoiceMode },
                 set: { newValue in
                     settings.chromecaseVoiceMode = newValue
                     model.applyChromecaseSettings()
                 }
             )) {
-                ForEach(ChromecaseVoiceMode.allCases) { mode in
+                ForEach(offeredModes) { mode in
                     Text(LocalizedStringKey(mode.localizationKey)).tag(mode)
                 }
             }
@@ -951,28 +907,13 @@ struct SettingsView: View {
             .labelsHidden()
             .disabled(!settings.chromecaseEnabled)
 
-            Text(LocalizedStringKey(settings.chromecaseVoiceMode.detailLocalizationKey))
+            Text(LocalizedStringKey(model.effectiveChromecaseVoiceMode.detailLocalizationKey))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var chromecaseStatusText: String {
-        if case .connected(let displayName) = model.chromecaseStatus {
-            return displayName
-        }
-        return localization.text(model.chromecaseStatus.localizationKey)
-    }
-
-    private var chromecaseStatusTint: Color {
-        switch model.chromecaseStatus {
-        case .connected: return .green
-        case .searching, .connecting: return .orange
-        case .unsupported, .unauthorized: return .red
-        case .disabled, .unavailable, .disconnected: return .secondary
-        }
-    }
     #endif
 
     private var phoneConnectionsPanel: some View {
@@ -1444,6 +1385,14 @@ struct SettingsView: View {
                     guard let button = chromecaseButton(for: controlID),
                           let trigger = ButtonTrigger(rawValue: triggerID)
                     else { return localization.text("action.disabled") }
+                    // 系统占用键（left/right/select）不在本 App 的映射范围内：单击槽位展示该键
+                    // 在系统侧的实际行为，其余槽位无动作。行为由 macOS 配件服务（BT-AACP）产生，
+                    // 详见 Testing/ChromecaseVoicePitfalls.md。
+                    if let control = ChromecaseRemoteControl(rawValue: controlID),
+                       ChromecaseRemoteControl.systemReservedControls.contains(control) {
+                        guard trigger == .singleClick else { return "—" }
+                        return localization.text("chromecase.mapping.system.\(controlID)")
+                    }
                     return mappingActionSummary(for: button, trigger: trigger)
                 },
                 onEdit: { controlID, triggerID in
@@ -1718,16 +1667,27 @@ struct SettingsView: View {
     }
 
     private func mappingFooter(includeSiriScrollArrow: Bool = false) -> some View {
-        GlassPanel {
+        // 能力一律取自「链路自报优先、型号默认兜底」的判定结果（见 RemoteVoiceCapabilities）。
+        let capabilities = model.selectedRemoteVoiceCapabilities
+        return GlassPanel {
             VStack(alignment: .leading, spacing: 12) {
                 mappingHIDStatus
                 Divider()
                 mappingSelectionLockControl
                 Divider()
                 mappingVoiceKeyModeControl
-                Divider()
-                mappingVoiceFnTapControl
-                if includeSiriScrollArrow {
+                // 「语音键模拟 Fn 点按」只对「不会按一次收音」的遥控器有意义：
+                // 它把按住模拟成点按，用来驱动只认点按的工具。Chromecase 自己能按一次收音，
+                // 驱动方式由语音模式直接决定，页面不出现该开关（见能力矩阵文档）。
+                if VoiceFunctionKeyTapApplicability.isApplicable(capabilities: capabilities) {
+                    Divider()
+                    mappingVoiceFnTapControl
+                }
+                // 触摸面（滑动箭头/光标）只有具备触摸面的遥控器才显示，页面请求之外再加一道能力门禁。
+                if TouchSurfaceControlApplicability.isApplicable(
+                    capabilities: capabilities,
+                    pageRequestsControl: includeSiriScrollArrow
+                ) {
                     Divider()
                     siriRemoteScrollArrowControl
                 }

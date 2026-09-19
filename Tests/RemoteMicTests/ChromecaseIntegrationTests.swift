@@ -150,8 +150,10 @@ struct ChromecaseIntegrationTests {
 
         // 面板里开关与模式选择必须走同一条「立即作用于运行时」的入口。
         #expect(settingsView.contains("model.applyChromecaseSettings()"))
-        // 模式推送必须真的发生在运行入口里，而不是只写偏好。
-        #expect(modelSource.contains("chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)"))
+        // 模式推送必须真的发生在运行入口里，而不是只写偏好；
+        // 且推的是「生效模式」——设备自报不支持「按一次」时必须按「按住说话」执行。
+        #expect(modelSource.contains("chromecaseFeature.setVoiceMode(effectiveChromecaseVoiceMode)"))
+        #expect(modelSource.contains("var effectiveChromecaseVoiceMode"))
         #expect(modelSource.contains("func applyChromecaseSettings()"))
     }
 

@@ -31,6 +31,9 @@ final class KeyboardEventSuppressor {
     private var heldEventCounts: [RemoteNativeEvent: Int] = [:]
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    /// 最近 arm 过的事件（带过期时刻），仅用于诊断日志：只有与这些事件相关的
+    /// 未命中才值得记录，避免被无关键盘输入淹没。
+    private var recentArmed: [(event: RemoteNativeEvent, until: TimeInterval)] = []
 
     private(set) var isRunning = false
 
@@ -90,8 +93,17 @@ final class KeyboardEventSuppressor {
 
     func arm(nativeEvents: Set<RemoteNativeEvent>, edge: RemoteEventEdge) {
         guard !nativeEvents.isEmpty else { return }
+        // 诊断：留证「本次预定了什么」，便于与 miss 日志里系统真实事件对照。
+        AppLogger.shared.write(
+            "HID FILTER arm events=\(nativeEvents.map(Self.logToken).sorted().joined(separator: "+")) "
+                + "edge=\(edge == .down ? "down" : "up")"
+        )
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
+        recentArmed.removeAll { $0.until <= now }
+        for nativeEvent in nativeEvents {
+            recentArmed.append((event: nativeEvent, until: now + 1.0))
+        }
         pendingEvents.removeAll { $0.expiresAt <= now }
         for nativeEvent in nativeEvents {
             switch edge {
@@ -147,6 +159,11 @@ final class KeyboardEventSuppressor {
         }) {
             pendingEvents.remove(at: matchIndex)
             lock.unlock()
+            // 诊断：命中并吞掉——与 miss 日志对照即可判定「系统是否产生了该事件」。
+            AppLogger.shared.write(
+                "HID FILTER suppressed event=\(Self.logToken(descriptor.event)) "
+                    + "edge=\(descriptor.edge == .down ? "down" : "up") type=\(type.rawValue)"
+            )
             return true
         }
         if descriptor.edge == .down, (heldEventCounts[descriptor.event] ?? 0) > 0 {
@@ -154,13 +171,39 @@ final class KeyboardEventSuppressor {
                event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
                 heldEventCounts.removeValue(forKey: descriptor.event)
                 lock.unlock()
+                AppLogger.shared.write(
+                    "HID FILTER suppressed event=\(Self.logToken(descriptor.event)) "
+                        + "edge=down type=\(type.rawValue) via=held"
+                )
                 return false
             }
             lock.unlock()
             return true
         }
+        let pendingCount = pendingEvents.count
+        // 诊断范围（187 的教训：条件太窄会漏掉「系统事件与预定键码不同」的情况）：
+        //   1) 与预定键码一致但没被吞（窗口过期）；
+        //   2) 任意 systemDefined（媒体/音量类，我们关心的正是这些）；
+        //   3) 最近 1 秒内曾 arm 过（覆盖「系统产生的键码与我们预定的不同」）。
+        let armedExactly = recentArmed.contains { $0.event == descriptor.event && $0.until > now }
+        let isSystemDefined = type.rawValue == Self.systemDefinedEventTypeRawValue
+        let withinArmedWindow = !recentArmed.isEmpty
         lock.unlock()
+        if armedExactly || isSystemDefined || withinArmedWindow {
+            AppLogger.shared.write(
+                "HID FILTER miss type=\(type.rawValue) event=\(Self.logToken(descriptor.event)) "
+                    + "edge=\(descriptor.edge == .down ? "down" : "up") "
+                    + "armed=\(armedExactly) pending=\(pendingCount)"
+            )
+        }
         return false
+    }
+
+    private static func logToken(_ event: RemoteNativeEvent) -> String {
+        switch event {
+        case .keyboard(let keyCode): return "key\(keyCode)"
+        case .systemKey(let type): return "sys\(type)"
+        }
     }
 
     private func descriptor(

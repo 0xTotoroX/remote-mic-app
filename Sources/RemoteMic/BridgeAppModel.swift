@@ -670,6 +670,29 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 设置页展示用。私有包缺失时恒为 `.unavailable`，界面据此隐藏整块内容。
     @Published private(set) var chromecaseStatus: ChromecaseLinkStatus =
         ChromecaseFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
+    /// 遥控器**自报**的能力位；链路不可用时为空集合。
+    ///
+    /// 界面与语音键驱动都读它（经 `RemoteVoiceCapabilities.resolve`），宿主不再维护第二份型号能力表。
+    @Published private(set) var chromecaseDeclaredCapabilities: ChromecaseDeclaredCapabilities = []
+    /// 苹果遥控器**自报**的能力位；链路不可用时为空集合（同上）。
+    @Published private(set) var siriDeclaredCapabilities: SiriRemoteDeclaredCapabilities = []
+
+    /// 当前选中遥控器档案的语音能力：**该遥控器所在链路的自报**优先，自报缺失才回退型号默认表。
+    ///
+    /// 两条链路各自上报（Chromecase 走 ATVV、苹果遥控器走 HID），必须按型号取对应的那一份，
+    /// 不能混用——串用会让不具备该能力的遥控器凭空多出功能入口。
+    var selectedRemoteVoiceCapabilities: RemoteVoiceCapabilities {
+        let model = settings.selectedRemoteProfile?.model
+        var declared: ChromecaseDeclaredCapabilities = []
+        if let model {
+            if model.isChromecaseRemote {
+                declared = chromecaseDeclaredCapabilities
+            } else if model.isAppleSiriRemote {
+                declared = siriDeclaredCapabilities.asDeclaredVoiceCapabilities
+            }
+        }
+        return .resolve(model: model, declared: declared)
+    }
     /// 当前是否有活跃的 Chromecase 收音会话（按键页用它点亮固定的语音键卡片）。
     @Published private(set) var isChromecaseVoiceActive = false
     /// Chromecase 遥控器对应的设备档案。按型号识别，不存设备标识。
@@ -753,6 +776,12 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         siriRemoteFeature.onConnection = { [weak self] connection in
             self?.handleAppleRemoteConnection(connection)
         }
+        siriRemoteFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
+            guard let self, self.siriDeclaredCapabilities != declared else { return }
+            self.siriDeclaredCapabilities = declared
+            // 触摸类设置是否出现取决于设备自报，必须跟着变。
+            AppLogger.shared.write("SIRI CAPABILITIES declared=\(Self.describeSiri(declared))")
+        }
         siriRemoteFeature.onControlEvent = { [weak self] event in
             self?.handleAppleRemoteControlEvent(event)
         }
@@ -796,6 +825,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         // 否则最早几帧会落在还没有出口的时刻（首字丢失）。
         chromecaseFeature.onStatusChange = { [weak self] status in
             self?.handleChromecaseStatusChange(status)
+        }
+        chromecaseFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
+            guard let self else { return }
+            guard self.chromecaseDeclaredCapabilities != declared else { return }
+            self.chromecaseDeclaredCapabilities = declared
+            // 能力变化会改变「按一次说话」这类选项的可用性，必须立即同步到运行时与界面。
+            AppLogger.shared.write(
+                "CHROMECASE CAPABILITIES declared=\(Self.describe(declared))"
+            )
+            self.syncChromecaseRuntimeState()
         }
         chromecaseFeature.onVoiceStart = { [weak self] in
             self?.beginChromecaseVoice()
@@ -5781,7 +5820,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
     private func syncChromecaseRuntimeState() {
         guard started else { return }
-        chromecaseFeature.setVoiceMode(settings.chromecaseVoiceMode)
+        chromecaseFeature.setVoiceMode(effectiveChromecaseVoiceMode)
         // 映射总开关决定 HID 通道是否独占设备：它必须即时生效，否则界面上「已开启映射」
         // 而系统仍在消费这些按键，用户会以为映射没生效。
         chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)
@@ -5837,6 +5876,118 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         )
     }
 
+    // MARK: 语音键驱动（长按式 vs 点按式目标工具）
+    //
+    // 目标工具分两类，语音键的语义必须跟着分（见 `ChromecaseFunctionKeyDrive`）：
+    // 长按式（豆包「长按模式」）按住—松开；点按式（豆包「免按模式」、Typeless）只认按下，
+    // 必须「开始一次点按、结束再一次点按」。真机实测见 `Testing/VoiceKeyFnPanelProbe.swift`。
+
+    /// 「开始那次点按」的延迟松开（仅点按式驱动使用）。
+    private var chromecaseFunctionKeyTapRelease: DispatchWorkItem?
+    /// 一次点按的按下时长：与小米蓝牙链路的 `VoiceFnTapSessionController` 保持一致。
+    private static let chromecaseFunctionKeyTapDuration: TimeInterval = 0.12
+
+    /// 当前应使用的驱动方式：由遥控器自己的语音模式 + 目标工具是否支持长按推导（见能力矩阵）。
+    private var chromecaseFunctionKeyDrive: ChromecaseFunctionKeyDrive {
+        .resolve(
+            voiceMode: effectiveChromecaseVoiceMode,
+            toolSupportsHoldVoiceRecording: settings.onboardingVoiceTool
+                .supportsHoldVoiceRecording
+        )
+    }
+
+    /// 生效的语音模式：设备**自报**不支持「按一次收音」时，即使设置里存着 toggle 也按「按住说话」执行。
+    /// 这样能力不足的型号不会因为一份历史设置而走进它做不到的路径（设置里的原值保留，不静默改写）。
+    var effectiveChromecaseVoiceMode: ChromecaseVoiceMode {
+        let declared = chromecaseDeclaredCapabilities
+        guard !declared.isEmpty, !declared.contains(.toggleVoiceGesture) else {
+            return settings.chromecaseVoiceMode
+        }
+        return .hold
+    }
+
+    /// 自报能力的日志标记（真机核对用）。
+    private static func describe(_ declared: ChromecaseDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.battery) { names.append("battery") }
+        if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+
+    /// 自报能力的日志标记（真机核对用，苹果遥控器链路）。
+    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.batteryLevel) { names.append("battery_level") }
+        if declared.contains(.powerState) { names.append("power_state") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+
+    /// 开始收音时驱动语音键。返回 false 表示按下失败（调用方按既有逻辑报失败）。
+    @discardableResult
+    private func beginChromecaseFunctionKeyDrive() -> Bool {
+        let drive = chromecaseFunctionKeyDrive
+        if drive.startEvents.contains(.press) {
+            guard updateVoiceKeyState(
+                streaming: true,
+                forceSoftware: true,
+                owner: .chromecase
+            ) else { return false }
+        }
+        guard drive.startEvents.contains(.release) else { return true }
+        // 点按式：延迟一个按下时长后松开，把「长按」变成一次点按。
+        // 不这样做的话 Fn 修饰位会在整个会话期间被按住，用户此时打字会变成 Fn 组合键。
+        AppLogger.shared.write(
+            "CHROMECASE VOICE fn_drive=taps phase=start_tap release_after_ms="
+                + "\(Int(Self.chromecaseFunctionKeyTapDuration * 1_000))"
+        )
+        scheduleChromecaseFunctionKeyTapRelease()
+        return true
+    }
+
+    /// 结束收音时驱动语音键。点按式工具必须再收到一次**按下 + 松开**才结束（松开对它是空操作）。
+    /// 返回值沿用既有判据：松开是否成功（`phase=completed result=stopped|release_failed`）。
+    @discardableResult
+    private func finishChromecaseFunctionKeyDrive() -> Bool {
+        let drive = chromecaseFunctionKeyDrive
+        chromecaseFunctionKeyTapRelease?.cancel()
+        chromecaseFunctionKeyTapRelease = nil
+        if drive.stopEvents.contains(.press) {
+            let pressed = updateVoiceKeyState(
+                streaming: true,
+                forceSoftware: true,
+                owner: .chromecase
+            )
+            AppLogger.shared.write(
+                "CHROMECASE VOICE fn_drive=taps phase=stop_tap pressed=\(pressed)"
+            )
+        }
+        return releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+    }
+
+    private func scheduleChromecaseFunctionKeyTapRelease() {
+        chromecaseFunctionKeyTapRelease?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.chromecaseVoiceActive || self.chromecaseVoiceStopping
+            else { return }
+            self.chromecaseFunctionKeyTapRelease = nil
+            _ = self.releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+            AppLogger.shared.write("CHROMECASE VOICE fn_drive=taps phase=start_released")
+        }
+        chromecaseFunctionKeyTapRelease = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.chromecaseFunctionKeyTapDuration,
+            execute: work
+        )
+    }
+
     /// 预卷缓冲：会话开头 prerollDelay 秒的音频先攒后灌（见 receiveChromecaseAudio 注释）。
     private var chromecaseAudioPrerollOpenedAt: TimeInterval?
     private var chromecaseAudioPrerollBatches: [[Int16]] = []
@@ -5873,11 +6024,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             )
             return
         }
-        guard updateVoiceKeyState(
-            streaming: true,
-            forceSoftware: true,
-            owner: .chromecase
-        ) else {
+        guard beginChromecaseFunctionKeyDrive() else {
             AppLogger.shared.write(
                 "CHROMECASE VOICE phase=failed result=voice_key_press_failed"
             )
@@ -5889,7 +6036,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         AppLogger.shared.write(
             "CHROMECASE VOICE phase=started result=triggered " +
                 "audio_source=chromecase_microphone route=MiRemoteV_2ch " +
-                "mode=\(settings.chromecaseVoiceMode.rawValue)"
+                "mode=\(effectiveChromecaseVoiceMode.rawValue)"
         )
     }
 
@@ -5935,7 +6082,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         reason: ChromecaseVoiceEndReason
     ) {
         guard chromecaseVoiceStopping, chromecaseVoiceStopOperation == operation else { return }
-        let released = releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+        let released = finishChromecaseFunctionKeyDrive()
         chromecaseVoiceStopping = false
         endVoiceSessionIfNeeded(flushAudio: false)
         let outputAfterStop = audioOutput.diagnosticSnapshot(
@@ -5988,6 +6135,28 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
         let profileID = ensureChromecaseProfile()
         let isPress = event.phase == .began
+        // 系统占用键（left/right/select）：报告 usage 在系统眼里是 Menu Up/Down/Left，macOS 配件服务
+        // 直接消费成媒体控制且**不经 CGEvent**（真机实测：事件 tap 两层与 hidutil 都无法拦截）。
+        // 按产品决策完全不接管：不武装抑制（无效）、不执行自定义动作，按键归系统。
+        if ChromecaseRemoteControl.systemReservedControls.contains(event.control) {
+            if isPress {
+                AppLogger.shared.write(
+                    "CHROMECASE ACTION phase=completed result=system_reserved control=\(controlID)"
+                )
+            }
+            return
+        }
+        // 与小米/苹果链路一致的第二道保险：HID 独占（seize）只挡住 HID 层的报告分发，
+        // 系统仍会把部分 usage 解析成原生事件（实测：静音键产生 systemKey(7) → 系统音量 HUD）。
+        // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉。
+        if !hidEventSuppressor.isRunning {
+            let ready = hidEventSuppressor.start()
+            AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
+        }
+        hidEventSuppressor.arm(
+            nativeEvents: chromecaseNativeEvents(for: event.control),
+            edge: isPress ? .down : .up
+        )
         if isPress {
             selectRemoteProfile(profileID)
             chromecasePressedControls.insert(controlID)
@@ -6006,6 +6175,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             phase: isPress ? .press : .release,
             profileID: profileID
         )
+    }
+
+    /// Chromecase 遥控器在 macOS 上产生的原生事件（2026-09-16 正品真机实测，`HID FILTER miss` 日志为证）。
+    ///
+    /// 与小米 RC003 的通用表存在差异：**静音键在系统侧是 `systemKey(7)`**（通用表按 RC003 记录为 3），
+    /// 沿用通用表时抑制必然 miss、系统音量 HUD 照常出现。其余按键实测与通用表一致：
+    /// 音量 = sys0/sys1（抑制命中）、方向/确认键系统侧不产生事件（tap 零记录，无副作用）。
+    private func chromecaseNativeEvents(for control: ChromecaseRemoteControl) -> Set<RemoteNativeEvent> {
+        switch control {
+        case .mute: return [.systemKey(type: 7)]
+        default: return control.remoteButton.nativeEvents
+        }
     }
 
     /// 注册并连接 Chromecase 设备档案。档案按型号识别，不存设备标识。

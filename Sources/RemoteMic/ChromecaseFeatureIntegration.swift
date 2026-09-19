@@ -94,6 +94,22 @@ enum ChromecaseVoiceEndReason: Equatable {
     }
 }
 
+/// 遥控器**自报**的能力（宿主侧镜像，与私有包 `ChromecaseCapabilityFlags` 的位一一对应）。
+///
+/// 这是宿主判断「这台遥控器能做什么」的唯一来源：私有包在连接变化时通过 `onConnection`
+/// 把型号声明的能力位一起报上来，界面与语音键驱动只读这里，**不再在宿主维护第二份型号表**。
+/// 链路不可用（未连接、型号不支持、断开）时为空集合，此时才回退到 `RemoteVoiceCapabilities`
+/// 里那份与自报值等价的默认表（由跨仓一致性测试锁定）。
+struct ChromecaseDeclaredCapabilities: OptionSet, Equatable {
+    let rawValue: Int
+
+    static let controlEdges = ChromecaseDeclaredCapabilities(rawValue: 1 << 0)
+    static let voiceStream = ChromecaseDeclaredCapabilities(rawValue: 1 << 1)
+    static let touchSurface = ChromecaseDeclaredCapabilities(rawValue: 1 << 2)
+    static let battery = ChromecaseDeclaredCapabilities(rawValue: 1 << 3)
+    static let toggleVoiceGesture = ChromecaseDeclaredCapabilities(rawValue: 1 << 4)
+}
+
 /// Chromecase 遥控器的普通按键。
 ///
 /// 与私有包的 `ChromecaseControl` 一一对应（rawValue 相同），宿主用 `…Remote…` 前缀命名是为了
@@ -138,6 +154,15 @@ enum ChromecaseRemoteControl: String, CaseIterable, Equatable {
 
     /// 画布用的控制 ID。与 `ChromecaseMappingCanvas.configurableControlIDs` 同值。
     var canvasControlID: String { rawValue }
+
+    /// 系统占用、宿主不接管的按键。与私有包 `ChromecaseControl.systemReservedControls` 对称。
+    ///
+    /// 真机实测（2026-09-16）：这三颗键的 HID 报告 usage 在系统眼里是 Menu Up / Menu Down /
+    /// Menu Left，macOS 配件服务（BT-AACP）直接消费成媒体控制（上一首/下一首/播放暂停），
+    /// **不经过 CGEvent**——事件抑制器与设备属性都无法拦截。接管只会造成双执行，
+    /// 因此按产品决策完全交给系统（画布置灰、运行时跳过）。详见
+    /// `Testing/ChromecaseVoicePitfalls.md`。
+    static let systemReservedControls: Set<ChromecaseRemoteControl> = [.left, .right, .select]
 }
 
 enum ChromecaseRemoteControlPhase: String, Equatable {
@@ -169,6 +194,8 @@ final class ChromecaseFeatureIntegration {
 
     /// 链路状态变化。宿主据此刷新设置页与日志。
     var onStatusChange: ((ChromecaseLinkStatus) -> Void)?
+    /// 遥控器自报的能力变化（连接可用时给出位域，链路不可用时给出空集合）。
+    var onDeclaredCapabilitiesChange: ((ChromecaseDeclaredCapabilities) -> Void)?
     /// 遥控器请求开始收音。宿主必须在此回调内准备好音频出口并合成语音键按下。
     var onVoiceStart: (() -> Void)?
     /// 收音继续，用户可见状态不变。宿主不得产生第二次用户可见动作。
@@ -276,7 +303,14 @@ final class ChromecaseFeatureIntegration {
         // `instanceKey` 只用于进程内路由，按合同不得写日志或上传。
         onLog?(
             "CHROMECASE CONNECTION state=\(Self.logToken(connection.state)) "
-                + "model=\(connection.modelID) sequence=\(connection.sequence)"
+                + "model=\(connection.modelID) sequence=\(connection.sequence) "
+                + "capabilities=\(Self.capabilityLogToken(connection.capabilities))"
+        )
+        // 自报能力只在链路可用时有意义；其余状态一律清零，避免「断开后界面还留着上一个型号的能力」。
+        onDeclaredCapabilitiesChange?(
+            connection.state.isUsable
+                ? ChromecaseDeclaredCapabilities(rawValue: connection.capabilities.rawValue)
+                : []
         )
         switch connection.state {
         case .available:
@@ -328,6 +362,18 @@ final class ChromecaseFeatureIntegration {
         case .unavailable: return "unavailable"
         case .disconnected(let reason): return "disconnected.\(reason.logToken)"
         }
+    }
+
+    /// 把自报能力位写成可读的日志标记，便于真机核对「设备到底报了什么」。
+    private static func capabilityLogToken(_ capabilities: ChromecaseCapabilityFlags) -> String {
+        let declared = ChromecaseDeclaredCapabilities(rawValue: capabilities.rawValue)
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.battery) { names.append("battery") }
+        if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
     }
     #endif
 }
