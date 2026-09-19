@@ -18,6 +18,7 @@ xcrun swiftc \
   "$ROOT/Sources/RemoteMic/RemoteButtons.swift" \
   "$ROOT/Sources/RemoteMic/KeyboardShortcutPicker.swift" \
   "$ROOT/Sources/RemoteMic/RemoteDeviceProfile.swift" \
+  "$ROOT/Sources/RemoteMic/RemoteDeviceNamePolicy.swift" \
   "$ROOT/Sources/RemoteMic/FirstUseDiagnostics.swift" \
   "$ROOT/Sources/RemoteMic/OnboardingFlow.swift" \
   "$ROOT/Sources/RemoteMic/VoiceKeyMode.swift" \
