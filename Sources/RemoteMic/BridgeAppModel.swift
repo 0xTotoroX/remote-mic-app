@@ -6195,14 +6195,25 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
     /// 注册并连接 Chromecase 设备档案。档案按型号识别，不存设备标识。
     private func ensureChromecaseProfile() -> UUID {
-        if let existing = chromecaseProfileID { return existing }
-        let profileID = settings.registerChromecaseRemote()
-        chromecaseProfileID = profileID
+        // 断链时 disconnectChromecaseProfile 会把档案从「已连接」集合里摘掉；重连后这里必须
+        // 重新加入——否则设备选择器一直走空态、头部回落到小米的「正在查找小米遥控器」
+        //（真机 2026-09-19：一次蓝牙断连后按键一切正常，页面却始终显示查找中）。
+        // 所以「档案已存在」不能提前 return：成员资格与选中态每次都要确保。
+        let profileID: UUID
+        if let existing = chromecaseProfileID {
+            profileID = existing
+        } else {
+            profileID = settings.registerChromecaseRemote()
+            chromecaseProfileID = profileID
+        }
         connectedChromecaseProfileIDs.insert(profileID)
         // 连接即选中（与小米链路的 activateRemoteProfile 对齐）：否则按键页停留在上一次
         // 选中的档案（用户看到的是小米遥控器画布），要等「按键映射开启且按下普通键」才会切换。
-        selectRemoteProfile(profileID)
-        refreshBluetoothPresentation()
+        if settings.selectedRemoteProfileID != profileID {
+            selectRemoteProfile(profileID)
+        } else {
+            refreshBluetoothPresentation()
+        }
         return profileID
     }
 
