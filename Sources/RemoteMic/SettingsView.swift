@@ -1389,7 +1389,11 @@ struct SettingsView: View {
                     // 在系统侧的实际行为，其余槽位无动作。行为由 macOS 配件服务（BT-AACP）产生，
                     // 详见 Testing/ChromecaseVoicePitfalls.md。
                     if let control = ChromecaseRemoteControl(rawValue: controlID),
-                       ChromecaseRemoteControl.systemReservedControls.contains(control) {
+                       ChromecaseRemoteControl.isSystemManaged(
+                           control,
+                           allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
+                           exceptions: settings.chromecaseSystemReservedExceptions
+                       ) {
                         guard trigger == .singleClick else { return "—" }
                         return localization.text("chromecase.mapping.system.\(controlID)")
                     }
@@ -1407,7 +1411,12 @@ struct SettingsView: View {
                         button: button,
                         trigger: trigger
                     )
-                }
+                },
+                // 置灰表 = 默认表去掉已放开的键（主开关全放开 / 按键级豁免）。
+                systemReservedControlIDs: ChromecaseRemoteControl.canvasReservedControlIDs(
+                    allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
+                    exceptions: settings.chromecaseSystemReservedExceptions
+                )
             )
         }
     }

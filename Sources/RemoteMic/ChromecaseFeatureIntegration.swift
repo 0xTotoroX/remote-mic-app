@@ -163,6 +163,26 @@ enum ChromecaseRemoteControl: String, CaseIterable, Equatable {
     /// 因此按产品决策完全交给系统（画布置灰、运行时跳过）。详见
     /// `Testing/ChromecaseVoicePitfalls.md`。
     static let systemReservedControls: Set<ChromecaseRemoteControl> = [.left, .right, .select]
+
+    /// 该键此刻是否仍交给系统。主开关全放开；`exceptions` 逐颗放开（两者相加生效）。
+    static func isSystemManaged(
+        _ control: ChromecaseRemoteControl,
+        allowSystemReservedKeys: Bool,
+        exceptions: Set<String> = []
+    ) -> Bool {
+        guard systemReservedControls.contains(control) else { return false }
+        return !(allowSystemReservedKeys || exceptions.contains(control.rawValue))
+    }
+
+    /// 给画布用的置灰表：从默认表里去掉已放开的键。
+    static func canvasReservedControlIDs(
+        allowSystemReservedKeys: Bool,
+        exceptions: Set<String>
+    ) -> Set<String> {
+        Set(systemReservedControls
+            .filter { isSystemManaged($0, allowSystemReservedKeys: allowSystemReservedKeys, exceptions: exceptions) }
+            .map(\.rawValue))
+    }
 }
 
 enum ChromecaseRemoteControlPhase: String, Equatable {

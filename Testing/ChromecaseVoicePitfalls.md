@@ -142,6 +142,19 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 **结论**：这是 macOS 对 Apple 配件协议遥控器的系统级行为，用户态 App 无法拦截。
 需要产品决策：接受现状，或投入 DriverKit 扩展方案。
 
+**补充（2026-09-19，新款遥控器 + 豁免开关实测后）**：最后一种未试过的用户态手段——
+`hidutil` **UserKeyRemapping**（usage 级重映射，consumer 0x44/0x45/0x41 → F13/14/15）——也已验证无效：
+按 VID/PID、全局、`Transport=BT-AACP` 三种 matching 写入，回读均为 `(null)`，属性根本挂不到
+AACP 侧的虚拟 HID 事件服务上。至此用户态手段全部穷尽（seize / CGEventTap 两层 /
+hidutil 设备属性 / hidutil usage 重映射），结论不变：**要消除三键的系统侧行为只有 DriverKit
+系统扩展（Karabiner 方案）一条路**。三键在 App 内的自定义映射一切正常
+（`CHROMECASE ACTION result=dispatched` 全部命中）。
+
+系统副作用的实际边界（2026-09-19 用户实测更正）：**不只在播放时**——OK 键（Menu Left）被
+AACP 当作播放/暂停，**没有媒体会话时会拉起音乐 App**；左/右（Menu Up/Down → 上一首/下一首）
+只在有播放会话时可感知。因此三键的代价不同：左/右 = 播放时切歌；OK = 任何时候拉起音乐。
+据此把豁免做成按键级（`chromecase.systemReservedExceptions`，CSV），可按键取舍。
+
 ### 补充：参考实现要点与「删除系统配对」实验结论（2026-09-16）
 
 参考文档：私有包 `packages/audio-input-kit/chromecase/Referance/google-tv-remote.md`
@@ -521,3 +534,16 @@ Chromecase 页面**不再出现**「语音键模拟 Fn 点按」：那个开关�
 
 **排查纪律**：报告「结束不生效」时，先问目标工具当前是哪一种模式（豆包设置里就是这两个开关），
 再用探针量三态，最后才动代码——本次若先猜「关流/排空/防抖」都会改错地方。
+
+#### 「left/right/select 被系统占用」的豁免开关（2026-09-19，build 224）
+
+旧款遥控器真机实测：这三颗键的 HID usage 是 Menu Up/Down/Left，macOS 配件服务（BT-AACP）
+在 CGEvent 之外直接消费成媒体控制，用户态无法拦截——因此默认置灰 + 运行时跳过
+（`ChromecaseRemoteControl.systemReservedControls`）。
+
+该结论是**按遥控器型号/固件而定**的，不是协议常态。新款遥控器是否真的被系统占用只能真机验证：
+`defaults write com.hd838a.RemoteMic chromecase.allowSystemReservedKeys -bool YES` 后重启，
+画布三键不再置灰、运行时不再跳过（`CHROMECASE ACTION result=system_reserved` 不再出现）。
+
+判据：若系统仍在消费 → 按一下出现**双执行**（App 自定义动作 + 系统媒体控制各一次），
+此时应关回开关；若无系统反应且自定义动作正常 → 该遥控器可以接管，考虑按能力位放开。
