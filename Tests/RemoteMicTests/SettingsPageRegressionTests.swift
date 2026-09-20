@@ -1529,4 +1529,20 @@ struct SettingsPageRegressionTests {
                 .contains("corruptedSettingsBanner")
         )
     }
+
+    @Test func mappingPageResetsEditorAndScrollsToTopWhenRemoteChanges() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains(".id(\"mapping-page-top\")"))
+        #expect(source.contains(".onChange(of: settings.selectedRemoteProfileID)"))
+        #expect(source.contains("mappingEditingTarget = nil"))
+        #expect(source.contains("proxy.scrollTo(\"mapping-page-top\", anchor: .top)"))
+        #expect(source.contains("Group {\n                    ScrollView(.vertical, showsIndicators: false)"))
+    }
 }
