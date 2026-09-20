@@ -5,6 +5,185 @@ import Testing
 
 @Suite("Virtual audio connection lifecycle")
 struct VirtualAudioConnectionLifecycleTests {
+    @Test func virtualAudioLevelPolicyRepairsOnlyExplicitSilence() {
+        #expect(VirtualAudioDeviceLevelPolicy.requiresUnmute(mute: true))
+        #expect(!VirtualAudioDeviceLevelPolicy.requiresUnmute(mute: false))
+        #expect(!VirtualAudioDeviceLevelPolicy.requiresUnmute(mute: nil))
+
+        #expect(VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: 0))
+        #expect(!VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: 0.01))
+        #expect(!VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: 1))
+        #expect(!VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: nil))
+    }
+
+    @Test func virtualAudioAudibilityTreatsUnknownPropertiesAsNonBlocking() {
+        let unknown = VirtualAudioDeviceAudibilitySnapshot()
+        #expect(!unknown.isExplicitlySilent)
+
+        let muted = VirtualAudioDeviceAudibilitySnapshot(
+            output: VirtualAudioDeviceLevelObservation(mute: true, volume: nil)
+        )
+        #expect(muted.isExplicitlySilent)
+
+        let zeroInput = VirtualAudioDeviceAudibilitySnapshot(
+            input: VirtualAudioDeviceLevelObservation(mute: nil, volume: 0)
+        )
+        #expect(zeroInput.isExplicitlySilent)
+    }
+
+    @Test func virtualAudioRepairRequiresAReadableNonSilentResult() {
+        let silent = VirtualAudioDeviceAudibilitySnapshot(
+            output: VirtualAudioDeviceLevelObservation(mute: true, volume: 0)
+        )
+        let audible = VirtualAudioDeviceAudibilitySnapshot(
+            output: VirtualAudioDeviceLevelObservation(mute: false, volume: 1),
+            input: VirtualAudioDeviceLevelObservation(mute: false, volume: 1)
+        )
+
+        #expect(VirtualAudioDeviceAudibilityRepairResult(
+            applicable: true,
+            before: silent,
+            after: audible,
+            unmuteAttempted: true,
+            volumeRestoreAttempted: true
+        ).isReady)
+        #expect(!VirtualAudioDeviceAudibilityRepairResult(
+            applicable: true,
+            before: silent,
+            after: silent,
+            unmuteAttempted: true,
+            volumeRestoreAttempted: true,
+            writeFailed: true
+        ).isReady)
+        #expect(!VirtualAudioDeviceAudibilityRepairResult(
+            applicable: true,
+            before: silent,
+            after: .init(),
+            unmuteAttempted: true,
+            volumeRestoreAttempted: true,
+            writeFailed: true
+        ).isReady)
+        #expect(VirtualAudioDeviceAudibilityRepairResult().isReady)
+    }
+
+    @Test func installedMiRemoteVCanRecoverFromMuteAndZeroVolume() throws {
+        guard ProcessInfo.processInfo.environment["SAYALL_TEST_MUTATE_VIRTUAL_AUDIO_LEVEL"] == "1"
+        else { return }
+        let device = try #require(
+            CoreAudioDeviceCatalog.outputDevices().first { $0.uid == "MiRemoteV2ch_UID" }
+        )
+        let original = CoreAudioDeviceCatalog.virtualAudioAudibilitySnapshot(for: device)
+        defer {
+            Self.restoreDeviceLevel(original.output, deviceID: device.id, scope: kAudioDevicePropertyScopeOutput)
+            Self.restoreDeviceLevel(original.input, deviceID: device.id, scope: kAudioDevicePropertyScopeInput)
+        }
+
+        #expect(Self.setDeviceUInt32(
+            1,
+            deviceID: device.id,
+            selector: kAudioDevicePropertyMute,
+            scope: kAudioDevicePropertyScopeOutput
+        ))
+        #expect(Self.setDeviceFloat32(
+            0,
+            deviceID: device.id,
+            selector: kAudioDevicePropertyVolumeScalar,
+            scope: kAudioDevicePropertyScopeOutput
+        ))
+        #expect(Self.setDeviceUInt32(
+            1,
+            deviceID: device.id,
+            selector: kAudioDevicePropertyMute,
+            scope: kAudioDevicePropertyScopeInput
+        ))
+        #expect(Self.setDeviceFloat32(
+            0,
+            deviceID: device.id,
+            selector: kAudioDevicePropertyVolumeScalar,
+            scope: kAudioDevicePropertyScopeInput
+        ))
+        #expect(CoreAudioDeviceCatalog.virtualAudioAudibilitySnapshot(for: device).isExplicitlySilent)
+
+        let repair = CoreAudioDeviceCatalog.ensureVirtualAudioDeviceAudible(device)
+
+        #expect(repair.applicable)
+        #expect(repair.unmuteAttempted)
+        #expect(repair.volumeRestoreAttempted)
+        #expect(!repair.writeFailed)
+        #expect(repair.isReady)
+        #expect(repair.after.output.mute == false)
+        #expect(repair.after.output.volume == 1)
+        #expect(repair.after.input.mute == false)
+        #expect(repair.after.input.volume == 1)
+    }
+
+    private static func restoreDeviceLevel(
+        _ observation: VirtualAudioDeviceLevelObservation,
+        deviceID: AudioDeviceID,
+        scope: AudioObjectPropertyScope
+    ) {
+        if let mute = observation.mute {
+            _ = setDeviceUInt32(
+                mute ? 1 : 0,
+                deviceID: deviceID,
+                selector: kAudioDevicePropertyMute,
+                scope: scope
+            )
+        }
+        if let volume = observation.volume {
+            _ = setDeviceFloat32(
+                volume,
+                deviceID: deviceID,
+                selector: kAudioDevicePropertyVolumeScalar,
+                scope: scope
+            )
+        }
+    }
+
+    private static func setDeviceUInt32(
+        _ value: UInt32,
+        deviceID: AudioDeviceID,
+        selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope
+    ) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var mutableValue = value
+        return AudioObjectSetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            UInt32(MemoryLayout<UInt32>.size),
+            &mutableValue
+        ) == noErr
+    }
+
+    private static func setDeviceFloat32(
+        _ value: Float32,
+        deviceID: AudioDeviceID,
+        selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope
+    ) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var mutableValue = value
+        return AudioObjectSetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            UInt32(MemoryLayout<Float32>.size),
+            &mutableValue
+        ) == noErr
+    }
+
     @Test func healthyExplicitOutputIgnoresDefaultSystemOutputOnlyChanges() {
         #expect(VirtualAudioRecoveryPolicy.shouldIgnoreDefaultSystemOutputChange(
             details: "properties=default_system_output",
