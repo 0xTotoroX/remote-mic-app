@@ -1,7 +1,7 @@
 # 虚拟设备被静音时仍判定「送达成功」，并把失败归因为第三方工具配置
 
 - 时间：2026-09-20
-- 状态：现象与根因已确证，现场已恢复；**建议的代码改进尚未实现**，等待维护者决定
+- 状态：现象与根因已确证；自动解除静音与零音量的候选修复已完成，等待 PR、CI 与发布后验证
 - 影响范围：所有把音频写入 `MiRemoteV 2ch` 或 `BlackHole 2ch` 的语音路径，
   包括 Onboarding 语音测试、实体遥控器、iPhone App、网页版与回眸。
   当所选虚拟设备处于静音（mute=1）或音量为 0 时必然命中，与第三方语音工具无关。
@@ -12,7 +12,7 @@
   并把失败归因为第三方工具未提交文字。
 - 原始记录：本机 `~/Library/Logs/RemoteMic/runtime.log`（2026-09-19T17:06–17:12Z，
   构建自 `origin/main` `940dde5`，`ver=1.9.21 build=227`）；CoreAudio 设备属性查询；
-  双进程回环实验（见 E1）。日志未记录任何语音内容。
+  双进程回环实验（见 E1）。日志未记录任何语音内容。跟踪 Issue：[#475](https://github.com/HD838A/remote-mic-app/issues/475)。
 
 ## Observations
 
@@ -115,6 +115,15 @@
   `enqueue_failures=0`、`focus_loss_count=0`、`transcript_wait_ms=40`。
 - 文字在 40ms 内上屏，远小于 3 秒判定窗口。
 
+### E3：产品代码自动恢复真实 MiRemoteV 2ch
+
+- 本机先独立读取 MiRemoteV 2ch 的 input/output scope 主声道属性，确认两端均支持
+  可读、可写的 `kAudioDevicePropertyMute` 与 `kAudioDevicePropertyVolumeScalar`。
+- 测试保存原值后，把 input/output 两端都设为 `mute=1 / volume=0`，再调用产品中的
+  `ensureVirtualAudioDeviceAudible`；约 0.1 秒内自动恢复为 `mute=0 / volume=1.0`。
+- 测试使用 `defer` 恢复原始值；测试结束后再次由独立 CoreAudio 查询确认 input/output
+  均为 `mute=0 / volume=1.0`。
+
 ## 根因
 
 所选虚拟设备处于静音或音量为 0，音频在设备内部被衰减为静音。
@@ -122,16 +131,21 @@ SayAll 的送达判定完全基于主机侧渲染状态，不含目标设备的 
 因此无法区分「我们渲染出去了」与「它到达了线路上」，
 于是报告 `delivered_to_selected_device`，并在失败归因上指向第三方工具。
 
-## 建议的改进（待维护者决定）
+## 修复
 
-在 `VoiceAudioDeliveryPolicy.result(for:)` 判定
-`deliveredToSelectedDevice` 之前，增加对所选设备
-`kAudioDevicePropertyMute` 与 `kAudioDevicePropertyVolumeScalar` 的检查；
-不通过时给出与「第三方未提交」可区分的独立失败码与恢复文案
-（例如「所选虚拟设备已被静音或音量为 0」）。
+在配置输出和每次语音开始前的实时健康检查中，对受支持的虚拟回环设备读取 input/output
+scope 主声道的 `kAudioDevicePropertyMute` 与 `kAudioDevicePropertyVolumeScalar`：
 
-理由：这两个属性是 SayAll 唯一可免费取得、又能一刀切开本类故障的信号；
-缺失它会使所有「设备侧无声」的情形都被推给第三方配置。
+- 只有明确 `mute=true` 时才写回 `false`；只有明确 `volume<=0` 时才恢复为 `1.0`。
+- 正常非零音量完全保留，不覆盖用户已有的增益选择。
+- 只对稳定识别为 `MiRemoteV 2ch` 或 `BlackHole 2ch` 的设备执行修复；实体扬声器、
+  实体麦克风和未知设备不读取为门禁，也不写入任何属性。
+- 属性不存在时记录为 `unknown` 并保持兼容；属性存在但写入后仍明确静音时，输出配置失败，
+  不再把设备标为 Ready。
+- 健康检查会实时读取属性；用户在 App 启动后再次静音虚拟声卡，下一次语音开始前会触发
+  重新配置和同一套自愈。
+- 运行日志只记录稳定设备分类、是否静音、音量是否为零、是否尝试修复和最终结果，
+  不记录设备 ID、UID、自定义名称或用户音频。
 
 ## 验证
 
@@ -139,8 +153,12 @@ SayAll 的送达判定完全基于主机侧渲染状态，不含目标设备的 
 - 回环：0/12 → 10/12 窗口有信号，`peak` 与写入振幅一致。
 - 真机：实体 RC003 遥控器 + 真实豆包输入法，语音测试 `result=passed`，
   `transcript_wait_ms=40`。
-- 未执行：macOS 26 上的验证；`BlackHole 2ch`（非 MiRemoteV 重打包）的同类验证；
-  归属到具体版本的复现（本机为源码构建 `build 227`）。
+- 自动化：`VirtualAudioConnectionLifecycleTests` 27 项通过，覆盖明确静音、零音量、
+  正常非零音量、未知属性、修复成功、写入/读回后仍静音，以及未知设备不适用。
+- 真实属性自愈：`SAYALL_TEST_MUTATE_VIRTUAL_AUDIO_LEVEL=1 swift test --disable-keychain
+  --filter installedMiRemoteVCanRecoverFromMuteAndZeroVolume` 通过。
+- 未执行：macOS 26 上的候选 App 验证；原生 `BlackHole 2ch` 的属性写入与真实回环；
+  实体 RC003 从自动修复到第三方文字上屏的完整候选 App 复验。
 
 ## 边界与遗留
 
@@ -149,9 +167,8 @@ SayAll 的送达判定完全基于主机侧渲染状态，不含目标设备的 
   时被静音（静音键或某应用静音了默认输出），该状态会写入它自己的持久化音量并保留。
   **该推测无法在本机回溯确认，仅作提示，不作为已确认事实。**
   相关线索见未合并的 PR #323（「实体遥控器按需占用虚拟声卡，空闲时不压低系统播放音量」）。
-- 建议在 `TROUBLESHOOTING.md` / `DEBUG.md` 中把「先确认所选虚拟设备未被静音或
-  音量为 0」列为「第三方工具不上屏」的第一步排查项——这是本类故障中用户可自行
-  检查、且当前诊断完全无法提示的一项。
+- 自动修复只恢复明确的静音和零音量，不会提高已有的非零音量；若设备不公开这些属性，
+  仍需依靠真实回环和最终文字上屏确认。
 - 本问题与
   [Onboarding 语音诊断无法区分焦点、音频输出与第三方未提交](./2026-08-31-onboarding-voice-attempt-diagnostics/DEBUG.md)
   所列假设互补：该文档的 H2 已考虑「虚拟音频输出实际失败」，但把低概率归因于
