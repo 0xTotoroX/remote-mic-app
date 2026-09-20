@@ -697,6 +697,8 @@ struct BuildSigningTests {
         #expect(dmgVerifierSource.contains("DISPLAY_NAME=\"SayAll\""))
         #expect(packageSource.contains("APP=\"$OUTPUT_DIR/SayAll.app\""))
         #expect(packageSource.contains("$PAYLOAD_ROOT/Applications/SayAll.app"))
+        #expect(packageSource.contains("Set :$component_index:BundleIsRelocatable false"))
+        #expect(packageSource.contains("Add :$component_index:BundleIsRelocatable bool false"))
         #expect(packageSource.contains("Install SayAll-unsigned.pkg"))
         #expect(packageSource.contains("Uninstall SayAll-unsigned.pkg"))
         #expect(releaseVariantSource.contains(
