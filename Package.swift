@@ -269,6 +269,7 @@ let package = Package(
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("CoreFoundation"),
+                .linkedFramework("IOKit"),
             ]
         ),
         .target(
