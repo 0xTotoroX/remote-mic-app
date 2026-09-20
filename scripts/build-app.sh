@@ -221,8 +221,14 @@ if [[ -n "$SAYALL_BUTTON_PROFILES_PACKAGE_PATH" ]]; then
 else
   SAYALL_BUTTON_PROFILES_INCLUDED=false
 fi
+if [[ -n "${SAYALL_MEMBERSHIP_PACKAGE_PATH:-}" || \
+      -n "${SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH:-}" ]]; then
+  print -u2 "membership source packages are not supported; use SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH"
+  exit 1
+fi
 if [[ -n "$SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH" ]]; then
-  if [[ -n "$SAYALL_COMBINATION_ACTIONS_PATH" || -n "${SAYALL_MEMBERSHIP_PACKAGE_PATH:-}" ]]; then
+  if [[ -n "$SAYALL_COMBINATION_ACTIONS_PATH" || \
+        -n "$SAYALL_BUTTON_PROFILES_PACKAGE_PATH" ]]; then
     print -u2 "private artifacts cannot be combined with private source packages"
     exit 1
   fi
@@ -259,11 +265,7 @@ if [[ -n "$SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH" ]]; then
   export SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH
   SAYALL_PRIVATE_ARTIFACT_INCLUDED=true
   SAYALL_COMBINATION_ACTIONS_INCLUDED=true
-  if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
-        "$SAYALL_BUTTON_PROFILES_PACKAGE_PATH" != "$SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH" ]]; then
-    print -u2 "private artifacts cannot be combined with a paid source package"
-    exit 1
-  fi
+  SAYALL_BUTTON_PROFILES_INCLUDED=true
 else
   SAYALL_PRIVATE_ARTIFACT_INCLUDED=false
   if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
