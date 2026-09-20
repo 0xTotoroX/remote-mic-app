@@ -1,4 +1,4 @@
-# 虚拟声卡静音与零音量自动恢复测试
+# 虚拟声卡静音与低音量自动恢复测试
 
 ## 适用范围
 
@@ -22,53 +22,64 @@
 swift test --disable-keychain --filter VirtualAudioConnectionLifecycleTests
 ```
 
-预期：策略测试覆盖明确静音、零音量、正常非零音量、未知属性、修复成功及修复后仍静音。
+预期：策略测试覆盖明确静音、低于 `0.2`、等于或高于 `0.2`、未知属性、修复成功及修复后仍不可用。
 
 本机安装 MiRemoteV 2ch 时，可以运行显式设备变更测试：
 
 ```bash
 SAYALL_TEST_MUTATE_VIRTUAL_AUDIO_LEVEL=1 swift test --disable-keychain \
-  --filter installedMiRemoteVCanRecoverFromMuteAndZeroVolume
+  --filter installedMiRemoteVCanRecoverFromMuteAndLowVolume
 ```
 
-该测试会保存原值，把 input/output 两端临时设为 `mute=1 / volume=0`，调用产品修复代码，
-验证恢复为 `mute=0 / volume=1.0`，最后恢复测试前原值。执行结束后仍需独立读回确认。
+该测试会保存原值，先把 input/output 两端临时设为 `mute=1 / volume=0`，再设为
+`mute=0 / volume=0.19`，分别调用产品修复代码并验证恢复为 `mute=0 / volume=1.0`，
+最后恢复测试前原值。执行结束后仍需独立读回确认。
 
-## 用例一：明确静音与零音量
+## 用例一：明确静音与低音量
 
-1. 把所选受支持虚拟声卡的 input/output 主声道设为 `mute=1 / volume=0`。
+1. 分别把所选受支持虚拟声卡的 input/output 主声道设为 `mute=1 / volume=0` 和
+   `mute=0 / volume=0.19`。
 2. 启动无线麦或点击测试音。
 3. 再次读取设备属性并检查日志。
 
 预期：只对所选受支持虚拟设备执行修复；属性恢复为未静音和 `1.0`。日志包含
-`AUDIO AUDIBILITY repair`、稳定设备分类、修复动作、前后布尔状态和 `result=ready`。
+`AUDIO AUDIBILITY repair`、稳定设备分类、修复动作、修复前后 scalar、`volume_low`、
+`minimum_volume_scalar=0.2` 和 `result=ready`。
 
-失败：仍为静音/零音量、只修改一个 scope、日志报告 ready 但读回仍静音，或日志包含
+失败：仍为静音/低于 `0.2`、只修改一个 scope、日志报告 ready 但读回仍不可用，或日志包含
 设备 ID、UID、自定义名称及用户内容。
 
-## 用例二：保留正常非零音量
+## 用例二：保留阈值及以上音量
 
-1. 把 input/output volume 分别设为 `0.25`，保持未静音。
+1. 分别把 input/output volume 设为 `0.20` 和 `0.25`，保持未静音。
 2. 重新配置设备并开始一次测试音或语音。
 3. 读回属性。
 
-预期：volume 仍为 `0.25`，`volume_restore_attempted=false`；产品不把所有非满音量强制改为 1。
+预期：volume 保持 `0.20` / `0.25`，`volume_restore_attempted=false`；只有严格小于 `0.2`
+的值才恢复到 1。
 
-## 用例三：属性未知或不可写
+## 用例三：默认增益
+
+1. 使用没有 `gainDB` 持久化值的新 UserDefaults 启动设置。
+2. 使用已保存其它增益值的 UserDefaults 重新启动设置。
+
+预期：新安装默认增益为 `10 dB`；已有用户保存的增益保持原值，不强制迁移到 10。
+
+## 用例四：属性未知或不可写
 
 1. 使用不公开 mute/volume 的受支持回环设备，确认属性读数为 `unknown`。
 2. 使用可复现只读或写入失败的测试替身，制造修复后仍明确静音。
 
-预期：属性不存在时保持兼容，不仅因 unknown 阻断；已知静音但写入或读回未恢复时，
+预期：属性不存在时保持兼容，不仅因 unknown 阻断；已知静音或低于阈值但写入/读回未恢复时，
 配置失败且不得进入 Ready，也不得产生 `delivered_to_selected_device` 的假成功。
 
-## 用例四：启动后再次静音
+## 用例五：启动后再次静音或调低音量
 
 1. 启动 App 并确认虚拟声卡 Ready。
-2. 在空闲状态把设备改为 `mute=1 / volume=0`。
+2. 在空闲状态把设备改为 `mute=1 / volume=0` 或 `mute=0 / volume=0.19`。
 3. 分别从实体遥控器、iPhone、Apple Watch 和网页开始下一次语音。
 
-预期：每个入口现有的实时音频健康检查发现静音，重新配置并修复后才接受语音；
+预期：每个入口现有的实时音频健康检查发现静音或低音量，重新配置并修复后才接受语音；
 不得丢失首字，不得通过 flush 丢弃尾音。
 
 ## 稳定功能回归

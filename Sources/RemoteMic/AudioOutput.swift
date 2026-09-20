@@ -14,7 +14,7 @@ struct VirtualAudioDeviceLevelObservation: Equatable {
     var mute: Bool?
     var volume: Float32?
 
-    var isExplicitlySilent: Bool {
+    var requiresAudibilityRepair: Bool {
         VirtualAudioDeviceLevelPolicy.requiresUnmute(mute: mute) ||
             VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: volume)
     }
@@ -24,8 +24,8 @@ struct VirtualAudioDeviceAudibilitySnapshot: Equatable {
     var output = VirtualAudioDeviceLevelObservation()
     var input = VirtualAudioDeviceLevelObservation()
 
-    var isExplicitlySilent: Bool {
-        output.isExplicitlySilent || input.isExplicitlySilent
+    var requiresAudibilityRepair: Bool {
+        output.requiresAudibilityRepair || input.requiresAudibilityRepair
     }
 
     var hasObservation: Bool {
@@ -34,13 +34,22 @@ struct VirtualAudioDeviceAudibilitySnapshot: Equatable {
 
     var diagnostic: String {
         "output_mute=\(Self.optionalBoolean(output.mute)) " +
-            "output_volume_zero=\(Self.optionalBoolean(output.volume.map { $0 <= 0 })) " +
+            "output_volume_scalar=\(Self.optionalScalar(output.volume)) " +
+            "output_volume_low=\(Self.optionalBoolean(output.volume.map { VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: $0) })) " +
             "input_mute=\(Self.optionalBoolean(input.mute)) " +
-            "input_volume_zero=\(Self.optionalBoolean(input.volume.map { $0 <= 0 }))"
+            "input_volume_scalar=\(Self.optionalScalar(input.volume)) " +
+            "input_volume_low=\(Self.optionalBoolean(input.volume.map { VirtualAudioDeviceLevelPolicy.requiresVolumeRestore(volume: $0) })) " +
+            "minimum_volume_scalar=\(VirtualAudioDeviceLevelPolicy.minimumUsableVolume)"
     }
 
     private static func optionalBoolean(_ value: Bool?) -> String {
         value.map(String.init) ?? "unknown"
+    }
+
+    private static func optionalScalar(_ value: Float32?) -> String {
+        guard let value, value.isFinite else { return "unknown" }
+        let rounded = (Double(value) * 1_000).rounded() / 1_000
+        return String(rounded)
     }
 }
 
@@ -54,20 +63,22 @@ struct VirtualAudioDeviceAudibilityRepairResult: Equatable {
 
     var isReady: Bool {
         !applicable || (
-            !after.isExplicitlySilent &&
-                (!before.isExplicitlySilent || after.hasObservation)
+            !after.requiresAudibilityRepair &&
+                (!before.requiresAudibilityRepair || after.hasObservation)
         )
     }
 }
 
 enum VirtualAudioDeviceLevelPolicy {
+    static let minimumUsableVolume: Float32 = 0.2
+
     static func requiresUnmute(mute: Bool?) -> Bool {
         mute == true
     }
 
     static func requiresVolumeRestore(volume: Float32?) -> Bool {
-        guard let volume else { return false }
-        return volume <= 0
+        guard let volume, volume.isFinite else { return false }
+        return volume < minimumUsableVolume
     }
 }
 
@@ -812,13 +823,13 @@ final class VirtualAudioOutput {
                     "write_failed=\(audibilityRepair.writeFailed) " +
                     "before={\(audibilityRepair.before.diagnostic)} " +
                     "after={\(audibilityRepair.after.diagnostic)} " +
-                    "result=\(audibilityRepair.isReady ? "ready" : "silent")"
+                    "result=\(audibilityRepair.isReady ? "ready" : "below_minimum")"
             )
         }
         guard audibilityRepair.isReady else {
             status = LocalizedMessage("audio.output.selected_unavailable")
             AppLogger.shared.write(
-                "AUDIO CONFIGURE failed reason=virtual_device_silent " +
+                "AUDIO CONFIGURE failed reason=virtual_device_level_below_minimum " +
                     "device_kind=\(VirtualAudioDeviceDiagnosticKind.classify(device).rawValue)"
             )
             return false
@@ -1277,7 +1288,7 @@ final class VirtualAudioOutput {
             engineRunning: engine?.isRunning == true,
             playerPlaying: player?.isPlaying == true,
             boundToSelectedDevice: selectedDevice?.id == actualOutput?.id
-        ) && !audibility.isExplicitlySilent
+        ) && !audibility.requiresAudibilityRepair
     }
 
     private func currentOutputDevice() -> AudioDeviceInfo? {
