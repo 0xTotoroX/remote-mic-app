@@ -65,6 +65,9 @@ enum SettingsScreenshotRenderer {
         let usesChromecase = ProcessInfo.processInfo.environment[
             "REMOTE_MIC_SETTINGS_SCREENSHOT_CHROMECASE"
         ] == "1"
+        let showsRemoteCards = ProcessInfo.processInfo.environment[
+            "REMOTE_MIC_SETTINGS_SCREENSHOT_REMOTE_CARDS"
+        ] == "1"
         try FileManager.default.createDirectory(
             at: outputDirectory,
             withIntermediateDirectories: true
@@ -79,6 +82,33 @@ enum SettingsScreenshotRenderer {
         let settings = AppSettings(defaults: defaults)
         settings.applicationLanguage = language
         settings.completeOnboarding()
+        var remoteCardSystemNames: [UUID: String] = [:]
+        var remoteCardBatteryLevels: [UUID: Int] = [:]
+        var remoteCardPowerStates: [UUID: RemotePowerState] = [:]
+        if showsRemoteCards {
+            let xiaomiID = settings.registerBluetoothRemote(
+                identifier: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
+            )
+            settings.updateRemoteProfileModel(xiaomiID, model: .rc003)
+            settings.bindHIDFingerprint("settings-screenshot-xiaomi", to: xiaomiID)
+            let appleID = settings.registerHIDRemote(fingerprint: "settings-screenshot-apple-remote")
+            settings.updateRemoteProfileModel(appleID, model: .appleSiriRemoteA2854)
+            let chromecaseID = settings.registerChromecaseRemote()
+            settings.selectRemoteProfile(appleID)
+            remoteCardSystemNames = [
+                xiaomiID: "书房遥控器",
+                appleID: "客厅 Apple TV",
+                chromecaseID: "Bedroom Remote",
+            ]
+            remoteCardBatteryLevels = [
+                xiaomiID: 78,
+                chromecaseID: 42,
+            ]
+            remoteCardPowerStates = [
+                xiaomiID: .charging,
+                chromecaseID: .onBattery,
+            ]
+        }
 #if SAYALL_SIRI_REMOTE_ENABLED
         if usesSiriRemote {
             let profileID = settings.registerAppleSiriRemote(
@@ -108,6 +138,14 @@ enum SettingsScreenshotRenderer {
         }
         seedStatisticsForScreenshot(settings)
         let model = BridgeAppModel(settings: settings)
+        if showsRemoteCards {
+            model.configureRemoteCardsForSettingsScreenshot(
+                profileIDs: Set(remoteCardSystemNames.keys),
+                systemNames: remoteCardSystemNames,
+                batteryLevels: remoteCardBatteryLevels,
+                powerStates: remoteCardPowerStates
+            )
+        }
         let updateInformation = UpdateInformationStore()
         seedAvailableUpdate(updateInformation, language: language)
         let localization = LocalizationStore(settings: settings)

@@ -895,6 +895,11 @@ struct SettingsPageRegressionTests {
         let cardSource = settingsSource[cardStart.lowerBound..<cardEnd.lowerBound]
         #expect(cardSource.contains("ViewThatFits(in: .horizontal)"))
         #expect(cardSource.contains("fillsWidth ? nil : 232"))
+        #expect(cardSource.contains("let modelName = remoteModelName(profile)"))
+        #expect(cardSource.contains("let systemName = remoteSystemName(profile)"))
+        #expect(cardSource.contains("Text(modelName)"))
+        #expect(cardSource.contains("Text(systemName)"))
+        #expect(cardSource.contains(".accessibilityLabel(Text(\"\\(modelName), \\(systemName)\"))"))
         #expect(cardSource.contains("remoteBatteryLabel("))
         #expect(cardSource.contains("let powerState = model.powerState(for: profile.id)"))
         #expect(cardSource.contains("if showsBattery"))
@@ -978,6 +983,9 @@ struct SettingsPageRegressionTests {
         let selectorSource = source[selectorStart.lowerBound..<selectorEnd.lowerBound]
 
         #expect(selectorSource.contains("model.isRemoteConnected($0.id)"))
+        #expect(selectorSource.contains("RemoteDeviceNamePolicy.sortedForCards("))
+        #expect(selectorSource.contains("modelName: remoteModelName"))
+        #expect(selectorSource.contains("systemName: { model.systemDeviceName(for: $0) }"))
         #expect(selectorSource.contains("ForEach(connectedProfiles)"))
         #expect(selectorSource.contains("remoteDeviceEmptyState(vertical: vertical)"))
         #expect(selectorSource.contains("connectedProfiles.count <= 2"))
@@ -986,6 +994,7 @@ struct SettingsPageRegressionTests {
         #expect(!selectorSource.contains("ScrollView(.horizontal, showsIndicators: true)"))
         #expect(!selectorSource.contains("ForEach(settings.remoteDeviceProfiles)"))
         #expect(source.contains("Button(\"connection.action.reconnect\")"))
+        #expect(source.contains("remote.device.system_name_unknown"))
     }
 
     @Test func settingsPageKeepsVersionFeaturesTogetherAndLanguagesVisible() throws {
