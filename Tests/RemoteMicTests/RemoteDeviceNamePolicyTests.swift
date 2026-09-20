@@ -65,6 +65,71 @@ struct RemoteDeviceNamePolicyTests {
         #expect(RemoteDeviceNamePolicy.customName(from: "客厅\u{2028}遥控器", model: .rc001) == "客厅 遥控器")
     }
 
+    @Test func observedSystemNameKeepsFactoryAndSerialNamesForTheConnectedCard() {
+        #expect(RemoteDeviceNamePolicy.observedSystemName(from: "  MI RC\n") == "MI RC")
+        #expect(RemoteDeviceNamePolicy.observedSystemName(from: "TESTSERIAL001") == "TESTSERIAL001")
+        #expect(RemoteDeviceNamePolicy.observedSystemName(from: " \t\n") == nil)
+    }
+
+    @Test func cardOrderUsesModelPinyinBeforeSystemName() {
+        let xiaomi = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            model: .rc003,
+            name: "阿姨"
+        )
+        let apple = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            model: .appleSiriRemoteA2854,
+            name: "客厅"
+        )
+        let chromecase = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            model: .chromecaseVoiceRemote,
+            name: "Bedroom"
+        )
+
+        let sorted = RemoteDeviceNamePolicy.sortedForCards(
+            [xiaomi, apple, chromecase],
+            modelName: { profile in
+                switch profile.model {
+                case .appleSiriRemoteA2854: return "苹果遥控器 Type-C"
+                case .chromecaseVoiceRemote: return "Chromecase 遥控器"
+                case .rc003: return "小米蓝牙遥控器 2 Pro"
+                default: return "未知"
+                }
+            },
+            systemName: { $0.customName }
+        )
+
+        #expect(sorted.map(\.id) == [chromecase.id, apple.id, xiaomi.id])
+    }
+
+    @Test func cardOrderUsesSystemNamePinyinThenStableIDForTheSameModel() {
+        let laterID = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            name: "北京"
+        )
+        let earlierID = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            name: "北京"
+        )
+        let aName = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            name: "阿姨"
+        )
+        let missingName = makeProfile(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
+        )
+
+        let sorted = RemoteDeviceNamePolicy.sortedForCards(
+            [missingName, laterID, aName, earlierID],
+            modelName: { _ in "小米蓝牙遥控器 2" },
+            systemName: { $0.customName.isEmpty ? nil : $0.customName }
+        )
+
+        #expect(sorted.map(\.id) == [aName.id, earlierID.id, laterID.id, missingName.id])
+    }
+
     @Test func soleUnnamedProfileUsesLocalizedDefault() {
         let profile = makeProfile()
         #expect(display(profile, among: [profile]) == "小米蓝牙遥控器 2")
@@ -180,8 +245,13 @@ struct RemoteDeviceNamePolicyTests {
         }
     }
 
-    private func makeProfile(model: XiaomiRemoteModel = .rc001, name: String = "") -> RemoteDeviceProfile {
+    private func makeProfile(
+        id: UUID = UUID(),
+        model: XiaomiRemoteModel = .rc001,
+        name: String = ""
+    ) -> RemoteDeviceProfile {
         RemoteDeviceProfile(
+            id: id,
             model: model,
             customName: name,
             mappings: RemoteDeviceMappings(buttonBindings: [:], buttonShortcuts: [:], secondaryButtonBindings: [:])

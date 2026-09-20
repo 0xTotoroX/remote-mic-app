@@ -258,6 +258,7 @@
 "remote.device.unbound" = "待绑定";
 "remote.device.current" = "当前";
 "remote.device.disconnected" = "未连接";
+"remote.device.system_name_unknown" = "系统名称未知";
 "remote.device.battery_unavailable" = "暂时无法读取电量";
 "remote.device.power.battery" = "电池供电";
 "remote.device.power.charging" = "正在充电";

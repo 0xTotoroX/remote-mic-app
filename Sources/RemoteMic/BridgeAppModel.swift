@@ -458,6 +458,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     @Published private(set) var connectedRemoteProfileIDs = Set<UUID>()
     @Published private(set) var remoteBatteryLevels: [UUID: Int] = [:]
     @Published private(set) var remotePowerStates: [UUID: RemotePowerState] = [:]
+    @Published private(set) var remoteSystemDeviceNames: [UUID: String] = [:]
     @Published private(set) var audioDevices: [AudioDeviceInfo] = []
     @Published private(set) var testToneStatus = LocalizedMessage("audio.output.none_selected")
     @Published private(set) var isPlayingTestTone = false
@@ -2744,6 +2745,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 resolved += 1
             }
+            if let name = RemoteDeviceNamePolicy.observedSystemName(from: name) {
+                remoteSystemDeviceNames[profileID] = name
+            }
             if settings.updateRemoteProfileSystemName(profileID, name: name) { changed += 1 }
         }
         let appleProfiles = settings.remoteDeviceProfiles.filter {
@@ -2757,6 +2761,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 let name = observation?.name
                 if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     resolved += 1
+                }
+                if let name = RemoteDeviceNamePolicy.observedSystemName(from: name) {
+                    remoteSystemDeviceNames[profile.id] = name
                 }
                 if settings.updateRemoteProfileSystemName(
                     profile.id, name: name, serialNumber: observation?.serialNumber
@@ -4470,6 +4477,26 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
     func powerState(for profileID: UUID) -> RemotePowerState? {
         remotePowerStates[profileID]
+    }
+
+    func systemDeviceName(for profile: RemoteDeviceProfile) -> String? {
+        remoteSystemDeviceNames[profile.id]
+            ?? RemoteDeviceNamePolicy.observedSystemName(from: profile.customName)
+    }
+
+    func configureRemoteCardsForSettingsScreenshot(
+        profileIDs: Set<UUID>,
+        systemNames: [UUID: String],
+        batteryLevels: [UUID: Int],
+        powerStates: [UUID: RemotePowerState]
+    ) {
+        guard ProcessInfo.processInfo.environment["REMOTE_MIC_SETTINGS_SCREENSHOT_DIR"] != nil else {
+            return
+        }
+        connectedRemoteProfileIDs = profileIDs
+        remoteSystemDeviceNames = systemNames
+        remoteBatteryLevels = batteryLevels
+        remotePowerStates = powerStates
     }
 
     func isRemoteConnected(_ profileID: UUID) -> Bool {

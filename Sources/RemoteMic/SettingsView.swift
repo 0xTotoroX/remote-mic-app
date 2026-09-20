@@ -1838,9 +1838,11 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func remoteDeviceSelector(vertical: Bool = false) -> some View {
-        let connectedProfiles = settings.remoteDeviceProfiles.filter {
-            model.isRemoteConnected($0.id)
-        }
+        let connectedProfiles = RemoteDeviceNamePolicy.sortedForCards(
+            settings.remoteDeviceProfiles.filter { model.isRemoteConnected($0.id) },
+            modelName: remoteModelName,
+            systemName: { model.systemDeviceName(for: $0) }
+        )
         if connectedProfiles.isEmpty {
             remoteDeviceEmptyState(vertical: vertical)
         } else if vertical {
@@ -1908,6 +1910,8 @@ struct SettingsView: View {
         let connected = model.isRemoteConnected(profile.id)
         let batteryLevel = model.batteryLevel(for: profile.id)
         let powerState = model.powerState(for: profile.id)
+        let modelName = remoteModelName(profile)
+        let systemName = remoteSystemName(profile)
         let showsBattery = RemoteBatteryPresentationPolicy.shouldShowBattery(
             model: profile.model,
             level: batteryLevel,
@@ -1918,9 +1922,8 @@ struct SettingsView: View {
         } label: {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text(remoteDisplayName(profile))
-                        .help(remoteDisplayName(profile))
-                        .accessibilityLabel(Text(remoteDisplayName(profile)))
+                    Text(modelName)
+                        .help(modelName)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -1930,6 +1933,11 @@ struct SettingsView: View {
                             .help(localization.text("remote.device.current"))
                     }
                 }
+                Text(systemName)
+                    .help(systemName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 7) {
                         remoteConnectionLabel(connected: connected)
@@ -1962,6 +1970,7 @@ struct SettingsView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(modelName), \(systemName)"))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -2038,12 +2047,13 @@ struct SettingsView: View {
         }
     }
 
-    private func remoteDisplayName(_ profile: RemoteDeviceProfile) -> String {
-        RemoteDeviceNamePolicy.displayName(
-            for: profile,
-            among: settings.remoteDeviceProfiles,
-            defaultName: localization.text(profile.displayNameFallbackKey)
-        )
+    private func remoteModelName(_ profile: RemoteDeviceProfile) -> String {
+        localization.text(profile.displayNameFallbackKey)
+    }
+
+    private func remoteSystemName(_ profile: RemoteDeviceProfile) -> String {
+        model.systemDeviceName(for: profile)
+            ?? localization.text("remote.device.system_name_unknown")
     }
 
     private func mappingTriggerEditor(
