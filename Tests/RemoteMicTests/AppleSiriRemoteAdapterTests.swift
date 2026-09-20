@@ -192,6 +192,51 @@ struct AppleSiriRemoteAdapterTests {
         ) == nil)
     }
 
+    @Test func touchBridgeRegistersEveryExternalSourceAndCarriesSourceIdentity() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/AppleRemoteSupport/AppleRemoteSupport.c"),
+            encoding: .utf8
+        )
+        let header = try String(
+            contentsOf: root.appendingPathComponent("Sources/AppleRemoteSupport/include/AppleRemoteSupport.h"),
+            encoding: .utf8
+        )
+        #expect(source.contains("SAY_APPLE_REMOTE_MAX_TOUCH_DEVICES"))
+        #expect(source.contains("session->deviceCount++"))
+        #expect(source.contains("session->callback(contacts, count, timestamp, sourceID"))
+        #expect(source.contains("sourceID = session->sourceIDs[index]"))
+        #expect(source.contains("CFSTR(\"LocationID\")"))
+        #expect(!source.contains("IORegistryEntryGetRegistryEntryID"))
+        #expect(header.contains("uint64_t sourceID"))
+        #expect(header.contains("SAYAppleRemoteTouchSourceIDForHIDDevice"))
+    }
+
+    @Test func touchSessionRefreshesWhenRemoteTopologyChanges() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/AppleSiriRemoteAdapter.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains("updateTouchSessionForConnectedDevices(forceRestart: true)"))
+        #expect(source.contains("phase=refresh reason=device_topology"))
+        #expect(source.contains("interfaces.removeAll()\n        touchLock.lock()\n        touchIdentityBySourceID.removeAll()"))
+        let stopSession = try #require(source.range(of: "private func stopTouchSession()"))
+        let destroySession = try #require(source.range(
+            of: "private func destroyTouchSession()",
+            range: stopSession.upperBound..<source.endIndex
+        ))
+        #expect(!source[stopSession.lowerBound..<destroySession.lowerBound].contains(
+            "touchIdentityBySourceID.removeAll()"
+        ))
+    }
+
     @Test func centralTouchMovesPointer() {
         var interpreter = AppleSiriRemoteTouchInterpreter()
         #expect(interpreter.handle(event(.began, x: 0.5, y: 0.5, time: 1)).isEmpty)

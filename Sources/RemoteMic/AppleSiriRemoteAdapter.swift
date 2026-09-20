@@ -44,6 +44,7 @@ private func appleRemoteTouchFrame(
     contacts: UnsafePointer<SAYAppleRemoteTouchContact>?,
     contactCount: Int32,
     timestamp: Double,
+    sourceID: UInt64,
     context: UnsafeMutableRawPointer?
 ) {
     guard let context else { return }
@@ -62,7 +63,11 @@ private func appleRemoteTouchFrame(
     } else {
         values = []
     }
-    adapter.handleTouchFrame(contacts: values, timestampUptime: timestamp)
+    adapter.handleTouchFrame(
+        sourceID: sourceID,
+        contacts: values,
+        timestampUptime: timestamp
+    )
 }
 
 enum AppleSiriRemoteControl: String, CaseIterable, Equatable {
@@ -158,6 +163,11 @@ final class AppleSiriRemoteAdapter {
         let device: IOHIDDevice
         let identity: RemoteHardwareDeviceIdentity
         let fingerprint: String
+        let touchSourceID: UInt64
+    }
+
+    private struct TouchState {
+        var contactsWereActive = false
     }
 
     private struct ControlKey: Hashable {
@@ -193,9 +203,10 @@ final class AppleSiriRemoteAdapter {
     private var permissionTimer: DispatchSourceTimer?
     private var touchSession: OpaquePointer?
     private var touchIsRunning = false
-    private var touchDeviceIdentity: RemoteHardwareDeviceIdentity?
     private var preferredTouchDeviceIdentity: RemoteHardwareDeviceIdentity?
-    private var touchContactsWereActive = false
+    private var touchIdentityBySourceID: [UInt64: RemoteHardwareDeviceIdentity] = [:]
+    private var touchFallbackIdentity: RemoteHardwareDeviceIdentity?
+    private var touchStates: [RemoteHardwareDeviceIdentity: TouchState] = [:]
     private var touchSequence: UInt64 = 0
     private var coalescedControlReports: [ControlKey: Int] = [:]
     private let touchLock = NSLock()
@@ -290,6 +301,10 @@ final class AppleSiriRemoteAdapter {
             ))
         }
         interfaces.removeAll()
+        touchLock.lock()
+        touchIdentityBySourceID.removeAll()
+        touchFallbackIdentity = nil
+        touchLock.unlock()
         interfaceCountByIdentity.removeAll()
         fingerprintByIdentity.removeAll()
         coalescedControlReports.removeAll()
@@ -365,11 +380,25 @@ final class AppleSiriRemoteAdapter {
         interfaces[key] = Interface(
             device: device,
             identity: identity,
-            fingerprint: fingerprint
+            fingerprint: fingerprint,
+            touchSourceID: SAYAppleRemoteTouchSourceIDForHIDDevice(
+                Unmanaged.passUnretained(device).toOpaque()
+            )
         )
+        let touchSourceID = interfaces[key]?.touchSourceID ?? 0
+        if touchSourceID != 0 {
+            touchLock.lock()
+            touchIdentityBySourceID[touchSourceID] = identity
+            touchLock.unlock()
+        }
         let previousCount = interfaceCountByIdentity[identity, default: 0]
         interfaceCountByIdentity[identity] = previousCount + 1
         fingerprintByIdentity[identity] = fingerprint
+        touchLock.lock()
+        touchFallbackIdentity = interfaceCountByIdentity.count == 1
+            ? interfaceCountByIdentity.keys.first
+            : nil
+        touchLock.unlock()
         if previousCount == 0 {
             onConnection?(Connection(
                 device: identity,
@@ -381,7 +410,7 @@ final class AppleSiriRemoteAdapter {
             "APPLE REMOTE DEVICE phase=connected model=a2854 " +
                 "interface_page=\(stableHex(usagePage)) seized=\(isSeized)"
         )
-        updateTouchSessionForConnectedDevices()
+        updateTouchSessionForConnectedDevices(forceRestart: true)
     }
 
     fileprivate func deviceDidRemove(_ device: IOHIDDevice) {
@@ -413,7 +442,17 @@ final class AppleSiriRemoteAdapter {
         } else {
             interfaceCountByIdentity[interface.identity] = remainingCount
         }
-        updateTouchSessionForConnectedDevices()
+        touchLock.lock()
+        touchIdentityBySourceID = interfaces.values.reduce(into: [:]) { result, value in
+            if value.touchSourceID != 0 {
+                result[value.touchSourceID] = value.identity
+            }
+        }
+        touchFallbackIdentity = interfaceCountByIdentity.count == 1
+            ? interfaceCountByIdentity.keys.first
+            : nil
+        touchLock.unlock()
+        updateTouchSessionForConnectedDevices(forceRestart: true)
     }
 
     fileprivate func handleInputValue(_ value: IOHIDValue, from device: IOHIDDevice) {
@@ -465,28 +504,34 @@ final class AppleSiriRemoteAdapter {
     }
 
     fileprivate func handleTouchFrame(
+        sourceID: UInt64,
         contacts: [RemoteHardwareTouchContact],
         timestampUptime: TimeInterval
     ) {
         touchLock.lock()
-        guard let identity = touchDeviceIdentity else {
+        let identity = touchIdentityBySourceID[sourceID]
+            ?? (sourceID == 0 ? touchFallbackIdentity : nil)
+        guard let identity else {
             touchLock.unlock()
+            logger("APPLE REMOTE TOUCH frame result=unmapped_source")
             return
         }
+        var state = touchStates[identity, default: TouchState()]
         let phase: RemoteHardwareTouchPhase
         if contacts.isEmpty {
-            guard touchContactsWereActive else {
+            guard state.contactsWereActive else {
                 touchLock.unlock()
                 return
             }
             phase = .ended
-            touchContactsWereActive = false
-        } else if touchContactsWereActive {
+            state.contactsWereActive = false
+        } else if state.contactsWereActive {
             phase = .changed
         } else {
             phase = .began
-            touchContactsWereActive = true
+            state.contactsWereActive = true
         }
+        touchStates[identity] = state
         touchSequence &+= 1
         let event = RemoteHardwareTouchEvent(
             device: identity,
@@ -499,6 +544,95 @@ final class AppleSiriRemoteAdapter {
         DispatchQueue.main.async { [weak self] in
             self?.onTouchEvent?(event)
         }
+    }
+
+    private func updateTouchSessionForConnectedDevices(forceRestart: Bool = false) {
+        guard customMappingEnabled, !interfaceCountByIdentity.isEmpty else {
+            cancelActiveTouch(reason: .superseded)
+            stopTouchSession()
+            return
+        }
+        if forceRestart, touchIsRunning {
+            cancelActiveTouch(reason: .superseded)
+            stopTouchSession()
+            logger("APPLE REMOTE TOUCH phase=refresh reason=device_topology")
+        }
+        if touchSession == nil {
+            touchSession = SAYAppleRemoteTouchSessionCreate(
+                appleRemoteTouchFrame,
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+        }
+        guard let touchSession else {
+            logger("APPLE REMOTE TOUCH unavailable reason=framework_or_symbols")
+            return
+        }
+        if !touchIsRunning {
+            touchIsRunning = SAYAppleRemoteTouchSessionStart(touchSession)
+            logger(
+                "APPLE REMOTE TOUCH phase=start selection=all_connected_devices " +
+                    "device_count=\(interfaceCountByIdentity.count) " +
+                    "result=\(touchIsRunning ? "attached" : "surface_unavailable")"
+            )
+        }
+    }
+
+    static func selectTouchIdentity(
+        available: Set<RemoteHardwareDeviceIdentity>,
+        preferred: RemoteHardwareDeviceIdentity?,
+        current: RemoteHardwareDeviceIdentity?
+    ) -> RemoteHardwareDeviceIdentity? {
+        if let current, available.contains(current) {
+            return current
+        }
+        if let preferred, available.contains(preferred) {
+            return preferred
+        }
+        return available.count == 1 ? available.first : nil
+    }
+
+    private func stopTouchSession() {
+        if let touchSession {
+            SAYAppleRemoteTouchSessionStop(touchSession)
+        }
+        touchLock.lock()
+        touchStates.removeAll()
+        touchLock.unlock()
+        touchIsRunning = false
+    }
+
+    private func destroyTouchSession() {
+        guard let touchSession else { return }
+        SAYAppleRemoteTouchSessionDestroy(touchSession)
+        self.touchSession = nil
+        touchIsRunning = false
+    }
+
+    private func cancelActiveTouch(reason: RemoteHardwareLifecycleCancellationReason) {
+        touchLock.lock()
+        let activeIdentities = touchStates.compactMap { identity, state in
+            state.contactsWereActive ? identity : nil
+        }
+        guard !activeIdentities.isEmpty else {
+            touchLock.unlock()
+            return
+        }
+        activeIdentities.forEach { identity in
+            touchStates[identity]?.contactsWereActive = false
+        }
+        let events = activeIdentities.map { identity -> RemoteHardwareTouchEvent in
+            touchSequence &+= 1
+            return RemoteHardwareTouchEvent(
+                device: identity,
+                phase: .cancelled,
+                contacts: [],
+                timestampUptime: ProcessInfo.processInfo.systemUptime,
+                sequence: touchSequence
+            )
+        }
+        touchLock.unlock()
+        logger("APPLE REMOTE TOUCH phase=cancelled reason=\(reason.rawValue) count=\(events.count)")
+        events.forEach { onTouchEvent?($0) }
     }
 
     private func emit(_ events: [RemoteHardwareControlEvent]) {
@@ -528,113 +662,6 @@ final class AppleSiriRemoteAdapter {
         }
         permissionTimer = timer
         timer.resume()
-    }
-
-    private func updateTouchSessionForConnectedDevices() {
-        guard customMappingEnabled, !interfaceCountByIdentity.isEmpty else {
-            cancelActiveTouch(reason: .superseded)
-            touchLock.lock()
-            touchDeviceIdentity = nil
-            touchLock.unlock()
-            stopTouchSession()
-            return
-        }
-        let available = Set(interfaceCountByIdentity.keys)
-        guard let identity = Self.selectTouchIdentity(
-            available: available,
-            preferred: preferredTouchDeviceIdentity,
-            current: touchDeviceIdentity
-        ) else {
-            cancelActiveTouch(reason: .superseded)
-            stopTouchSession()
-            logger(
-                "APPLE REMOTE TOUCH unavailable reason=multiple_devices " +
-                    "detail=waiting_for_recent_control"
-            )
-            return
-        }
-        if let current = touchDeviceIdentity, current != identity {
-            cancelActiveTouch(reason: .superseded)
-            stopTouchSession()
-        }
-        preferredTouchDeviceIdentity = identity
-        touchLock.lock()
-        touchDeviceIdentity = identity
-        touchLock.unlock()
-        if touchSession == nil {
-            touchSession = SAYAppleRemoteTouchSessionCreate(
-                appleRemoteTouchFrame,
-                Unmanaged.passUnretained(self).toOpaque()
-            )
-        }
-        guard let touchSession else {
-            logger("APPLE REMOTE TOUCH unavailable reason=framework_or_symbols")
-            return
-        }
-        if !touchIsRunning {
-            touchIsRunning = SAYAppleRemoteTouchSessionStart(touchSession)
-            logger(
-                "APPLE REMOTE TOUCH phase=start selection=recent_control " +
-                    "result=\(touchIsRunning ? "attached" : "surface_unavailable")"
-            )
-        }
-    }
-
-    static func selectTouchIdentity(
-        available: Set<RemoteHardwareDeviceIdentity>,
-        preferred: RemoteHardwareDeviceIdentity?,
-        current: RemoteHardwareDeviceIdentity?
-    ) -> RemoteHardwareDeviceIdentity? {
-        if let current, available.contains(current) {
-            return current
-        }
-        if let preferred, available.contains(preferred) {
-            return preferred
-        }
-        return available.count == 1 ? available.first : nil
-    }
-
-    private func stopTouchSession() {
-        if let touchSession {
-            SAYAppleRemoteTouchSessionStop(touchSession)
-        }
-        touchLock.lock()
-        touchDeviceIdentity = nil
-        touchLock.unlock()
-        touchIsRunning = false
-        if let preferredTouchDeviceIdentity,
-           !interfaceCountByIdentity.keys.contains(preferredTouchDeviceIdentity) {
-            self.preferredTouchDeviceIdentity = nil
-        }
-    }
-
-    private func destroyTouchSession() {
-        guard let touchSession else { return }
-        SAYAppleRemoteTouchSessionDestroy(touchSession)
-        self.touchSession = nil
-        touchIsRunning = false
-    }
-
-    private func cancelActiveTouch(reason: RemoteHardwareLifecycleCancellationReason) {
-        touchLock.lock()
-        guard touchContactsWereActive,
-              let identity = touchDeviceIdentity
-        else {
-            touchLock.unlock()
-            return
-        }
-        touchContactsWereActive = false
-        touchSequence &+= 1
-        let event = RemoteHardwareTouchEvent(
-            device: identity,
-            phase: .cancelled,
-            contacts: [],
-            timestampUptime: ProcessInfo.processInfo.systemUptime,
-            sequence: touchSequence
-        )
-        touchLock.unlock()
-        logger("APPLE REMOTE TOUCH phase=cancelled reason=\(reason.rawValue)")
-        onTouchEvent?(event)
     }
 
     private func integerProperty(_ key: String, device: IOHIDDevice) -> Int? {
