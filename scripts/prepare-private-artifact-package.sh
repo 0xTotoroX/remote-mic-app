@@ -43,6 +43,7 @@ EXPECTED_ARCHIVES=(
   SayAllButtonProfiles.xcframework.zip
   SayAllMembershipCore.xcframework.zip
   SayAllMembershipUI.xcframework.zip
+  SayAllMembershipHostAdapter.xcframework.zip
   SayAllCombinationActions_SayAllMacroRemoteMic.bundle.zip
   SayAllButtonProfiles_SayAllButtonProfiles.bundle.zip
 )
@@ -66,6 +67,7 @@ if ! jq -e '
   .modules == [
     "SayAllMembershipCore",
     "SayAllMembershipUI",
+    "SayAllMembershipHostAdapter",
     "SayAllMacroCore",
     "SayAllMacroMacOS",
     "SayAllMacroRemoteMic",
@@ -122,6 +124,7 @@ mkdir -p "$STAGING_DIRECTORY/Artifacts" "$STAGING_DIRECTORY/Resources"
 for module_name in \
   SayAllMembershipCore \
   SayAllMembershipUI \
+  SayAllMembershipHostAdapter \
   SayAllMacroCore \
   SayAllMacroMacOS \
   SayAllMacroRemoteMic \
@@ -151,8 +154,14 @@ let package = Package(
     name: "SayAllPrivateArtifacts",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "SayAllMembershipCore", targets: ["SayAllMembershipCore"]),
-        .library(name: "SayAllMembershipUI", targets: ["SayAllMembershipCore", "SayAllMembershipUI"]),
+        .library(
+            name: "SayAllMembershipHostAdapter",
+            targets: [
+                "SayAllMembershipCore",
+                "SayAllMembershipUI",
+                "SayAllMembershipHostAdapter",
+            ]
+        ),
         .library(
             name: "SayAllMacroRemoteMic",
             targets: ["SayAllMacroCore", "SayAllMacroMacOS", "SayAllMacroRemoteMic"]
@@ -165,6 +174,10 @@ let package = Package(
     targets: [
         .binaryTarget(name: "SayAllMembershipCore", path: "Artifacts/SayAllMembershipCore.xcframework"),
         .binaryTarget(name: "SayAllMembershipUI", path: "Artifacts/SayAllMembershipUI.xcframework"),
+        .binaryTarget(
+            name: "SayAllMembershipHostAdapter",
+            path: "Artifacts/SayAllMembershipHostAdapter.xcframework"
+        ),
         .binaryTarget(name: "SayAllMacroCore", path: "Artifacts/SayAllMacroCore.xcframework"),
         .binaryTarget(name: "SayAllMacroMacOS", path: "Artifacts/SayAllMacroMacOS.xcframework"),
         .binaryTarget(name: "SayAllMacroRemoteMic", path: "Artifacts/SayAllMacroRemoteMic.xcframework"),

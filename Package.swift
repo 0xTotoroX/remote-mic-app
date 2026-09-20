@@ -170,25 +170,32 @@ if let buttonProfilesPath = buttonProfilesPackagePath,
     )
 }
 
-if let membershipPackagePath = ProcessInfo.processInfo.environment[
+let legacyMembershipPackagePath = ProcessInfo.processInfo.environment[
     "SAYALL_MEMBERSHIP_PACKAGE_PATH"
-], !membershipPackagePath.isEmpty {
-    let packageIdentity = URL(fileURLWithPath: membershipPackagePath)
+]
+if !(legacyMembershipPackagePath ?? "").isEmpty {
+    fatalError(
+        "SAYALL_MEMBERSHIP_PACKAGE_PATH is no longer supported; " +
+            "use SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH"
+    )
+}
+
+if let membershipAdapterPackagePath = ProcessInfo.processInfo.environment[
+    "SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH"
+], !membershipAdapterPackagePath.isEmpty {
+    let packageIdentity = URL(fileURLWithPath: membershipAdapterPackagePath)
         .lastPathComponent
         .lowercased()
-    packageDependencies.append(.package(path: membershipPackagePath))
+    packageDependencies.append(.package(path: membershipAdapterPackagePath))
     remoteMicDependencies.append(
-        .product(name: "SayAllMembershipCore", package: packageIdentity)
-    )
-    remoteMicDependencies.append(
-        .product(name: "SayAllMembershipUI", package: packageIdentity)
+        .product(name: "SayAllMembershipHostAdapter", package: packageIdentity)
     )
 }
 
 if let privateArtifactPackagePath, !privateArtifactPackagePath.isEmpty {
     let sourcePackageVariables = [
         "SAYALL_COMBINATION_ACTIONS_PATH",
-        "SAYALL_MEMBERSHIP_PACKAGE_PATH",
+        "SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH",
     ]
     if sourcePackageVariables.contains(where: {
         !(ProcessInfo.processInfo.environment[$0] ?? "").isEmpty
@@ -200,10 +207,7 @@ if let privateArtifactPackagePath, !privateArtifactPackagePath.isEmpty {
         .lowercased()
     packageDependencies.append(.package(path: privateArtifactPackagePath))
     remoteMicDependencies.append(
-        .product(name: "SayAllMembershipCore", package: packageIdentity)
-    )
-    remoteMicDependencies.append(
-        .product(name: "SayAllMembershipUI", package: packageIdentity)
+        .product(name: "SayAllMembershipHostAdapter", package: packageIdentity)
     )
     remoteMicDependencies.append(.product(name: "SayAllMacroRemoteMic", package: packageIdentity))
     if let buttonProfilesPackagePath, !buttonProfilesPackagePath.isEmpty {

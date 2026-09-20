@@ -10,7 +10,7 @@
 
 1. 准备不注入任何私有 Package 的公开构建。
 2. 准备注入会员与按键方案 Package 的内部构建；使用独立 Worktree，不把私有源码或本机绝对路径提交到本仓库。
-3. 内部构建通过 `SAYALL_MEMBERSHIP_API_BASE_URL` 提供测试服务地址。生产或远程测试只允许 `https`；`http://127.0.0.1:<port>` 仅用于本机开发。
+3. 内部构建通过 `SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH` 显式注入私有会员 Adapter，并通过 `SAYALL_MEMBERSHIP_API_BASE_URL` 提供测试服务地址。生产或远程测试只允许 `https`；`http://127.0.0.1:<port>` 仅用于本机开发。
 4. 准备 Free、Plus、会员刚过期、网络断开但租约仍有效、租约已过期五种脱敏测试状态。
 5. 准备真实实体遥控器、Nearby iPhone 或 Apple Watch，以及 Web Remote；分别记录当前公开按键映射作为回退基线。
 
@@ -28,12 +28,12 @@ swift build --disable-keychain -c release
 ```bash
 SAYALL_COMBINATION_ACTIONS_PATH=/path/to/sayall-private-platform/packages/macos-combination-actions \
 SAYALL_BUTTON_PROFILES_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-button-profiles \
-SAYALL_MEMBERSHIP_PACKAGE_PATH=/path/to/private/macos-membership \
+SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-membership \
 swift test --disable-keychain --scratch-path .build-free-paid
 
 SAYALL_COMBINATION_ACTIONS_PATH=/path/to/sayall-private-platform/packages/macos-combination-actions \
 SAYALL_BUTTON_PROFILES_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-button-profiles \
-SAYALL_MEMBERSHIP_PACKAGE_PATH=/path/to/private/macos-membership \
+SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-membership \
 swift build --disable-keychain --scratch-path .build-free-paid -c release
 ```
 

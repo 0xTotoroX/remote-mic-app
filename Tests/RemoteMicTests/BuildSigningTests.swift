@@ -446,6 +446,7 @@ struct BuildSigningTests {
         #expect(fixtureSource.contains("-u SAYALL_SIRI_REMOTE_PACKAGE_PATH"))
         #expect(fixtureSource.contains("-u SAYALL_COMBINATION_ACTIONS_PATH"))
         #expect(fixtureSource.contains("-u SAYALL_BUTTON_PROFILES_PACKAGE_PATH"))
+        #expect(fixtureSource.contains("-u SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH"))
         #expect(fixtureSource.contains("-u SAYALL_MEMBERSHIP_PACKAGE_PATH"))
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
