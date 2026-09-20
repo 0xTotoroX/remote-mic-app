@@ -123,6 +123,8 @@ enum RemoteBatteryPresentationPolicy {
 }
 
 enum SettingsPageBehavior {
+    static let sidebarTopDragHeight: CGFloat = 20
+
     static let sidebarSectionOrder: [SettingsSection] = [
         .mapping,
         .macros,
@@ -669,7 +671,7 @@ struct SettingsView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             WindowDragArea()
-                .frame(height: 56)
+                .frame(height: SettingsPageBehavior.sidebarTopDragHeight)
                 .accessibilityHidden(true)
             ForEach(visibleSections.filter { $0 != .statistics }) { section in
                 sidebarButton(section)
@@ -698,6 +700,7 @@ struct SettingsView: View {
                 sidebarButton(.statistics)
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
@@ -722,6 +725,9 @@ struct SettingsView: View {
                     || section == .buttonProfiles
                     || section == .membership {
                     Text(sectionTitle(section))
+                        .font(.system(size: 13, weight: .semibold))
+                } else if section == .statistics {
+                    Text(membershipFeature.accountDisplayName ?? localization.text("settings.section.login"))
                         .font(.system(size: 13, weight: .semibold))
                 } else {
                     Text(section.title)

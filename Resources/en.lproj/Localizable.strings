@@ -526,6 +526,7 @@
 "settings.application_updates.title" = "App & Updates";
 "settings.application.tagline" = "Voice within reach";
 "settings.section.statistics" = "Profile";
+"settings.section.login" = "Sign In";
 "settings.section.transcripts" = "Reflections";
 "about.page.subtitle" = "View version, updates, language, and app display options";
 "about.app.description" = "Wireless voice and shortcut controls for Xiaomi Bluetooth Remote 2 Pro.";
