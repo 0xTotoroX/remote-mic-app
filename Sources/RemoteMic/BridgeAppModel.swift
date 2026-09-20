@@ -782,7 +782,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             guard let self, self.siriDeclaredCapabilities != declared else { return }
             self.siriDeclaredCapabilities = declared
             // 触摸类设置是否出现取决于设备自报，必须跟着变。
-            AppLogger.shared.write("SIRI CAPABILITIES declared=\(Self.describeSiri(declared))")
+            AppLogger.shared.write(
+                "SIRI CAPABILITIES declared=\(BridgeAppModel.describeSiri(declared))"
+            )
         }
         siriRemoteFeature.onControlEvent = { [weak self] event in
             self?.handleAppleRemoteControlEvent(event)
@@ -5851,6 +5853,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return true
     }
 
+    /// 苹果遥控器自报能力的日志标记（真机核对用）。
+    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.batteryLevel) { names.append("battery_level") }
+        if declared.contains(.powerState) { names.append("power_state") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+
     // MARK: - Chromecase 硬件（可选私有包）
     //
     // 与 Siri Remote 链路完全隔离：独立 owner（`.chromecase`）、独立会话与排空操作号，
@@ -5967,18 +5981,6 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if declared.contains(.touchSurface) { names.append("touch_surface") }
         if declared.contains(.battery) { names.append("battery") }
         if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
-        return names.isEmpty ? "none" : names.joined(separator: "+")
-    }
-
-    /// 自报能力的日志标记（真机核对用，苹果遥控器链路）。
-    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
-        var names: [String] = []
-        if declared.contains(.controlEdges) { names.append("control_edges") }
-        if declared.contains(.touchSurface) { names.append("touch_surface") }
-        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
-        if declared.contains(.voiceStream) { names.append("voice_stream") }
-        if declared.contains(.batteryLevel) { names.append("battery_level") }
-        if declared.contains(.powerState) { names.append("power_state") }
         return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 
