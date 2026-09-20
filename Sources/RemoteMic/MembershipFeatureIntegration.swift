@@ -147,6 +147,8 @@ final class MembershipFeatureIntegration: ObservableObject {
             return .requiresPlus
         case .unavailable:
             return .unavailable
+        @unknown default:
+            return .unavailable
         }
     }
     #endif
