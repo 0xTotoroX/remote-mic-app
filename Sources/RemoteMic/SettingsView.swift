@@ -1497,33 +1497,47 @@ struct SettingsView: View {
             Divider()
 
             ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        configurationImportBanner
-                        corruptedSettingsBanner
+                Group {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 16) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id("mapping-page-top")
+                            configurationImportBanner
+                            corruptedSettingsBanner
 
-                        hardwareCanvas()
+                            hardwareCanvas()
 
-                        if let target = mappingEditingTarget {
-                            mappingEditorPanel(target)
-                                .id("mapping-action-editor")
+                            if let target = mappingEditingTarget {
+                                mappingEditorPanel(target)
+                                    .id("mapping-action-editor")
+                            }
+
+                            #if SAYALL_CHROMECASE_ENABLED
+                            // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
+                            // 放在按键页靠下的位置，方便随时切换手感。
+                            if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
+                                chromecaseVoiceModeSection
+                            }
+                            #endif
+
+                            mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
                         }
-
-                        #if SAYALL_CHROMECASE_ENABLED
-                        // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
-                        // 放在按键页靠下的位置，方便随时切换手感。
-                        if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
-                            chromecaseVoiceModeSection
-                        }
-                        #endif
-
-                        mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
+                        .padding(22)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .padding(22)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .id(settings.selectedRemoteProfileID)
+                    .compatibilityScrollEdgeEffect()
                 }
-                .id(settings.selectedRemoteProfileID)
-                .compatibilityScrollEdgeEffect()
+                .onChange(of: settings.selectedRemoteProfileID) { _ in
+                    // 编辑器属于上一只遥控器；切换设备后不得把旧编辑区带到新页面。
+                    mappingEditingTarget = nil
+                    shortcutCaptureTarget = nil
+                    applicationShortcutCaptureProfileID = nil
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("mapping-page-top", anchor: .top)
+                    }
+                }
                 .onAppear {
                     guard mappingEditingTarget != nil else { return }
                     DispatchQueue.main.async {
