@@ -1497,33 +1497,47 @@ struct SettingsView: View {
             Divider()
 
             ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        configurationImportBanner
-                        corruptedSettingsBanner
+                Group {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 16) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id("mapping-page-top")
+                            configurationImportBanner
+                            corruptedSettingsBanner
 
-                        hardwareCanvas()
+                            hardwareCanvas()
 
-                        if let target = mappingEditingTarget {
-                            mappingEditorPanel(target)
-                                .id("mapping-action-editor")
+                            if let target = mappingEditingTarget {
+                                mappingEditorPanel(target)
+                                    .id("mapping-action-editor")
+                            }
+
+                            #if SAYALL_CHROMECASE_ENABLED
+                            // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
+                            // 放在按键页靠下的位置，方便随时切换手感。
+                            if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
+                                chromecaseVoiceModeSection
+                            }
+                            #endif
+
+                            mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
                         }
-
-                        #if SAYALL_CHROMECASE_ENABLED
-                        // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
-                        // 放在按键页靠下的位置，方便随时切换手感。
-                        if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
-                            chromecaseVoiceModeSection
-                        }
-                        #endif
-
-                        mappingFooter(includeSiriScrollArrow: includeSiriScrollArrow)
+                        .padding(22)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .padding(22)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .id(settings.selectedRemoteProfileID)
+                    .compatibilityScrollEdgeEffect()
                 }
-                .id(settings.selectedRemoteProfileID)
-                .compatibilityScrollEdgeEffect()
+                .onChange(of: settings.selectedRemoteProfileID) { _ in
+                    // 编辑器属于上一只遥控器；切换设备后不得把旧编辑区带到新页面。
+                    mappingEditingTarget = nil
+                    shortcutCaptureTarget = nil
+                    applicationShortcutCaptureProfileID = nil
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("mapping-page-top", anchor: .top)
+                    }
+                }
                 .onAppear {
                     guard mappingEditingTarget != nil else { return }
                     DispatchQueue.main.async {
@@ -1824,9 +1838,11 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func remoteDeviceSelector(vertical: Bool = false) -> some View {
-        let connectedProfiles = settings.remoteDeviceProfiles.filter {
-            model.isRemoteConnected($0.id)
-        }
+        let connectedProfiles = RemoteDeviceNamePolicy.sortedForCards(
+            settings.remoteDeviceProfiles.filter { model.isRemoteConnected($0.id) },
+            modelName: remoteModelName,
+            systemName: { model.systemDeviceName(for: $0) }
+        )
         if connectedProfiles.isEmpty {
             remoteDeviceEmptyState(vertical: vertical)
         } else if vertical {
@@ -1894,6 +1910,8 @@ struct SettingsView: View {
         let connected = model.isRemoteConnected(profile.id)
         let batteryLevel = model.batteryLevel(for: profile.id)
         let powerState = model.powerState(for: profile.id)
+        let modelName = remoteModelName(profile)
+        let systemName = remoteSystemName(profile)
         let showsBattery = RemoteBatteryPresentationPolicy.shouldShowBattery(
             model: profile.model,
             level: batteryLevel,
@@ -1904,9 +1922,8 @@ struct SettingsView: View {
         } label: {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    Text(remoteDisplayName(profile))
-                        .help(remoteDisplayName(profile))
-                        .accessibilityLabel(Text(remoteDisplayName(profile)))
+                    Text(modelName)
+                        .help(modelName)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -1916,6 +1933,11 @@ struct SettingsView: View {
                             .help(localization.text("remote.device.current"))
                     }
                 }
+                Text(systemName)
+                    .help(systemName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 7) {
                         remoteConnectionLabel(connected: connected)
@@ -1948,6 +1970,7 @@ struct SettingsView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(modelName), \(systemName)"))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -2024,12 +2047,13 @@ struct SettingsView: View {
         }
     }
 
-    private func remoteDisplayName(_ profile: RemoteDeviceProfile) -> String {
-        RemoteDeviceNamePolicy.displayName(
-            for: profile,
-            among: settings.remoteDeviceProfiles,
-            defaultName: localization.text(profile.displayNameFallbackKey)
-        )
+    private func remoteModelName(_ profile: RemoteDeviceProfile) -> String {
+        localization.text(profile.displayNameFallbackKey)
+    }
+
+    private func remoteSystemName(_ profile: RemoteDeviceProfile) -> String {
+        model.systemDeviceName(for: profile)
+            ?? localization.text("remote.device.system_name_unknown")
     }
 
     private func mappingTriggerEditor(

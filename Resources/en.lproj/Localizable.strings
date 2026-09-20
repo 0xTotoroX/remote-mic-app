@@ -258,6 +258,7 @@
 "remote.device.unbound" = "Not bound";
 "remote.device.current" = "Current";
 "remote.device.disconnected" = "Disconnected";
+"remote.device.system_name_unknown" = "System name unavailable";
 "remote.device.battery_unavailable" = "Battery level is temporarily unavailable";
 "remote.device.power.battery" = "Battery power";
 "remote.device.power.charging" = "Charging";

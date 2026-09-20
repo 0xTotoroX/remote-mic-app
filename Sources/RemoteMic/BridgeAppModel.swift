@@ -458,6 +458,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     @Published private(set) var connectedRemoteProfileIDs = Set<UUID>()
     @Published private(set) var remoteBatteryLevels: [UUID: Int] = [:]
     @Published private(set) var remotePowerStates: [UUID: RemotePowerState] = [:]
+    @Published private(set) var remoteSystemDeviceNames: [UUID: String] = [:]
     @Published private(set) var audioDevices: [AudioDeviceInfo] = []
     @Published private(set) var testToneStatus = LocalizedMessage("audio.output.none_selected")
     @Published private(set) var isPlayingTestTone = false
@@ -782,7 +783,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             guard let self, self.siriDeclaredCapabilities != declared else { return }
             self.siriDeclaredCapabilities = declared
             // 触摸类设置是否出现取决于设备自报，必须跟着变。
-            AppLogger.shared.write("SIRI CAPABILITIES declared=\(Self.describeSiri(declared))")
+            AppLogger.shared.write(
+                "SIRI CAPABILITIES declared=\(BridgeAppModel.describeSiri(declared))"
+            )
         }
         siriRemoteFeature.onControlEvent = { [weak self] event in
             self?.handleAppleRemoteControlEvent(event)
@@ -2742,6 +2745,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 resolved += 1
             }
+            if let name = RemoteDeviceNamePolicy.observedSystemName(from: name) {
+                remoteSystemDeviceNames[profileID] = name
+            }
             if settings.updateRemoteProfileSystemName(profileID, name: name) { changed += 1 }
         }
         let appleProfiles = settings.remoteDeviceProfiles.filter {
@@ -2755,6 +2761,9 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 let name = observation?.name
                 if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     resolved += 1
+                }
+                if let name = RemoteDeviceNamePolicy.observedSystemName(from: name) {
+                    remoteSystemDeviceNames[profile.id] = name
                 }
                 if settings.updateRemoteProfileSystemName(
                     profile.id, name: name, serialNumber: observation?.serialNumber
@@ -4470,6 +4479,26 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         remotePowerStates[profileID]
     }
 
+    func systemDeviceName(for profile: RemoteDeviceProfile) -> String? {
+        remoteSystemDeviceNames[profile.id]
+            ?? RemoteDeviceNamePolicy.observedSystemName(from: profile.customName)
+    }
+
+    func configureRemoteCardsForSettingsScreenshot(
+        profileIDs: Set<UUID>,
+        systemNames: [UUID: String],
+        batteryLevels: [UUID: Int],
+        powerStates: [UUID: RemotePowerState]
+    ) {
+        guard ProcessInfo.processInfo.environment["REMOTE_MIC_SETTINGS_SCREENSHOT_DIR"] != nil else {
+            return
+        }
+        connectedRemoteProfileIDs = profileIDs
+        remoteSystemDeviceNames = systemNames
+        remoteBatteryLevels = batteryLevels
+        remotePowerStates = powerStates
+    }
+
     func isRemoteConnected(_ profileID: UUID) -> Bool {
         connectedRemoteProfileIDs.contains(profileID)
     }
@@ -5851,6 +5880,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return true
     }
 
+    /// 苹果遥控器自报能力的日志标记（真机核对用）。
+    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
+        var names: [String] = []
+        if declared.contains(.controlEdges) { names.append("control_edges") }
+        if declared.contains(.touchSurface) { names.append("touch_surface") }
+        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
+        if declared.contains(.voiceStream) { names.append("voice_stream") }
+        if declared.contains(.batteryLevel) { names.append("battery_level") }
+        if declared.contains(.powerState) { names.append("power_state") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+
     // MARK: - Chromecase 硬件（可选私有包）
     //
     // 与 Siri Remote 链路完全隔离：独立 owner（`.chromecase`）、独立会话与排空操作号，
@@ -5967,18 +6008,6 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if declared.contains(.touchSurface) { names.append("touch_surface") }
         if declared.contains(.battery) { names.append("battery") }
         if declared.contains(.toggleVoiceGesture) { names.append("toggle_voice") }
-        return names.isEmpty ? "none" : names.joined(separator: "+")
-    }
-
-    /// 自报能力的日志标记（真机核对用，苹果遥控器链路）。
-    private static func describeSiri(_ declared: SiriRemoteDeclaredCapabilities) -> String {
-        var names: [String] = []
-        if declared.contains(.controlEdges) { names.append("control_edges") }
-        if declared.contains(.touchSurface) { names.append("touch_surface") }
-        if declared.contains(.continuousScroll) { names.append("continuous_scroll") }
-        if declared.contains(.voiceStream) { names.append("voice_stream") }
-        if declared.contains(.batteryLevel) { names.append("battery_level") }
-        if declared.contains(.powerState) { names.append("power_state") }
         return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 

@@ -2,6 +2,7 @@
 
 - [ ] 蓝牙遥控器系统自定义名称（[#406](https://github.com/HD838A/remote-mic-app/issues/406)）
 	- 已接入按设备身份读取名称、历史编号和事件刷新；A2854 独立 API 实验已验证改名读取和重连身份稳定，并补充序列号默认名识别；候选程序实际运行、截图及端到端验收待完成，保持 Draft。
+	- 2026-09-20：已按跨平台合同把已连接遥控器卡片统一为“通用型号 / 系统蓝牙名称 / 连接与电池状态”三行，并按通用型号的拼音/拉丁化结果稳定排序；当前连接的完整系统名只在内存显示，仍待生产窗口与多型号真机验收。
 	- 验证入口：[BluetoothDeviceNames](Testing/BluetoothDeviceNames.md)。
 
 - [x] 统一 SayAll 品牌、官网与当前上架战略
@@ -40,6 +41,7 @@
   - 蓝牙、iPhone、Apple Watch、Web、测试音和长录音开始前会读取实时健康状态，异常时自动重建输出通道，不再要求用户重复选择 MiRemoteV 2ch 才能恢复。
   - AVFoundation 最小复现和自动化回归已通过；真实 MiRemoteV、睡眠唤醒、RC001/RC003 与第三方语音工具仍按 `Testing/MiRemoteVAudioStaleRecovery.md` 验收。
   - 2026-09-12 补充启动兼容恢复：已完成配置但当前 UID 为空时，优先恢复仍可枚举的最近一次明确选择；只有一个受支持候选时才允许历史配置恢复，多候选或历史设备缺失均不猜测。自动化覆盖持久化、恢复决策和失败日志，真实重启与第三方工具验收仍待完成。
+  - 2026-09-20 补充静音与低音量自愈：配置及每次语音开始前只检查稳定识别的 MiRemoteV 2ch / BlackHole 2ch；明确静音时解除静音，volume 严格低于 `0.2` 时恢复到 `1.0`，阈值及以上保持不变。App 新安装 PCM 增益继续默认为 `10 dB`，已有用户保存值不变。真实 MiRemoteV input/output 属性自愈和自动化已通过，BlackHole 与第三方文字上屏仍按 `Testing/VirtualAudioAudibilityRecovery.md` 验收。
 
 - [x] 建立可选私有功能组件集成边界
   - 私有功能的源码、测试、资源和内部文档由独立私有组件维护；本仓库只保留稳定的可选适配层和语音会话生命周期契约。
@@ -397,7 +399,7 @@
   - 已完成 SiriRemoteForge、Wand、siri-remote-steamos、SiriRemoteVibe 及其他相关开源项目的可行性研究；当前总体首选 SiriRemoteForge，建议按“按键 → 触摸/滚动 → 麦克风高级组件”分阶段验证。
   - SiriRemoteForge 集成评估、候选项目源码与 Release 对比，以及暂停的 Apple Remote Windows 路线研究均已迁移至独立的产品资料工作区。
   - 2026-09-04 已增加通用硬件输入契约并接入 A2854 候选适配器：使用精确 Apple VID/PID 与批准 usage page 监听实体键，以设备实例标准化即时按下、释放、取消、重复报告合并、配置切换后的迟到释放抑制及断连收尾；Siri 键直接进入既有 Fn 按下/释放会话，不经过双击或长按等待。
-  - 已通过动态加载系统 `MultitouchSupport` 接入单只 A2854 的候选触摸表面，并按实验初值实现中心移动、轻触点击和外圈连续滚动；多只 Apple Remote 同时连接时主动关闭触摸，避免把私有框架回调错误归属到具体设备。方向、中心、返回、TV、音量、播放/暂停、静音和电源均进入 A2854 独立档案映射；Siri 键保持固定语音路径。
+  - 已通过动态加载系统 `MultitouchSupport` 接入 A2540/A2854 的候选触摸表面，并按实验初值实现中心移动、轻触点击和外圈连续滚动；多只 Apple Remote 同时连接时注册全部外部触摸源，以触摸子服务和 HID 父接口共享的 `LocationID` 路由到对应设备，并在设备拓扑变化时刷新会话，不再把触摸限制为第一只或最近按键设备。方向、中心、返回、TV、音量、播放/暂停、静音和电源均进入独立档案映射；Siri 键保持固定语音路径。
   - 已接入完整候选音频链路：Apple Remote 内置麦克风 → 系统 PacketLogger XPC/HCI → Opus → PCM → `MiRemoteV 2ch`；用户不需要安装 PacketLogger、Bluetooth Profile、Homebrew 或额外硬件，安装包 helper 负责临时 HCI tracing、一次性管理员授权和退出恢复。缺少系统 HCI 语音跟踪时只报告明确不可用，不回退 Mac 麦克风。A2854 的配对、实体键边沿、触摸、断连、权限、签名构建、授权恢复和 RC001/RC003 回归矩阵见 `Testing/AppleRemoteHardwareInterface.md`；仍需真实 A2854、一次 GUI 管理员认证、Developer ID + Hardened Runtime、公证包和目标 macOS 完成验收，因此本任务保持未完成。
   - 2026-09-05：修复 Siri 键释放后的音频尾部生命周期；正常路径不再立即 flush，而是保留 closing generation 接收在途尾包，并等待 PCM 主线程投递归零与 `MiRemoteV 2ch` 队列自然排空后再释放 Fn，正常验收要求 `interrupted_samples=0`；快速再次按下会取消旧停止并继续同一语音会话，避免第二段开头被延后。同步补充 HCI XPC 客户端签名、helper 拒绝阶段和配置 OSStatus 日志。真实设备仍需按测试手册完成 10 次短按、5 次持续录音、5 次快速再次按下和不同 macOS 版本回归。
   - 2026-09-05：候选对齐 RC001/RC003 的按住连发规则；无双击/长按绑定时，返回键、方向键和音量键分别按既有 50 ms / 100 ms 间隔重复，松键、断连、配置或权限变化会停止。Siri 语音活动及尾音排空期间屏蔽触摸输出，当前接触需离开后才恢复，避免说话时误移动、滚动或点击。自动化已通过，真实 A2854 连续删除、连续导航、音量和语音触摸屏蔽仍待现场验收。
