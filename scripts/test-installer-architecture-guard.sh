@@ -138,6 +138,7 @@ fi
 /usr/bin/grep -Fq '/usr/bin/pkgbuild' "$BUILD_SCRIPT"
 /usr/bin/grep -Fq -- '--analyze' "$BUILD_SCRIPT"
 /usr/bin/grep -Fq 'BundleIsRelocatable false' "$BUILD_SCRIPT"
+/usr/bin/grep -Fq 'BundleIsRelocatable bool false' "$BUILD_SCRIPT"
 /usr/bin/grep -Fq 'Applications/SayAll.app' "$BUILD_SCRIPT"
 /usr/bin/grep -Fq 'SIRI_REMOTE_COMPONENT_PACKAGE=' "$BUILD_SCRIPT"
 /usr/bin/grep -Fq 'UNSIGNED_INSTALL_PACKAGE=' "$BUILD_SCRIPT"
