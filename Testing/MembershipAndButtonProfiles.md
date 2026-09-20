@@ -9,8 +9,8 @@
 ## 测试前准备
 
 1. 准备不注入任何私有 Package 的公开构建。
-2. 准备注入会员与按键方案 Package 的内部构建；使用独立 Worktree，不把私有源码或本机绝对路径提交到本仓库。
-3. 内部构建通过 `SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH` 显式注入私有会员 Adapter，并通过 `SAYALL_MEMBERSHIP_API_BASE_URL` 提供测试服务地址。生产或远程测试只允许 `https`；`http://127.0.0.1:<port>` 仅用于本机开发。
+2. 准备注入统一私有二进制构件 Package 的内部构建；不把私有源码、二进制构件或本机绝对路径提交到本仓库。
+3. 内部构建只通过 `SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH` 注入会员、组合动作和付费键位方案，并通过 `SAYALL_MEMBERSHIP_API_BASE_URL` 提供测试服务地址。生产或远程测试只允许 `https`；`http://127.0.0.1:<port>` 仅用于本机开发。
 4. 准备 Free、Plus、会员刚过期、网络断开但租约仍有效、租约已过期五种脱敏测试状态。
 5. 准备真实实体遥控器、Nearby iPhone 或 Apple Watch，以及 Web Remote；分别记录当前公开按键映射作为回退基线。
 
@@ -23,17 +23,13 @@ swift test --disable-keychain
 swift build --disable-keychain -c release
 ```
 
-内部集成构建显式注入免费组合动作、付费键位方案和会员 Package；付费键位方案缺少免费依赖时必须直接失败：
+内部集成构建只注入一个经过校验的私有二进制构件 Package；会员、组合动作和付费键位方案必须来自同一份构件清单：
 
 ```bash
-SAYALL_COMBINATION_ACTIONS_PATH=/path/to/sayall-private-platform/packages/macos-combination-actions \
-SAYALL_BUTTON_PROFILES_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-button-profiles \
-SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-membership \
+SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH=/path/to/prepared-private-artifact-package \
 swift test --disable-keychain --scratch-path .build-free-paid
 
-SAYALL_COMBINATION_ACTIONS_PATH=/path/to/sayall-private-platform/packages/macos-combination-actions \
-SAYALL_BUTTON_PROFILES_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-button-profiles \
-SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH=/path/to/sayall-private-platform/packages/macos-membership \
+SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH=/path/to/prepared-private-artifact-package \
 swift build --disable-keychain --scratch-path .build-free-paid -c release
 ```
 

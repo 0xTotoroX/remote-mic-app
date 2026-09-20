@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 
-#if canImport(SayAllMembershipHostAdapter)
+#if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
 import SayAllMembershipHostAdapter
 #endif
 
@@ -49,7 +49,7 @@ final class MembershipFeatureIntegration: ObservableObject {
 
     private var localeIdentifier: String
 
-    #if canImport(SayAllMembershipHostAdapter)
+    #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
     @MainActor private var adapter: MembershipHostAdapter?
     private var subscriptions = Set<AnyCancellable>()
     #endif
@@ -59,7 +59,7 @@ final class MembershipFeatureIntegration: ObservableObject {
         configuration: MembershipFeatureConfiguration? = .current()
     ) {
         self.localeIdentifier = localeIdentifier
-        #if canImport(SayAllMembershipHostAdapter)
+        #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
         if let configuration {
             Task { @MainActor [weak self] in
                 self?.configure(configuration)
@@ -69,7 +69,7 @@ final class MembershipFeatureIntegration: ObservableObject {
     }
 
     var sectionTitle: String {
-        #if canImport(SayAllMembershipHostAdapter)
+        #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
         Locale(identifier: localeIdentifier).identifier.lowercased().hasPrefix("zh")
             ? "会员"
             : "Membership"
@@ -82,7 +82,7 @@ final class MembershipFeatureIntegration: ObservableObject {
 
     func updateLocaleIdentifier(_ identifier: String) {
         localeIdentifier = identifier
-        #if canImport(SayAllMembershipHostAdapter)
+        #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
         Task { @MainActor [weak self] in
             self?.adapter?.updateLocaleIdentifier(identifier)
         }
@@ -92,21 +92,21 @@ final class MembershipFeatureIntegration: ObservableObject {
 
     @MainActor
     func refreshIfNeeded() {
-        #if canImport(SayAllMembershipHostAdapter)
+        #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
         adapter?.refreshIfNeeded()
         #endif
     }
 
     @MainActor
     func settingsView() -> AnyView {
-        #if canImport(SayAllMembershipHostAdapter)
+        #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
         adapter?.settingsView() ?? AnyView(EmptyView())
         #else
         AnyView(EmptyView())
         #endif
     }
 
-    #if canImport(SayAllMembershipHostAdapter)
+    #if SAYALL_MEMBERSHIP_ENABLED && canImport(SayAllMembershipHostAdapter)
     @MainActor
     private func configure(_ configuration: MembershipFeatureConfiguration) {
         guard adapter == nil else { return }

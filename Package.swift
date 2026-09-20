@@ -170,32 +170,23 @@ if let buttonProfilesPath = buttonProfilesPackagePath,
     )
 }
 
-let legacyMembershipPackagePath = ProcessInfo.processInfo.environment[
-    "SAYALL_MEMBERSHIP_PACKAGE_PATH"
+let unsupportedMembershipSourceVariables = [
+    "SAYALL_MEMBERSHIP_PACKAGE_PATH",
+    "SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH",
 ]
-if !(legacyMembershipPackagePath ?? "").isEmpty {
+if unsupportedMembershipSourceVariables.contains(where: {
+    !(ProcessInfo.processInfo.environment[$0] ?? "").isEmpty
+}) {
     fatalError(
-        "SAYALL_MEMBERSHIP_PACKAGE_PATH is no longer supported; " +
-            "use SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH"
-    )
-}
-
-if let membershipAdapterPackagePath = ProcessInfo.processInfo.environment[
-    "SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH"
-], !membershipAdapterPackagePath.isEmpty {
-    let packageIdentity = URL(fileURLWithPath: membershipAdapterPackagePath)
-        .lastPathComponent
-        .lowercased()
-    packageDependencies.append(.package(path: membershipAdapterPackagePath))
-    remoteMicDependencies.append(
-        .product(name: "SayAllMembershipHostAdapter", package: packageIdentity)
+        "membership source packages are not supported; " +
+            "use SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH"
     )
 }
 
 if let privateArtifactPackagePath, !privateArtifactPackagePath.isEmpty {
     let sourcePackageVariables = [
         "SAYALL_COMBINATION_ACTIONS_PATH",
-        "SAYALL_MEMBERSHIP_ADAPTER_PACKAGE_PATH",
+        "SAYALL_BUTTON_PROFILES_PACKAGE_PATH",
     ]
     if sourcePackageVariables.contains(where: {
         !(ProcessInfo.processInfo.environment[$0] ?? "").isEmpty
@@ -209,17 +200,11 @@ if let privateArtifactPackagePath, !privateArtifactPackagePath.isEmpty {
     remoteMicDependencies.append(
         .product(name: "SayAllMembershipHostAdapter", package: packageIdentity)
     )
+    remoteMicSwiftSettings.append(.define("SAYALL_MEMBERSHIP_ENABLED"))
     remoteMicDependencies.append(.product(name: "SayAllMacroRemoteMic", package: packageIdentity))
-    if let buttonProfilesPackagePath, !buttonProfilesPackagePath.isEmpty {
-        let artifactURL = URL(fileURLWithPath: privateArtifactPackagePath).standardizedFileURL
-        let paidURL = URL(fileURLWithPath: buttonProfilesPackagePath).standardizedFileURL
-        guard paidURL == artifactURL else {
-            fatalError("private artifacts cannot be combined with a paid source package")
-        }
-        remoteMicDependencies.append(
-            .product(name: "SayAllButtonProfiles", package: packageIdentity)
-        )
-    }
+    remoteMicDependencies.append(
+        .product(name: "SayAllButtonProfiles", package: packageIdentity)
+    )
 }
 
 if let hardwareSimulationPath = ProcessInfo.processInfo.environment[
