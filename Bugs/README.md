@@ -87,7 +87,7 @@
 | 时间 | Bug | 状态 |
 | --- | --- | --- |
 | 2026-09-20 | [Onboarding 语音测试页失控循环：`removeDuplicates()` 重订阅反复触发语音 attempt](./2026-09-20-onboarding-voice-attempt-runaway-loop.md) | 已修复（候选）；`OnboardingFlowTests` 50 项与本机真机语音测试通过，等待合入与发布后验证 |
-| 2026-09-20 | [虚拟设备被静音时仍判定「送达成功」，并把失败归因为第三方工具配置](./2026-09-20-miremotev-muted-misreported-as-third-party.md) | 现象与根因已确证、现场已恢复；建议的设备 mute/volume 门禁尚未实现，静音来源未查明 |
+| 2026-09-20 | [虚拟设备被静音或音量过低时仍判定「送达成功」，并把失败归因为第三方工具配置](./2026-09-20-miremotev-muted-misreported-as-third-party.md) | 自动解除静音与低于 0.2 的音量保护完成；MiRemoteV 2ch 属性自愈实测通过，等待 BlackHole 与完整语音链路验收 |
 | 2026-09-11 | [苹果遥控器 Command 语音键再次无法唤醒目标输入法](./2026-09-11-siri-remote-command-voice-regression.md) | 候选修复与失败门禁完成，等待真实遥控器和目标输入法验收 |
 | 2026-09-03 | [1.9.19 偶发显示“暂时无法获取更新信息”](./2026-09-03-github-api-update-feed-unavailable/DEBUG.md) | 候选修复、自动化与生产通道部署完成，等待 `1.9.21` 真实 Sparkle UI 验收 |
 | 2026-09-01 | [1.9.18「语音键模拟 Fn 点按」自动关闭](./2026-09-01-fn-tap-auto-disable/DEBUG.md) | 根因确认并完成候选修复；自动化通过，等待 RC003 与 Typeless 真机验收 |
