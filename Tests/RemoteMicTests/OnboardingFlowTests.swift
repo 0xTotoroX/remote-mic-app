@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import RemoteMic
@@ -614,6 +615,25 @@ struct OnboardingFlowTests {
         #expect(viewSource.contains("ONBOARDING TRANSCRIPT manual_keyboard_input=true"))
         #expect(viewSource.contains("voiceSessionStarted = true"))
         #expect(viewSource.contains("transcript = \"\""))
+        #expect(viewSource.contains("transcriptCommitRequest &+= 1"))
+        #expect(viewSource.contains("textView.unmarkText()"))
+        #expect(viewSource.contains("!textView.hasMarkedText"))
+        #expect(viewSource.contains("restored_after_voice_release=true"))
+    }
+
+    @Test @MainActor func markedTranscriptTextCanBeCommittedWithoutChangingItsVisibleText() {
+        let textView = NSTextView(frame: .zero)
+        textView.setMarkedText(
+            "测试文字",
+            selectedRange: NSRange(location: 4, length: 0),
+            replacementRange: NSRange(location: 0, length: 0)
+        )
+
+        #expect(textView.hasMarkedText())
+        #expect(textView.string == "测试文字")
+        textView.unmarkText()
+        #expect(!textView.hasMarkedText())
+        #expect(textView.string == "测试文字")
     }
 
     @Test func voiceTestConfigurationOnlyRequiresGlobalVoiceForDoubao() {

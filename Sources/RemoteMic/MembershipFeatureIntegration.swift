@@ -46,6 +46,7 @@ struct MembershipFeatureConfiguration: Equatable {
 final class MembershipFeatureIntegration: ObservableObject {
     @Published private(set) var isFeatureVisible = false
     @Published private(set) var buttonProfilesAccessDecision: HostButtonProfilesAccessDecision = .unavailable
+    @Published private(set) var accountDisplayName: String? = nil
 
     private var localeIdentifier: String
 
@@ -131,6 +132,13 @@ final class MembershipFeatureIntegration: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
                 self?.buttonProfilesAccessDecision = value
+            }
+            .store(in: &subscriptions)
+        adapter.$accountDisplayName
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] value in
+                self?.accountDisplayName = value
             }
             .store(in: &subscriptions)
     }

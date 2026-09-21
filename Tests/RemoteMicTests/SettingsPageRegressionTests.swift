@@ -537,6 +537,8 @@ struct SettingsPageRegressionTests {
         #expect(!appSource.contains("window.isMovableByWindowBackground = true"))
         #expect(settingsSource.contains("WindowDragArea()"))
         #expect(settingsSource.contains("window?.performDrag(with: event)"))
+        #expect(settingsSource.contains("SettingsPageBehavior.sidebarTopDragHeight"))
+        #expect(settingsSource.contains(".ignoresSafeArea(.container, edges: .top)"))
     }
 
     @Test func settingsWindowEstablishesItsFullSizeBeforeCentering() throws {
@@ -807,7 +809,7 @@ struct SettingsPageRegressionTests {
         #expect(!source.contains("remoteDeviceBindingPanel"))
         #expect(!source.contains("SidebarGlassModifier"))
         #expect(source.contains(".focusEffectDisabled()"))
-        #expect(source.contains(".frame(height: 56)"))
+        #expect(source.contains("SettingsPageBehavior.sidebarTopDragHeight"))
         #expect(source.contains(".ignoresSafeArea(.container, edges: .top)"))
         #expect(source.contains("showsAnchor: activeButtons.contains(placement.button)"))
         #expect(source.contains(".toggleStyle(.switch)"))
@@ -1171,6 +1173,29 @@ struct SettingsPageRegressionTests {
             .about,
             .statistics,
         ])
+    }
+
+    @Test func profileSidebarUsesTheLoginFallbackAndSanitizedAccountDisplayName() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
+            encoding: .utf8
+        )
+        let integration = try String(
+            contentsOf: root.appendingPathComponent(
+                "Sources/RemoteMic/MembershipFeatureIntegration.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(source.contains(
+            "membershipFeature.accountDisplayName ?? localization.text(\"settings.section.login\")"
+        ))
+        #expect(integration.contains("@Published private(set) var accountDisplayName: String?"))
+        #expect(integration.contains("adapter.$accountDisplayName"))
     }
 
     @Test func defaultSettingsPageTracksTheFirstVisibleSidebarSection() throws {

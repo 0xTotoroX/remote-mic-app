@@ -314,17 +314,20 @@
 11. 分别制造以下失败：只触发会话但不产生音频、音频设备失效、开始后不松开、没有文字上屏。
 12. 完成一次有开始、PCM 和松开结束但没有文字的语音会话，然后直接用 Mac 键盘在输入框中键入或粘贴文字；确认“文字已经出现”仍未通过，并提示重新测试语音输入。
 13. 不点击重试直接开始下一次真实语音；确认新会话开始时旧的手动文字被清空，真实语音写入后才能继续。
-14. 对豆包、微信输入法、Typeless 和其他工具重复第 12、13 步；若任一工具无法继续，记录故障时间和 `runtime.log`。日志允许记录无线麦自身 PID 以区分实例，但不得包含输入事件来源 PID、键码、输入文字或前台 App。
-15. 使用“活动监视器”记录无线麦进程 CPU，在语音测试页可见、完成向导后的设置页可见、设置窗口打开后再关闭三种状态下，各执行一次至少 30 秒的连续真实语音。
-16. 分别记录三种状态的平均 CPU、峰值 CPU、音频批次数、样本数和 `enqueue_failures`；如果仍持续接近占满一个 CPU 核心，再采集同一时段的 Time Profiler 调用树。
-17. 完成一次“开始、PCM、松开结束均正常但没有文字”的会话，确认松开后的 3 秒等待窗口内不显示终态失败；窗口结束后只出现一个原因，不再依次出现 `voice.no_samples → voice.session_not_ended → voice.no_transcript`。
-18. 在每个 Onboarding 步骤进入、通过、阻断、重试、恢复和完成时检查 `runtime.log` 已实时出现对应的 `ONBOARDING STEP` 或 `ONBOARDING EVENT`；再复制 Onboarding 诊断，确认剪贴板和日志都包含同一份 `diagnostic_schema=3` 摘要。日志中应出现 `ONBOARDING DIAGNOSTICS BEGIN`、逐行 `FIELD` 和 `END`，当前 attempt 包含 App/Build/系统完整身份、`voice_attempt`、`voice_trigger_path`、输入框焦点丢失次数/维度/恢复/截止状态、首样本延迟、会话时长、文字等待时长，以及 `voice_audio_generation`、音频路线、收到/调度/实际播放/中断/pending 样本、入队失败、所选/实际设备稳定类型和绑定状态。
-19. 制造一次中间瞬时失焦但三秒截止前已恢复的会话，确认不会被归类为 `voice.input_target_focus_lost`；截止时仍失焦才允许使用该失败码。
-20. 制造一次 SayAll 音频完整送达、焦点稳定但没有文字的会话，确认日志为 `voice.external_tool_no_commit`、`voice_probable_cause_confirmed=false`、`voice_external_tool_microphone_observable=false`，并把 `microphone_matches_selected_device` 列为首个检查项。
-21. 制造入队失败、实际设备绑定错误、播放中断和截止时仍 pending，分别确认归类为 `voice.audio_delivery_failed`，且不会被第三方工具失败覆盖；正常排空中的 pending 不得在三秒截止前提前失败。
-22. 快速连续执行两次语音，确认第二次的 `voice_audio_generation` 不同，上一会话迟到的播放完成/中断数量不会进入第二次。
+14. 在语音过程中确认输入框出现临时文字后松开语音键；预期输入框仍保留这段文字，输入法临时组合态被提交为普通文字，不需要按回车或再次点击输入框，且“继续”可以按正常流程判断。
+15. 对豆包、微信输入法、Typeless 和其他工具重复第 12–14 步；若任一工具无法继续，记录故障时间和 `runtime.log`。日志允许记录无线麦自身 PID 以区分实例，但不得包含输入事件来源 PID、键码、输入文字或前台 App。
+16. 使用“活动监视器”记录无线麦进程 CPU，在语音测试页可见、完成向导后的设置页可见、设置窗口打开后再关闭三种状态下，各执行一次至少 30 秒的连续真实语音。
+17. 分别记录三种状态的平均 CPU、峰值 CPU、音频批次数、样本数和 `enqueue_failures`；如果仍持续接近占满一个 CPU 核心，再采集同一时段的 Time Profiler 调用树。
+18. 完成一次“开始、PCM、松开结束均正常但没有文字”的会话，确认松开后的 3 秒等待窗口内不显示终态失败；窗口结束后只出现一个原因，不再依次出现 `voice.no_samples → voice.session_not_ended → voice.no_transcript`。
+19. 在每个 Onboarding 步骤进入、通过、阻断、重试、恢复和完成时检查 `runtime.log` 已实时出现对应的 `ONBOARDING STEP` 或 `ONBOARDING EVENT`；再复制 Onboarding 诊断，确认剪贴板和日志都包含同一份 `diagnostic_schema=3` 摘要。日志中应出现 `ONBOARDING DIAGNOSTICS BEGIN`、逐行 `FIELD` 和 `END`，当前 attempt 包含 App/Build/系统完整身份、`voice_attempt`、`voice_trigger_path`、输入框焦点丢失次数/维度/恢复/截止状态、首样本延迟、会话时长、文字等待时长，以及 `voice_audio_generation`、音频路线、收到/调度/实际播放/中断/pending 样本、入队失败、所选/实际设备稳定类型和绑定状态。
+20. 制造一次中间瞬时失焦但三秒截止前已恢复的会话，确认不会被归类为 `voice.input_target_focus_lost`；截止时仍失焦才允许使用该失败码。
+21. 制造一次 SayAll 音频完整送达、焦点稳定但没有文字的会话，确认日志为 `voice.external_tool_no_commit`、`voice_probable_cause_confirmed=false`、`voice_external_tool_microphone_observable=false`，并把 `microphone_matches_selected_device` 列为首个检查项。
+22. 制造入队失败、实际设备绑定错误、播放中断和截止时仍 pending，分别确认归类为 `voice.audio_delivery_failed`，且不会被第三方工具失败覆盖；正常排空中的 pending 不得在三秒截止前提前失败。
+23. 快速连续执行两次语音，确认第二次的 `voice_audio_generation` 不同，上一会话迟到的播放完成/中断数量不会进入第二次。
 
 预期结果：首次进入、从其他 App 返回以及点击重试后，原生 `NSTextView` 都由当前窗口确认成为 `firstResponder`；无需额外点击即可让所选语音工具写入文字。只有当前所选来源的会话开始、PCM 样本数量大于零、松开后会话结束、所选 MiRemoteV 2ch 或 BlackHole 2ch 有效、单次 attempt 进入 `passed` 且文字由语音工具写入时才允许继续。进行中的正常阶段不写失败历史，每次 attempt 只产生一个 `passed` 或 `failed` 终态。每次会话的首个非空音频批次即可点亮样本检查，后续批次不会造成约 60 Hz 的整棵设置视图无效化；连续语音期间进程 CPU 不应再持续接近占满一个核心。只有确认来自 HID 系统且无用户进程来源的物理 `keyDown` 会标记手动输入；合成、combined/private、未知来源或缺少 CGEvent 的文字全部 fail-open。无线麦不读取第三方语音工具内部状态，也不记录音频内容、输入框文字或长度、输入事件来源 PID、键码、蓝牙地址、设备 UID 或前台 App。
+
+补充失败判定：语音键松开后已经显示的文字消失，或必须按回车/再次点击输入框才能保留文字，均视为失败。
 
 自动化兼容门禁：Onboarding 文字监听必须保持 macOS 13 可编译，Intel Ventura Release 构建不得使用仅 macOS 14 可用的双参数 `onChange` 重载。
 

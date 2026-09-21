@@ -12,6 +12,8 @@
 
 2026-08-19 音频与文字错误通过候选允许 MiRemoteV 2ch 与 BlackHole 2ch，拒绝 Beosound、扬声器等普通输出；完成语音会话后再用键盘输入仍不能点亮文字检查。真实虚拟音频输出和第三方输入法写入来源仍需现场验收。
 
+2026-09-21 修复语音测试页松键后 marked/composition text 消失：松键时提交原生 `NSTextView` 的 marked text，并在第三方工具延迟撤销时恢复本次 attempt 已显示文字；Onboarding 定向测试与完整 Swift 测试通过，微信输入法、豆包、Typeless 和实体遥控器仍需真实验收。
+
 2026-08-19 Typeless 与实体遥控器识别候选新增两项回归：四种语音工具选择会同步 Fn 点按偏好，三种控制方式通过权限页都会应用；生产 HID 普通按键可以在语音 bridge 尚未 Ready 时证明实体控制已识别，同时后续真实语音门禁保持不变。26 项 Onboarding、312 项完整 Swift 测试、42 项项目自检、Apple Silicon / Intel Release 构建与实体路径 18 张生产页面检查通过；真实 Typeless 与 RC001 / RC003 仍需现场验收。
 
 1.9.3 真实日志确认未绑定 HID discovery 首报告死锁：设备匹配 157 次但没有一次 `HID REPORT` 或 `HID CONNECTED`。候选实现改为非独占探测安全候选，只有包含已知普通按键的首份真实报告才绑定实际设备，空闲或未知报告不会抢占；Remote buttons 86 项、Onboarding 26 项、完整 Swift 314 项/31 suites、硬件事件回放 21 项、项目自检 42/42 与 Apple Silicon / Intel Release 构建通过。真实 IOHID 回调、RC001 / RC003、双遥控器及电源键保护仍需按用例 4B-1 现场验收。
