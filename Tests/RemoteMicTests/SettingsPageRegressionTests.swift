@@ -532,13 +532,19 @@ struct SettingsPageRegressionTests {
             contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
             encoding: .utf8
         )
+        let sidebarStart = try #require(settingsSource.range(of: "private var sidebar: some View {"))
+        let visibleSectionsStart = try #require(settingsSource.range(
+            of: "private var visibleSections: [SettingsSection]",
+            range: sidebarStart.upperBound..<settingsSource.endIndex
+        ))
+        let sidebarSource = settingsSource[sidebarStart.lowerBound..<visibleSectionsStart.lowerBound]
 
         #expect(appSource.contains("window.isMovableByWindowBackground = false"))
         #expect(!appSource.contains("window.isMovableByWindowBackground = true"))
         #expect(settingsSource.contains("WindowDragArea()"))
         #expect(settingsSource.contains("window?.performDrag(with: event)"))
         #expect(settingsSource.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(!settingsSource.contains(".ignoresSafeArea(.container, edges: .top)"))
+        #expect(!sidebarSource.contains(".ignoresSafeArea(.container, edges: .top)"))
     }
 
     @Test func settingsWindowEstablishesItsFullSizeBeforeCentering() throws {
@@ -810,7 +816,13 @@ struct SettingsPageRegressionTests {
         #expect(!source.contains("SidebarGlassModifier"))
         #expect(source.contains(".focusEffectDisabled()"))
         #expect(source.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(!source.contains(".ignoresSafeArea(.container, edges: .top)"))
+        let sidebarStart = try #require(source.range(of: "private var sidebar: some View {"))
+        let visibleSectionsStart = try #require(source.range(
+            of: "private var visibleSections: [SettingsSection]",
+            range: sidebarStart.upperBound..<source.endIndex
+        ))
+        let sidebarSource = source[sidebarStart.lowerBound..<visibleSectionsStart.lowerBound]
+        #expect(!sidebarSource.contains(".ignoresSafeArea(.container, edges: .top)"))
         #expect(source.contains("showsAnchor: activeButtons.contains(placement.button)"))
         #expect(source.contains(".toggleStyle(.switch)"))
         #expect(source.contains("button_mapping.permission_prompt.open"))

@@ -103,7 +103,7 @@
 已完成验证：
 
 - `swift test --disable-keychain --filter SettingsPageRegressionTests/profileStatisticsReportsIntrinsicHeightForBottomContent`：通过。
-- `swift test --disable-keychain --filter SettingsPageRegressionTests`：新增统计页回归通过；套件仍有 2 个与本次无关的既有源码门禁失败，分别是 `settingsWindowDragsOnlyFromDedicatedTopArea` 与 `redesignedPagesKeepEveryExistingUserAction` 对上一提交侧边栏顶部 safe-area 规则的断言。
+- `swift test --disable-keychain --filter SettingsPageRegressionTests`：43 项通过；为避免全局字符串断言误报，侧边栏 safe-area 回归断言已收窄到 `sidebar` 代码块。
 - `git diff --check`：通过。
 - Release 构建及 `scripts/verify-app.sh`：通过。
 - `SettingsScreenshotRenderer`：已生成并检查 1020×772、800×650 的浅色 / 深色统计页截图；截图仅证明静态布局，不能替代真实滚动手势验收。
