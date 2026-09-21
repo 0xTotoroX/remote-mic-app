@@ -373,6 +373,55 @@ struct VersionTapRevealCounter {
     }
 }
 
+private struct StatisticsColumnsLayout: Layout {
+    private let spacing: CGFloat = 14
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+
+        let width = proposal.width ?? 0
+        let availableWidth = max(0, width - spacing)
+        let rankingWidth = max(360, availableWidth * 0.42)
+        let rightWidth = max(0, availableWidth - rankingWidth)
+        let leftSize = subviews[0].sizeThatFits(
+            ProposedViewSize(width: rankingWidth, height: nil)
+        )
+        let rightSize = subviews[1].sizeThatFits(
+            ProposedViewSize(width: rightWidth, height: nil)
+        )
+        return CGSize(width: width, height: max(leftSize.height, rightSize.height))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+
+        let availableWidth = max(0, bounds.width - spacing)
+        let rankingWidth = max(360, availableWidth * 0.42)
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: rankingWidth, height: bounds.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX + rankingWidth + spacing, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(
+                width: max(0, availableWidth - rankingWidth),
+                height: bounds.height
+            )
+        )
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: BridgeAppModel
     @ObservedObject var settings: AppSettings
@@ -2853,20 +2902,13 @@ struct SettingsView: View {
             CompatibilityGlassContainer(spacing: 14) {
                 VStack(spacing: 14) {
                     statisticsSummaryGrid
-                    GeometryReader { proxy in
-                        let availableWidth = max(0, proxy.size.width - 14)
-                        let rankingWidth = max(360, availableWidth * 0.42)
-                        HStack(alignment: .top, spacing: 14) {
-                            statisticsRankingPanel
-                                .frame(width: rankingWidth, alignment: .top)
-                            VStack(spacing: 14) {
-                                statisticsCalendarPanel
-                                statisticsVoiceSessionRankingPanel
-                            }
-                                .frame(width: max(0, availableWidth - rankingWidth), alignment: .top)
+                    StatisticsColumnsLayout {
+                        statisticsRankingPanel
+                        VStack(spacing: 14) {
+                            statisticsCalendarPanel
+                            statisticsVoiceSessionRankingPanel
                         }
                     }
-                    .frame(minHeight: 648)
                 }
             }
         }
