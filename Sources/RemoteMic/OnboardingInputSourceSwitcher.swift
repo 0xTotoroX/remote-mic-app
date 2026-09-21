@@ -28,6 +28,7 @@ enum OnboardingInputSourceSwitcher {
     static func availability(
         for voiceTool: OnboardingVoiceTool
     ) -> OnboardingVoiceToolAvailability {
+        let profile = VoiceToolAdapterProfile.profile(for: voiceTool)
         if let inputSourceID = voiceTool.preferredInputSourceID {
             return inputSource(withID: inputSourceID, includeAllInstalled: true) == nil
                 ? .notInstalled
@@ -40,7 +41,14 @@ enum OnboardingInputSourceSwitcher {
             ) == nil ? .notInstalled : .available
         }
 
-        return .available
+        if profile.installationProbe == .publicURLScheme {
+            guard let launchURL = voiceTool.publicLaunchURL else { return .unknown }
+            return NSWorkspace.shared.urlForApplication(toOpen: launchURL) == nil
+                ? .notInstalled
+                : .available
+        }
+
+        return profile.installationProbe == .none ? .unknown : .available
     }
 
     static func selectIfNeeded(

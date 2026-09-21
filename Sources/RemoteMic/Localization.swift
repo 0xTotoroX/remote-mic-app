@@ -1,6 +1,58 @@
 import Combine
 import Foundation
 
+/// Resolves the resource bundle used by the running app and by the SwiftPM
+/// screenshot executable. Release apps always win; the repository fallback is
+/// only considered when the executable has no localized resources (the normal
+/// `swift run` layout).
+enum RemoteMicResourceBundle {
+    static var mainOrDevelopment: Bundle {
+        if hasLocalizedResources(in: .main) {
+            return .main
+        }
+
+        for candidate in candidates {
+            if let bundle = Bundle(path: candidate.path), hasLocalizedResources(in: bundle) {
+                return bundle
+            }
+        }
+        return .main
+    }
+
+    private static var candidates: [URL] {
+        var urls: [URL] = []
+        if let explicitPath = ProcessInfo.processInfo.environment[
+            "REMOTE_MIC_RESOURCE_ROOT"
+        ], !explicitPath.isEmpty {
+            urls.append(URL(fileURLWithPath: explicitPath, isDirectory: true))
+        }
+
+        let currentDirectory = URL(
+            fileURLWithPath: FileManager.default.currentDirectoryPath,
+            isDirectory: true
+        )
+        urls.append(currentDirectory.appendingPathComponent("Resources", isDirectory: true))
+
+        // `#filePath` points into Sources/RemoteMic in local SwiftPM builds.
+        // This candidate is only used after Bundle.main failed the resource
+        // check, so it cannot override resources embedded in a shipped app.
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        urls.append(sourceRoot.appendingPathComponent("Resources", isDirectory: true))
+        return urls.reduce(into: []) { result, url in
+            guard !result.contains(url) else { return }
+            result.append(url)
+        }
+    }
+
+    private static func hasLocalizedResources(in bundle: Bundle) -> Bool {
+        bundle.path(forResource: "en", ofType: "lproj") != nil ||
+            bundle.path(forResource: "zh-Hans", ofType: "lproj") != nil
+    }
+}
+
 enum AppLanguage: String, CaseIterable, Codable, Identifiable {
     case system
     case simplifiedChinese = "zh-Hans"

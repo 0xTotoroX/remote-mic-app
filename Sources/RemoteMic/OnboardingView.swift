@@ -6,6 +6,14 @@ import CoreImage.CIFilterBuiltins
 import SayAllMacRemoteCore
 import SwiftUI
 
+#if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
+import SayAllSiriRemote
+#endif
+
+#if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+import SayAllChromecase
+#endif
+
 private struct OnboardingInputMethodGuideStep: Identifiable {
     enum Content {
         case screenshot(String)
@@ -59,6 +67,9 @@ struct OnboardingView: View {
     @State private var externalToolMicrophoneConfirmed = false
     @State private var voiceTranscriptDeadlineToken = UUID()
     @State private var suppressConnectedPhysicalRemoteAutoRouteOnce = false
+    @State private var isCapturingVoiceShortcut = false
+    @State private var shortcutCaptureErrorKey: String?
+    @State private var vokieDeepLinkStatus: SayAllDeepLinkStatus?
 
     private let permissionRefreshTimer = Timer.publish(
         every: 1,
@@ -103,7 +114,6 @@ struct OnboardingView: View {
         .environment(\.locale, localization.locale)
         .frame(minWidth: 980, minHeight: 732)
         .onAppear {
-            enforceOnboardingVoiceKeyPolicy()
             refreshPermissionStates()
             refreshVoiceToolAvailability()
             prepareForStep(settings.onboardingStep)
@@ -136,12 +146,19 @@ struct OnboardingView: View {
                 break
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .sayAllDeepLinkReceived)) { notification in
+            guard let request = notification.object as? SayAllDeepLinkRequest,
+                  request.source == "vokie" else { return }
+            vokieDeepLinkStatus = request.status
+            refreshVoiceToolAvailability()
+        }
         .onReceive(model.$isConnected.removeDuplicates()) { isConnected in
             guard isConnected else { return }
             routeConnectedPhysicalRemoteIfNeeded()
         }
         .onReceive(model.$activeRemoteButtons) { buttons in
             guard settings.onboardingControlMethod == .physicalRemote,
+                  selectedPhysicalRemoteProfileMatchesSource,
                   !buttons.isEmpty else { return }
             if settings.onboardingStep == .remote {
                 recordRemoteControlButtons(buttons, source: "physical_remote")
@@ -151,7 +168,8 @@ struct OnboardingView: View {
             }
         }
         .onReceive(model.$lastRemoteButtonPress.compactMap { $0 }) { button in
-            guard settings.onboardingControlMethod == .physicalRemote else { return }
+            guard settings.onboardingControlMethod == .physicalRemote,
+                  selectedPhysicalRemoteProfileMatchesSource else { return }
             if settings.onboardingStep == .remote {
                 recordRemoteControlButtons(Set([button]), source: "physical_remote")
                 recoverRemoteConnectionIfNeeded()
@@ -196,7 +214,6 @@ struct OnboardingView: View {
             }
         }
         .onChange(of: settings.onboardingStep) { step in
-            enforceOnboardingVoiceKeyPolicy()
             prepareForStep(step)
         }
         .onChange(of: settings.onboardingVoiceTool) { _ in
@@ -297,7 +314,11 @@ struct OnboardingView: View {
                 Button {
                     goBack(to: previous)
                 } label: {
-                    Label("onboarding.action.back", systemImage: "arrow.left")
+                    Label {
+                        Text(verbatim: localization.text("onboarding.action.back"))
+                    } icon: {
+                        Image(systemName: "arrow.left")
+                    }
                         .font(.system(size: 13, weight: .medium))
                 }
                 .buttonStyle(.plain)
@@ -362,7 +383,7 @@ struct OnboardingView: View {
     private var welcomeContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.welcome.title")
-            Text("onboarding.welcome.detail")
+            Text(verbatim: localization.text("onboarding.welcome.detail"))
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -379,11 +400,12 @@ struct OnboardingView: View {
     }
 
     private var voiceToolContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 10) {
             onboardingTitle("onboarding.voice_tool.title")
-            Text("onboarding.voice_tool.detail")
+            Text(verbatim: localization.text("onboarding.voice_tool.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             onboardingVoiceKeyMigrationNotice
 
@@ -392,7 +414,7 @@ struct OnboardingView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Color.orange)
-                    Text("onboarding.voice_tool.none_detected")
+                    Text(verbatim: localization.text("onboarding.voice_tool.none_detected"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -408,10 +430,10 @@ struct OnboardingView: View {
 
             LazyVGrid(
                 columns: [
-                    GridItem(.flexible(), spacing: 10, alignment: .top),
+                    GridItem(.flexible(), spacing: 8, alignment: .top),
                     GridItem(.flexible(), alignment: .top),
                 ],
-                spacing: 10
+                spacing: 8
             ) {
                 ForEach(visibleVoiceTools) { tool in
                     Button {
@@ -433,12 +455,22 @@ struct OnboardingView: View {
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.leading)
-                                    .lineLimit(4, reservesSpace: true)
-                                if tool == .doubao,
-                                   voiceToolAvailability[tool] == .notInstalled {
-                                    Text("onboarding.voice_tool.status.not_installed")
+                                    .lineLimit(3, reservesSpace: true)
+                                if tool == .vokie {
+                                    Text(verbatim: localization.text("onboarding.voice_tool.vokie.deep_integration"))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                                if voiceToolAvailability[tool] == .notInstalled {
+                                    Text(verbatim: localization.text("onboarding.voice_tool.status.not_installed"))
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(.orange)
+                                        .lineLimit(1)
+                                } else if voiceToolAvailability[tool] == .unknown,
+                                          tool != .other {
+                                    Text(verbatim: localization.text("onboarding.voice_tool.status.unknown"))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
                             }
@@ -447,9 +479,9 @@ struct OnboardingView: View {
                                 .font(.system(size: 17))
                                 .foregroundStyle(settings.onboardingVoiceTool == tool ? Color.accentColor : Color.secondary)
                         }
-                        .padding(12)
+                        .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 112, alignment: .top)
+                        .frame(height: 104, alignment: .top)
                         .background(
                             settings.onboardingVoiceTool == tool
                                 ? Color.accentColor.opacity(0.09)
@@ -472,13 +504,12 @@ struct OnboardingView: View {
 
             if voiceToolAvailability[.doubao] == .notInstalled {
                 HStack(spacing: 8) {
-                    Text("onboarding.voice_tool.doubao.install_detail")
+                    Text(verbatim: localization.text("onboarding.voice_tool.doubao.install_detail"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                    Link(
-                        "onboarding.voice_tool.doubao.install",
-                        destination: AppLinks.doubaoInputMethod
-                    )
+                    Link(destination: AppLinks.doubaoInputMethod) {
+                        Text(verbatim: localization.text("onboarding.voice_tool.doubao.install"))
+                    }
                     .font(.system(size: 12, weight: .semibold))
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -489,7 +520,7 @@ struct OnboardingView: View {
                     Image(systemName: "mic.badge.xmark")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Color.accentColor)
-                    Text("onboarding.voice_tool.other.setup_detail")
+                    Text(verbatim: localization.text("onboarding.voice_tool.other.setup_detail"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -510,35 +541,52 @@ struct OnboardingView: View {
     }
 
     private var onboardingVoiceKeyControl: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("connection.voice_key_mode.title")
-                .font(.system(size: 13, weight: .semibold))
-
+        let profile = VoiceToolAdapterProfile.profile(for: settings.onboardingVoiceTool)
+        return VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.green)
-                Text(
-                    settings.onboardingVoiceTool == .typeless
-                        ? "onboarding.voice_tool.typeless.fn_required"
-                        : "onboarding.voice_tool.fn_only"
-                )
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+                Text(verbatim: localization.text("onboarding.voice_tool.binding.title"))
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer(minLength: 4)
+                Button {
+                    settings.setOnboardingVoiceBindingPreference(.documentedDefault)
+                } label: {
+                    Label(
+                        "onboarding.voice_tool.binding.recommended",
+                        systemImage: settings.onboardingVoiceBindingPreference == .documentedDefault
+                            ? "checkmark.circle.fill"
+                            : "circle"
+                    )
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    settings.setOnboardingVoiceBindingPreference(.learnCurrent)
+                } label: {
+                    Label(
+                        "onboarding.voice_tool.binding.learn",
+                        systemImage: settings.onboardingVoiceBindingPreference == .learnCurrent
+                            ? "checkmark.circle.fill"
+                            : "circle"
+                    )
+                }
+                .buttonStyle(.bordered)
             }
 
-            Text(
-                LocalizedMessage(
-                    "onboarding.voice_tool.voice_key_help",
-                    arguments: [
-                        localization.text("connection.voice_key.mode.fn"),
-                    ]
-                ).text(using: localization)
-            )
+            Text(settings.onboardingVoiceBindingPreference == .learnCurrent
+                ? "onboarding.voice_tool.binding.learn_detail"
+                : "onboarding.voice_tool.binding.recommended_detail")
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+
+            if settings.onboardingVoiceBindingPreference == .documentedDefault {
+                Text(defaultBindingSummary(profile: profile))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(profile.evidenceState == .verified ? Color.green : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(12)
+        .padding(10)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
     }
 
@@ -558,7 +606,7 @@ struct OnboardingView: View {
                     )
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
-                    Text("onboarding.voice_key.migration.detail")
+                    Text(verbatim: localization.text("onboarding.voice_key.migration.detail"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -575,88 +623,212 @@ struct OnboardingView: View {
     }
 
     private var remoteAvailabilityContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            onboardingTitle("onboarding.remote_availability.title")
-            Text("onboarding.remote_availability.detail")
+        let compact = availablePhysicalControlSources.count > 1 && !availableCompanionControlSources.isEmpty
+        return VStack(alignment: .leading, spacing: compact ? 10 : 18) {
+            onboardingTitle("onboarding.control_source.title")
+            Text(verbatim: localization.text("onboarding.control_source.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(spacing: 12) {
-                ForEach([
-                    OnboardingRemoteAvailability.hasRemote,
-                    .noRemote,
-                ]) { availability in
-                    Button {
-                        selectRemoteAvailability(availability)
-                    } label: {
-                        HStack(spacing: 16) {
-                            Image(systemName: remoteAvailabilityIcon(availability))
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 46, height: 46)
-                                .background(
-                                    Color.accentColor.opacity(0.10),
-                                    in: RoundedRectangle(cornerRadius: 12)
-                                )
+            Text(verbatim: localization.text("onboarding.control_source.hardware"))
+                .font(.system(size: 13, weight: .semibold))
 
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(spacing: 8) {
-                                    Text(localization.text(availability.titleKey))
-                                        .font(.system(size: 16, weight: .semibold))
-                                    if availability == .hasRemote {
-                                        Text("onboarding.remote_availability.recommended")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(Color.accentColor)
-                                            .padding(.horizontal, 7)
-                                            .padding(.vertical, 2)
-                                            .background(Color.accentColor.opacity(0.10), in: Capsule())
-                                    }
-                                }
-                                Text(localization.text(availability.detailKey))
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer(minLength: 10)
-                            Image(systemName: settings.onboardingRemoteAvailability == availability
-                                ? "checkmark.circle.fill"
-                                : "circle")
-                                .font(.system(size: 19))
-                                .foregroundStyle(
-                                    settings.onboardingRemoteAvailability == availability
-                                        ? Color.accentColor
-                                        : Color.secondary
-                                )
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-                        .background(
-                            settings.onboardingRemoteAvailability == availability
-                                ? Color.accentColor.opacity(0.09)
-                                : Color.primary.opacity(0.035),
-                            in: RoundedRectangle(cornerRadius: 14)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(
-                                    settings.onboardingRemoteAvailability == availability
-                                        ? Color.accentColor.opacity(0.65)
-                                        : Color.primary.opacity(0.08),
-                                    lineWidth: 1
-                                )
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                spacing: compact ? 8 : 10
+            ) {
+                ForEach(availablePhysicalControlSources) { source in
+                    controlSourceCard(source, emphasized: true)
+                }
+            }
+
+            if !availableCompanionControlSources.isEmpty {
+                Text(verbatim: localization.text("onboarding.control_source.alternatives"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: compact ? 8 : 10) {
+                    ForEach(availableCompanionControlSources) { source in
+                        controlSourceCard(source, emphasized: false)
+                    }
+                }
+            }
+
+            if settings.onboardingControlSource.supportedGestureModes.count > 1 {
+                gestureModeChoice
+            }
+
+            if let plan = proposedPairingPlan {
+                pairingPlanSummary(plan)
+            } else if settings.onboardingControlSource != .unselected {
+                statusCard(
+                    icon: "exclamationmark.triangle.fill",
+                    title: localization.text("onboarding.pairing_plan.needs_learning"),
+                    detail: localization.text("onboarding.pairing_plan.needs_learning_detail"),
+                    isComplete: false,
+                    pendingColor: .orange
+                )
+            }
+        }
+    }
+
+    private var availablePhysicalControlSources: [OnboardingControlSource] {
+        OnboardingBuildCapabilities.availableControlSources.filter {
+            [.xiaomiRemote, .siriRemote, .chromecastRemote].contains($0)
+        }
+    }
+
+    private var availableCompanionControlSources: [OnboardingControlSource] {
+        OnboardingBuildCapabilities.availableControlSources.filter {
+            [.appleCompanion, .webRemote].contains($0)
+        }
+    }
+
+    private func controlSourceCard(
+        _ source: OnboardingControlSource,
+        emphasized: Bool
+    ) -> some View {
+        let compact = availablePhysicalControlSources.count > 1
+        return Button {
+            selectControlSource(source)
+        } label: {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: controlSourceIcon(source))
+                    .font(.system(size: emphasized ? 21 : 17, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: emphasized ? 40 : 34, height: emphasized ? 40 : 34)
+                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(localization.text(source.titleKey))
+                            .font(.system(size: emphasized ? 14 : 13, weight: .semibold))
+                            .lineLimit(compact ? 2 : nil)
+                        if source == .xiaomiRemote {
+                            Text(verbatim: localization.text("onboarding.control_source.recommended"))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
-                    .buttonStyle(.plain)
+                    Text(localization.text(source.detailKey))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(compact ? 2 : 3)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: settings.onboardingControlSource == source
+                    ? "checkmark.circle.fill"
+                    : "circle")
+                    .foregroundStyle(settings.onboardingControlSource == source
+                        ? Color.accentColor
+                        : Color.secondary)
+            }
+            .padding(compact ? 10 : 12)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: emphasized
+                    ? (availablePhysicalControlSources.count > 1 ? 84 : 92)
+                    : (availablePhysicalControlSources.count > 1 ? 64 : 76),
+                alignment: .topLeading
+            )
+            .background(
+                settings.onboardingControlSource == source
+                    ? Color.accentColor.opacity(0.09)
+                    : Color.primary.opacity(emphasized ? 0.04 : 0.025),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        settings.onboardingControlSource == source
+                            ? Color.accentColor.opacity(0.65)
+                            : Color.primary.opacity(0.08),
+                        lineWidth: 1
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var gestureModeChoice: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(verbatim: localization.text("onboarding.gesture.title"))
+                .font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 6) {
+                ForEach(VoiceGestureMode.allCases) { mode in
+                    Button {
+                        settings.setOnboardingPreferredGesture(mode)
+                    } label: {
+                        Label(
+                            localization.text("onboarding.gesture.\(mode.rawValue)"),
+                            systemImage: effectivePreferredGesture == mode
+                                ? "checkmark.circle.fill"
+                                : "circle"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!VoiceToolAdapterProfile.profile(
+                        for: settings.onboardingVoiceTool
+                    ).supportedModes.contains(mode))
                 }
             }
         }
     }
 
+    private func pairingPlanSummary(_ plan: OnboardingVoicePairingPlan) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label {
+                Text(verbatim: localization.text("onboarding.pairing_plan.title"))
+            } icon: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+                .font(.system(size: 13, weight: .semibold))
+            Text(
+                LocalizedMessage(
+                    "onboarding.pairing_plan.summary",
+                    arguments: [
+                        localization.text("onboarding.gesture.\(plan.binding.gestureMode.rawValue)"),
+                        localization.text(plan.binding.shortcut.localizationKey),
+                        localization.text(plan.fnTapModeEnabled
+                            ? "onboarding.pairing_plan.fn_tap_on"
+                            : "onboarding.pairing_plan.fn_tap_off"),
+                    ]
+                ).text(using: localization)
+            )
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            if plan.evidenceState != .verified {
+                Text(verbatim: localization.text("onboarding.pairing_plan.pending_evidence"))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.orange)
+            }
+            if plan.binding.tool == .vokie {
+                HStack(spacing: 8) {
+                    Button("onboarding.vokie.open") {
+                        guard let url = VokieDeepLink.launchURL(for: plan) else { return }
+                        NSWorkspace.shared.open(url)
+                    }
+                    .buttonStyle(.bordered)
+                    if let vokieDeepLinkStatus {
+                        Text(localization.text("onboarding.vokie.status.\(vokieDeepLinkStatus.rawValue)"))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(vokieDeepLinkStatus == .failed ? Color.red : Color.secondary)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+    }
+
     private var controlMethodContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.control_method.title")
-            Text("onboarding.control_method.detail")
+            Text(verbatim: localization.text("onboarding.control_method.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -684,7 +856,7 @@ struct OnboardingView: View {
                                     Text(localization.text(method.titleKey))
                                         .font(.system(size: 15, weight: .semibold))
                                     if method == .iPhoneApp {
-                                        Text("onboarding.control_method.recommended")
+                                        Text(verbatim: localization.text("onboarding.control_method.recommended"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(Color.accentColor)
                                             .padding(.horizontal, 7)
@@ -694,7 +866,7 @@ struct OnboardingView: View {
                                                 in: Capsule()
                                             )
                                     } else if method == .webRemote {
-                                        Text("onboarding.control_method.no_iphone")
+                                        Text(verbatim: localization.text("onboarding.control_method.no_iphone"))
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(.secondary)
                                     }
@@ -866,7 +1038,7 @@ struct OnboardingView: View {
                             .stroke(Color.primary.opacity(0.10), lineWidth: 1)
                     }
             } else {
-                Text("onboarding.voice_tool.guide.image_missing")
+                Text(verbatim: localization.text("onboarding.voice_tool.guide.image_missing"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -890,7 +1062,7 @@ struct OnboardingView: View {
                             : "onboarding.voice_tool.system_fn.conflict"
                     ))
                     .font(.system(size: 14, weight: .semibold))
-                    Text("onboarding.voice_tool.system_fn.detail")
+                    Text(verbatim: localization.text("onboarding.voice_tool.system_fn.detail"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -913,7 +1085,7 @@ struct OnboardingView: View {
     private var permissionsContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.permissions.title")
-            Text("onboarding.permissions.detail")
+            Text(verbatim: localization.text("onboarding.permissions.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
 
@@ -953,6 +1125,70 @@ struct OnboardingView: View {
                     isComplete: true
                 )
             }
+
+            if settings.onboardingVoiceBindingPreference == .learnCurrent {
+                shortcutLearningCard
+            }
+        }
+    }
+
+    private var shortcutLearningCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: localization.text("onboarding.shortcut_learning.title"))
+                .font(.system(size: 14, weight: .semibold))
+            Text(verbatim: localization.text("onboarding.shortcut_learning.detail"))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if VoiceToolAdapterProfile.profile(
+                for: settings.onboardingVoiceTool
+            ).supportedModes.count > 1 {
+                gestureModeChoice
+            }
+
+            if let binding = settings.stagedVoiceToolBinding,
+               binding.source == .userLearned {
+                Label(
+                    LocalizedMessage(
+                        "onboarding.shortcut_learning.captured",
+                        arguments: [localization.text(binding.shortcut.localizationKey)]
+                    ).text(using: localization),
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.green)
+            } else {
+                Button(isCapturingVoiceShortcut
+                    ? "onboarding.shortcut_learning.waiting"
+                    : "onboarding.shortcut_learning.start") {
+                    shortcutCaptureErrorKey = nil
+                    isCapturingVoiceShortcut = true
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!accessibilityGranted || !inputMonitoringGranted)
+            }
+
+            if let shortcutCaptureErrorKey {
+                Text(localization.text(shortcutCaptureErrorKey))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+
+            if isCapturingVoiceShortcut {
+                OnboardingShortcutCaptureView(
+                    onCapture: handleLearnedShortcut,
+                    onFailure: handleShortcutCaptureFailure
+                )
+                .frame(width: 1, height: 1)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
         }
     }
 
@@ -973,7 +1209,7 @@ struct OnboardingView: View {
     private var physicalRemoteContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.remote.title")
-            Text("onboarding.remote.detail")
+            Text(verbatim: localization.text("onboarding.remote.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1011,13 +1247,15 @@ struct OnboardingView: View {
                 icon: selectedControlConnected
                     ? "checkmark.circle.fill"
                     : "dot.radiowaves.left.and.right",
-                title: !model.isConnected && selectedControlConnected
+                title: !selectedControlConnected && !observedRemoteButtons.isEmpty
                     ? localization.text("onboarding.remote.hid_connected")
-                    : model.connectionStatus.text(using: localization),
+                    : selectedControlConnected
+                        ? localization.text("onboarding.remote.connected")
+                        : localization.text("onboarding.remote.searching"),
                 detail: localization.text(
-                    model.isConnected
+                    selectedControlConnected
                         ? "onboarding.remote.connected_detail"
-                        : selectedControlConnected
+                        : !observedRemoteButtons.isEmpty
                             ? "onboarding.remote.hid_connected_detail"
                             : "onboarding.remote.searching_detail"
                 ),
@@ -1063,32 +1301,36 @@ struct OnboardingView: View {
 
     private var iPhoneRemoteContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            onboardingTitle("onboarding.iphone_remote.title")
-            Text("onboarding.iphone_remote.detail")
+            onboardingTitle("onboarding.apple_companion.title")
+            Text(verbatim: localization.text("onboarding.apple_companion.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Link(destination: AppLinks.testFlightPublicBeta) {
-                Label("onboarding.iphone_remote.install", systemImage: "arrow.up.right.square")
+                Label {
+                    Text(verbatim: localization.text("onboarding.apple_companion.install"))
+                } icon: {
+                    Image(systemName: "arrow.up.right.square")
+                }
             }
             .buttonStyle(.borderedProminent)
 
             statusCard(
-                icon: model.isPhoneRemoteConnected
+                icon: selectedControlConnected
                     ? "checkmark.circle.fill"
-                    : "iphone.radiowaves.left.and.right",
+                    : "iphone.and.arrow.forward",
                 title: localization.text(
-                    model.isPhoneRemoteConnected
-                        ? "onboarding.iphone_remote.connected"
-                        : "onboarding.iphone_remote.waiting"
+                    selectedControlConnected
+                        ? "onboarding.apple_companion.connected"
+                        : "onboarding.apple_companion.waiting"
                 ),
-                detail: localization.text("onboarding.iphone_remote.connection_detail"),
-                isComplete: model.isPhoneRemoteConnected
+                detail: localization.text("onboarding.apple_companion.connection_detail"),
+                isComplete: selectedControlConnected
             )
 
             controllerButtonStatusCard(
-                waitingDetailKey: "onboarding.iphone_remote.button_detail"
+                waitingDetailKey: "onboarding.apple_companion.button_detail"
             )
         }
     }
@@ -1096,7 +1338,7 @@ struct OnboardingView: View {
     private var webRemoteContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.web_remote.title")
-            Text("onboarding.web_remote.detail")
+            Text(verbatim: localization.text("onboarding.web_remote.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1150,7 +1392,7 @@ struct OnboardingView: View {
     private var audioContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             onboardingTitle("onboarding.audio.title")
-            Text("onboarding.audio.detail")
+            Text(verbatim: localization.text("onboarding.audio.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1225,7 +1467,7 @@ struct OnboardingView: View {
     private var voiceTestContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             onboardingTitle("onboarding.voice_test.title")
-            Text("onboarding.voice_test.detail")
+            Text(verbatim: localization.text("onboarding.voice_test.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
 
@@ -1257,7 +1499,7 @@ struct OnboardingView: View {
                 }
 
                 if transcript.isEmpty {
-                    Text("onboarding.voice_test.placeholder")
+                    Text(verbatim: localization.text("onboarding.voice_test.placeholder"))
                         .font(.system(size: 15))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 15)
@@ -1304,7 +1546,7 @@ struct OnboardingView: View {
             .fixedSize(horizontal: false, vertical: true)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("onboarding.voice_test.configuration.sayall_voice_key")
+                Text(verbatim: localization.text("onboarding.voice_test.configuration.sayall_voice_key"))
                     .font(.system(size: 12, weight: .medium))
                 Spacer(minLength: 8)
                 Label(
@@ -1318,7 +1560,7 @@ struct OnboardingView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("onboarding.voice_test.configuration.sayall_audio_output")
+                Text(verbatim: localization.text("onboarding.voice_test.configuration.sayall_audio_output"))
                     .font(.system(size: 12, weight: .medium))
                 Spacer(minLength: 8)
                 Label(
@@ -1350,7 +1592,7 @@ struct OnboardingView: View {
 
             if externalToolGlobalVoiceConfirmationRequired {
                 Toggle(isOn: $externalToolGlobalVoiceConfirmed) {
-                    Text("onboarding.voice_test.configuration.global_voice_checkbox")
+                Text(verbatim: localization.text("onboarding.voice_test.configuration.global_voice_checkbox"))
                         .font(.system(size: 12, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1373,7 +1615,11 @@ struct OnboardingView: View {
             .toggleStyle(.checkbox)
 
             if voiceAttempt.result == .externalToolNoCommit {
-                Label("onboarding.voice_test.configuration.no_commit", systemImage: "xmark.circle.fill")
+                Label {
+                    Text(verbatim: localization.text("onboarding.voice_test.configuration.no_commit"))
+                } icon: {
+                    Image(systemName: "xmark.circle.fill")
+                }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1391,7 +1637,7 @@ struct OnboardingView: View {
     private var controlsContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             onboardingTitle("onboarding.controls.title")
-            Text("onboarding.controls.detail")
+            Text(verbatim: localization.text("onboarding.controls.detail"))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
 
@@ -1439,7 +1685,7 @@ struct OnboardingView: View {
                 .font(.system(size: 46))
                 .foregroundStyle(Color.green)
             onboardingTitle("onboarding.complete.title")
-            Text("onboarding.complete.detail")
+            Text(verbatim: localization.text("onboarding.complete.detail"))
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1527,7 +1773,7 @@ struct OnboardingView: View {
             } else if settings.onboardingStep == .welcome || settings.onboardingStep == .voiceTool {
                 welcomeIllustration
             } else if settings.onboardingStep == .remoteAvailability {
-                remoteAvailabilityIllustration
+                selectedControlSourceIllustration
             } else if settings.onboardingStep == .controlMethod {
                 controlMethodIllustration
             } else if settings.onboardingStep == .complete {
@@ -1548,7 +1794,7 @@ struct OnboardingView: View {
             Image(systemName: "waveform")
                 .font(.system(size: 72, weight: .medium))
                 .foregroundStyle(Color.accentColor)
-            Text("onboarding.illustration.tagline")
+                Text(verbatim: localization.text("onboarding.illustration.tagline"))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
@@ -1556,20 +1802,65 @@ struct OnboardingView: View {
 
     private var remoteIllustration: some View {
         VStack(spacing: 16) {
-            if let remoteImage {
-                Image(nsImage: remoteImage)
+            onboardingRemotePhoto
+            sideStatusPanel
+        }
+        .padding(28)
+    }
+
+    @ViewBuilder
+    private var selectedControlSourceIllustration: some View {
+        switch settings.onboardingControlSource {
+        case .xiaomiRemote, .siriRemote, .chromecastRemote:
+            remoteIllustration
+        case .appleCompanion, .webRemote:
+            controlMethodIllustration
+        case .unselected:
+            remoteAvailabilityIllustration
+        }
+    }
+
+    @ViewBuilder
+    private var onboardingRemotePhoto: some View {
+        switch OnboardingRemotePhotoKind.resolve(
+            source: settings.onboardingControlSource,
+            selectedModel: settings.selectedRemoteProfile?.model
+        ) {
+        case let .bundled(resourceName):
+            if let image = bundledRemoteImage(resourceName: resourceName) {
+                Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: 190, maxHeight: 480)
                     .shadow(color: .black.opacity(0.20), radius: 16, y: 10)
             } else {
-                Image(systemName: "appletvremote.gen4.fill")
-                    .font(.system(size: 180))
-                    .foregroundStyle(.secondary)
+                remotePhotoPlaceholder
             }
-            sideStatusPanel
+        case .siriRemote:
+            #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
+            SiriRemoteConnectionPhoto()
+                .scaleEffect(1.8)
+                .frame(width: 190, height: 360)
+            #else
+            remotePhotoPlaceholder
+            #endif
+        case .chromecastRemote:
+            #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
+            ChromecaseConnectionPhoto()
+                .scaleEffect(1.8)
+                .frame(width: 190, height: 360)
+            #else
+            remotePhotoPlaceholder
+            #endif
+        case .placeholder:
+            remotePhotoPlaceholder
         }
-        .padding(28)
+    }
+
+    private var remotePhotoPlaceholder: some View {
+        Image(systemName: "appletvremote.gen4.fill")
+            .font(.system(size: 180))
+            .foregroundStyle(.secondary)
     }
 
     private var controlMethodIllustration: some View {
@@ -1580,7 +1871,7 @@ struct OnboardingView: View {
             }
             .font(.system(size: 58, weight: .medium))
             .foregroundStyle(Color.accentColor)
-            Text("onboarding.control_method.illustration")
+                Text(verbatim: localization.text("onboarding.control_method.illustration"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
@@ -1591,7 +1882,7 @@ struct OnboardingView: View {
             Image(systemName: "appletvremote.gen4.fill")
                 .font(.system(size: 150, weight: .medium))
                 .foregroundStyle(Color.accentColor)
-            Text("onboarding.remote_availability.illustration")
+                Text(verbatim: localization.text("onboarding.remote_availability.illustration"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
@@ -1620,7 +1911,7 @@ struct OnboardingView: View {
                     .frame(width: 220, height: 220)
                     .padding(12)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
-                Text("onboarding.iphone_remote.scan")
+                Text(verbatim: localization.text("onboarding.iphone_remote.scan"))
                     .font(.system(size: 15, weight: .semibold))
                     .multilineTextAlignment(.center)
             } else {
@@ -1651,7 +1942,7 @@ struct OnboardingView: View {
                         .padding(14)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
                 }
-                Text("onboarding.web_remote.scan")
+                Text(verbatim: localization.text("onboarding.web_remote.scan"))
                     .font(.system(size: 15, weight: .semibold))
                 Text(pairingCode.map(String.init).joined(separator: " "))
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
@@ -1665,19 +1956,19 @@ struct OnboardingView: View {
             case .connecting:
                 ProgressView()
                     .controlSize(.large)
-                Text("onboarding.web_remote.connecting")
+                Text(verbatim: localization.text("onboarding.web_remote.connecting"))
                     .font(.system(size: 15, weight: .semibold))
             case .unavailable, .failed:
                 Image(systemName: "wifi.exclamationmark")
                     .font(.system(size: 82))
                     .foregroundStyle(Color.orange)
-                Text("onboarding.web_remote.unavailable")
+                Text(verbatim: localization.text("onboarding.web_remote.unavailable"))
                     .font(.system(size: 15, weight: .semibold))
             case .disabled:
                 Image(systemName: "qrcode.viewfinder")
                     .font(.system(size: 100))
                     .foregroundStyle(Color.accentColor)
-                Text("onboarding.web_remote.preparing")
+                Text(verbatim: localization.text("onboarding.web_remote.preparing"))
                     .font(.system(size: 15, weight: .semibold))
             }
             sideStatusPanel
@@ -1695,7 +1986,7 @@ struct OnboardingView: View {
                     .font(.system(size: 74, weight: .bold))
                     .foregroundStyle(Color.green)
             }
-            Text("onboarding.complete.illustration")
+                Text(verbatim: localization.text("onboarding.complete.illustration"))
                 .font(.system(size: 18, weight: .semibold))
         }
     }
@@ -1935,24 +2226,34 @@ struct OnboardingView: View {
                 voiceAttempt.phase == .passed &&
                 externalToolConfigurationConfirmed
         }
+        if settings.onboardingStep == .remoteAvailability {
+            return settings.onboardingControlSource != .unselected &&
+                (settings.onboardingVoiceBindingPreference == .learnCurrent ||
+                    proposedPairingPlan != nil)
+        }
+        if settings.onboardingStep == .permissions,
+           settings.onboardingVoiceBindingPreference == .learnCurrent {
+            return policyAllowsContinue && settings.stagedVoiceToolBinding != nil
+        }
         return policyAllowsContinue &&
             (settings.onboardingStep != .voiceTool || voiceToolSelectionIsValid)
     }
 
     private var visibleVoiceTools: [OnboardingVoiceTool] {
-        var tools: [OnboardingVoiceTool] = [.doubao]
-        if voiceToolAvailability[.weixin] == .available {
-            tools.append(.weixin)
+        let fixedOrder: [OnboardingVoiceTool] = [
+            .vokie, .doubao, .weixin, .typeless, .chatterFly, .other,
+        ]
+        let currentInputSourceID = OnboardingInputSourceSwitcher.currentInputSourceID()
+        return fixedOrder.sorted { lhs, rhs in
+            let lhsRank = voiceToolSortRank(lhs, currentInputSourceID: currentInputSourceID)
+            let rhsRank = voiceToolSortRank(rhs, currentInputSourceID: currentInputSourceID)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return fixedOrder.firstIndex(of: lhs)! < fixedOrder.firstIndex(of: rhs)!
         }
-        if voiceToolAvailability[.typeless] == .available {
-            tools.append(.typeless)
-        }
-        tools.append(.other)
-        return tools
     }
 
     private var allRecognizedVoiceToolsUnavailable: Bool {
-        [OnboardingVoiceTool.doubao, .weixin, .typeless].allSatisfy {
+        [OnboardingVoiceTool.doubao, .weixin, .typeless, .vokie].allSatisfy {
             voiceToolAvailability[$0] == .notInstalled
         }
     }
@@ -1962,10 +2263,52 @@ struct OnboardingView: View {
         case .unselected:
             return false
         case .other:
-            return true
-        case .doubao, .weixin, .typeless:
+            return settings.onboardingVoiceBindingPreference == .learnCurrent
+        case .chatterFly:
+            return voiceToolAvailability[settings.onboardingVoiceTool] != .notInstalled
+        case .doubao, .weixin, .typeless, .vokie:
             return voiceToolAvailability[settings.onboardingVoiceTool] == .available
         }
+    }
+
+    private func voiceToolSortRank(
+        _ tool: OnboardingVoiceTool,
+        currentInputSourceID: String?
+    ) -> Int {
+        if tool.preferredInputSourceID == currentInputSourceID, currentInputSourceID != nil {
+            return 0
+        }
+        switch voiceToolAvailability[tool] ?? .unknown {
+        case .available: return 1
+        case .unknown: return 2
+        case .notInstalled: return 3
+        }
+    }
+
+    private var effectivePreferredGesture: VoiceGestureMode {
+        settings.onboardingPreferredGesture ?? proposedPairingPlan?.binding.gestureMode ?? .hold
+    }
+
+    private var proposedPairingPlan: OnboardingVoicePairingPlan? {
+        let selectedBinding: VoiceToolUserBinding?
+        if let staged = settings.stagedVoiceToolBinding,
+           staged.tool == settings.onboardingVoiceTool {
+            selectedBinding = staged
+        } else if let verified = settings.verifiedVoiceToolBinding,
+                  verified.tool == settings.onboardingVoiceTool,
+                  verified.validationState == .verified {
+            // 重跑 Onboarding 时，已验证的用户 Binding 高于工具文档默认值。
+            // 如果它与当前来源不兼容，resolve 会拒绝并回退到可用的推荐路径。
+            selectedBinding = verified
+        } else {
+            selectedBinding = nil
+        }
+        return OnboardingVoicePairingPlan.resolve(
+            tool: settings.onboardingVoiceTool,
+            controlSource: settings.onboardingControlSource,
+            preferredGesture: settings.onboardingPreferredGesture,
+            userBinding: selectedBinding
+        )
     }
 
     private var diagnosticContext: FirstUseDiagnosticContext {
@@ -2045,20 +2388,16 @@ struct OnboardingView: View {
     }
 
     private var selectedControlConnected: Bool {
-        switch settings.onboardingControlMethod {
-        case .physicalRemote:
+        if settings.onboardingControlMethod == .physicalRemote {
             return OnboardingFlowPolicy.isPhysicalRemoteRecognized(
                 at: settings.onboardingStep,
-                voiceConnectionReady: model.isConnected,
+                voiceConnectionReady: model.isOnboardingControlSourceConnected(
+                    settings.onboardingControlSource
+                ),
                 validatedHIDButtonObserved: !observedRemoteButtons.isEmpty
             )
-        case .iPhoneApp:
-            return model.isPhoneRemoteConnected
-        case .webRemote:
-            return webRemoteConnected
-        case .unselected:
-            return false
         }
+        return model.isOnboardingControlSourceConnected(settings.onboardingControlSource)
     }
 
     private var webRemoteConnected: Bool {
@@ -2103,27 +2442,27 @@ struct OnboardingView: View {
     }
 
     private var externalToolExpectedVoiceKeyText: String {
-        localization.text(
-            OnboardingVoiceTestConfigurationPolicy.expectsFnTap(
-                for: settings.onboardingVoiceTool
-            )
-                ? "onboarding.voice_test.configuration.voice_key_fn_tap"
-                : "onboarding.voice_test.configuration.voice_key_fn_hold"
-        )
+        guard let plan = proposedPairingPlan else {
+            return localization.text("onboarding.pairing_plan.needs_learning")
+        }
+        return LocalizedMessage(
+            "onboarding.voice_test.configuration.binding_expected",
+            arguments: [
+                localization.text(plan.binding.shortcut.localizationKey),
+                localization.text("onboarding.gesture.\(plan.binding.gestureMode.rawValue)"),
+            ]
+        ).text(using: localization)
     }
 
     private var externalToolExpectedVoiceKeyDiagnosticValue: String {
-        OnboardingVoiceTestConfigurationPolicy.expectsFnTap(
-            for: settings.onboardingVoiceTool
-        ) ? "fn_tap" : "fn_hold"
+        guard let plan = proposedPairingPlan else { return "unresolved" }
+        return "\(plan.binding.shortcut.rawValue)_\(plan.binding.gestureMode.rawValue)"
     }
 
     private var sayAllVoiceKeyConfigurationReady: Bool {
-        OnboardingVoiceTestConfigurationPolicy.isSayAllVoiceKeyReady(
-            voiceTool: settings.onboardingVoiceTool,
-            voiceKeyMode: settings.voiceKeyMode,
-            voiceFnTapModeEnabled: settings.voiceFnTapModeEnabled
-        )
+        guard let plan = proposedPairingPlan else { return false }
+        return settings.voiceKeyMode == plan.binding.shortcut &&
+            settings.voiceFnTapModeEnabled == plan.fnTapModeEnabled
     }
 
     private var sayAllVoiceKeyConfigurationText: String {
@@ -2166,15 +2505,11 @@ struct OnboardingView: View {
     }
 
     private var externalToolConfigurationConfirmed: Bool {
-        OnboardingVoiceTestConfigurationPolicy.isComplete(
-            voiceTool: settings.onboardingVoiceTool,
-            voiceKeyMode: settings.voiceKeyMode,
-            voiceFnTapModeEnabled: settings.voiceFnTapModeEnabled,
-            audioOutputReady: onboardingAudioReady,
-            externalVoiceKeyConfirmed: externalToolVoiceKeyConfirmed,
-            externalGlobalVoiceConfirmed: externalToolGlobalVoiceConfirmed,
-            externalMicrophoneConfirmed: externalToolMicrophoneConfirmed
-        )
+        sayAllVoiceKeyConfigurationReady &&
+            onboardingAudioReady &&
+            externalToolVoiceKeyConfirmed &&
+            (!externalToolGlobalVoiceConfirmationRequired || externalToolGlobalVoiceConfirmed) &&
+            externalToolMicrophoneConfirmed
     }
 
     private var voiceTestStatusText: String {
@@ -2193,8 +2528,11 @@ struct OnboardingView: View {
         return localization.text("onboarding.voice_test.waiting_voice")
     }
 
-    private var remoteImage: NSImage? {
-        guard let url = Bundle.main.url(forResource: "RC003-remote-photo", withExtension: "png") else {
+    private func bundledRemoteImage(resourceName: String) -> NSImage? {
+        guard let url = RemoteMicResourceBundle.mainOrDevelopment.url(
+            forResource: resourceName,
+            withExtension: "png"
+        ) else {
             return nil
         }
         return NSImage(contentsOf: url)
@@ -2205,7 +2543,20 @@ struct OnboardingView: View {
         case .doubao: return "quote.bubble.fill"
         case .weixin: return "message.fill"
         case .typeless: return "waveform.badge.mic"
+        case .vokie: return "sparkles.rectangle.stack.fill"
+        case .chatterFly: return "bird.fill"
         case .other: return "ellipsis.circle.fill"
+        case .unselected: return "circle"
+        }
+    }
+
+    private func controlSourceIcon(_ source: OnboardingControlSource) -> String {
+        switch source {
+        case .xiaomiRemote: return "appletvremote.gen4.fill"
+        case .siriRemote: return "appletvremote.gen4.fill"
+        case .chromecastRemote: return "tv.and.hifispeaker.fill"
+        case .appleCompanion: return "iphone.and.arrow.forward"
+        case .webRemote: return "safari.fill"
         case .unselected: return "circle"
         }
     }
@@ -2262,7 +2613,7 @@ struct OnboardingView: View {
                     content: .screenshot("weixin-input-settings")
                 ),
             ]
-        case .unselected, .typeless, .other:
+        case .unselected, .typeless, .vokie, .chatterFly, .other:
             return []
         }
 
@@ -2280,9 +2631,26 @@ struct OnboardingView: View {
         ]
     }
 
+    private func defaultBindingSummary(profile: VoiceToolAdapterProfile) -> String {
+        let descriptions = VoiceGestureMode.allCases.compactMap { mode -> String? in
+            guard let shortcut = profile.defaultShortcutByMode[mode] else { return nil }
+            return "\(localization.text("onboarding.gesture.\(mode.rawValue)")): " +
+                localization.text(shortcut.localizationKey)
+        }
+        if descriptions.isEmpty {
+            return localization.text("onboarding.voice_tool.binding.no_documented_default")
+        }
+        let evidence = localization.text(
+            profile.evidenceState == .verified
+                ? "onboarding.voice_tool.binding.evidence_verified"
+                : "onboarding.voice_tool.binding.evidence_pending"
+        )
+        return descriptions.joined(separator: " · ") + " · " + evidence
+    }
+
     private func onboardingGuideImage(resourceName: String) -> NSImage? {
         let appearance = colorScheme == .dark ? "dark" : "light"
-        guard let url = Bundle.main.url(
+        guard let url = RemoteMicResourceBundle.mainOrDevelopment.url(
             forResource: "\(resourceName)-\(appearance)",
             withExtension: "png",
             subdirectory: "Onboarding"
@@ -2294,8 +2662,11 @@ struct OnboardingView: View {
 
     private func selectVoiceTool(_ tool: OnboardingVoiceTool) {
         settings.setOnboardingVoiceTool(tool)
+        if tool == .other {
+            settings.setOnboardingVoiceBindingPreference(.learnCurrent)
+        }
         AppLogger.shared.write(
-            "ONBOARDING VOICE_TOOL selected=\(tool.rawValue) voice_key_policy=fn_only"
+            "ONBOARDING VOICE_TOOL selected=\(tool.rawValue) binding_policy=profile_or_learned"
         )
         selectedInputMethodGuideStep = 0
         switchToSelectedInputMethod()
@@ -2306,17 +2677,6 @@ struct OnboardingView: View {
         if let pending = settings.consumePendingOnboardingVoiceKeyMigration() {
             voiceKeyMigrationSource = pending
         }
-        guard settings.voiceKeyMode != .function else { return }
-        let previousMode = settings.voiceKeyMode.rawValue
-        voiceKeyMigrationSource = settings.voiceKeyMode
-        AppLogger.shared.write(
-            "ONBOARDING VOICE_KEY_POLICY requested from=\(previousMode) to=fn policy=fn_only"
-        )
-        model.setVoiceKeyMode(.function)
-        AppLogger.shared.write(
-            "ONBOARDING VOICE_KEY_POLICY result=\(settings.voiceKeyMode == .function ? "applied" : "blocked") " +
-                "voice_key_mode=\(settings.voiceKeyMode.rawValue) policy=fn_only"
-        )
     }
 
     private func refreshVoiceToolAvailability() {
@@ -2325,15 +2685,60 @@ struct OnboardingView: View {
             return
         }
         var availability: [OnboardingVoiceTool: OnboardingVoiceToolAvailability] = [:]
-        for tool in [OnboardingVoiceTool.doubao, .weixin, .typeless] {
+        for tool in [
+            OnboardingVoiceTool.doubao, .weixin, .typeless, .vokie, .chatterFly, .other,
+        ] {
             availability[tool] = OnboardingInputSourceSwitcher.availability(for: tool)
         }
         voiceToolAvailability = availability
+    }
 
-        let selected = settings.onboardingVoiceTool
-        if [.weixin, .typeless].contains(selected),
-           availability[selected] == .notInstalled {
-            settings.setOnboardingVoiceTool(.unselected)
+    private func selectControlSource(_ source: OnboardingControlSource) {
+        if settings.stagedVoiceToolBinding != nil {
+            settings.discardOnboardingVoiceTrial()
+            model.applyHIDSettings()
+        }
+        settings.setOnboardingControlSource(source)
+        if source.supportedGestureModes.count == 1 {
+            settings.setOnboardingPreferredGesture(source.supportedGestureModes.first)
+        } else {
+            settings.setOnboardingPreferredGesture(nil)
+        }
+        observedRemoteButtons.removeAll()
+        remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
+        testedControlButtons.removeAll()
+    }
+
+    private func handleLearnedShortcut(_ shortcut: CustomKeyboardShortcut) {
+        isCapturingVoiceShortcut = false
+        guard let modifier = shortcut.standaloneModifier,
+              let mode = VoiceKeyMode(standaloneModifier: modifier) else {
+            shortcutCaptureErrorKey = "onboarding.shortcut_learning.unsupported"
+            return
+        }
+        let gesture = settings.onboardingPreferredGesture ??
+            VoiceToolAdapterProfile.profile(for: settings.onboardingVoiceTool).recommendedMode ??
+            .hold
+        guard let plan = settings.stageLearnedOnboardingBinding(
+            shortcut: mode,
+            gesture: gesture
+        ) else {
+            shortcutCaptureErrorKey = "onboarding.shortcut_learning.incompatible"
+            return
+        }
+        shortcutCaptureErrorKey = nil
+        model.setVoiceKeyMode(plan.binding.shortcut)
+        model.setVoiceFnTapModeEnabled(plan.fnTapModeEnabled)
+        applyChromecastModeIfNeeded(plan)
+    }
+
+    private func handleShortcutCaptureFailure(_ failure: ShortcutCaptureStartFailure) {
+        isCapturingVoiceShortcut = false
+        switch failure {
+        case .accessibilityPermissionRequired:
+            shortcutCaptureErrorKey = "onboarding.shortcut_learning.permission_required"
+        case .eventTapUnavailable:
+            shortcutCaptureErrorKey = "onboarding.shortcut_learning.unavailable"
         }
     }
 
@@ -2756,7 +3161,7 @@ struct OnboardingView: View {
                 "external_global_voice_user_confirmed=\(voiceAttempt.externalToolGlobalVoiceUserConfirmed) " +
                 "external_microphone_observable=false " +
                 "external_microphone_user_confirmed=\(voiceAttempt.externalToolMicrophoneUserConfirmed) " +
-                "external_next_checks=trigger_mode_matches_fn,global_voice_enabled_if_required," +
+                "external_next_checks=trigger_matches_binding,global_voice_enabled_if_required," +
                 "microphone_matches_selected_device " +
                 "first_sample_latency_ms=\(voiceAttempt.firstSampleLatencyMilliseconds.map(String.init) ?? "unavailable") " +
                 "session_duration_ms=\(voiceAttempt.sessionDurationMilliseconds.map(String.init) ?? "unavailable") " +
@@ -2820,13 +3225,16 @@ struct OnboardingView: View {
             architecture: FirstUseDiagnosticSnapshot.architecture,
             voiceTool: settings.onboardingVoiceTool,
             voiceKeyMode: settings.voiceKeyMode,
+            voiceFnTapModeEnabled: settings.voiceFnTapModeEnabled,
             context: diagnosticContext,
             voiceAttempt: diagnosticVoiceAttempt,
             bluetoothStatus: model.connectionStatus.key,
             buttonStatus: model.hidStatus.key,
             audioStatus: model.audioStatus.key,
             events: settings.firstUseEvents,
-            appLanguage: localization.locale.identifier
+            appLanguage: localization.locale.identifier,
+            controlSource: settings.onboardingControlSource,
+            voiceBinding: settings.stagedVoiceToolBinding ?? settings.verifiedVoiceToolBinding
         )
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(snapshot.redactedText, forType: .string)
@@ -2879,11 +3287,18 @@ struct OnboardingView: View {
     }
 
     private func prepareSelectedControlConnection() {
-        switch settings.onboardingControlMethod {
-        case .physicalRemote:
+        switch settings.onboardingControlSource {
+        case .xiaomiRemote:
             model.refreshRemoteDiscovery()
             model.applyHIDSettings()
-        case .iPhoneApp:
+        case .siriRemote:
+            model.applyHIDSettings()
+        case .chromecastRemote:
+            #if SAYALL_CHROMECASE_ENABLED
+            model.applyChromecaseSettings()
+            model.reconnectChromecase()
+            #endif
+        case .appleCompanion:
             model.enablePhoneRemoteConnection()
         case .webRemote:
             if !model.webRemoteState.isEnabled {
@@ -2895,11 +3310,12 @@ struct OnboardingView: View {
     }
 
     private func routeConnectedPhysicalRemoteIfNeeded() {
+        guard availablePhysicalControlSources == [.xiaomiRemote] else { return }
         let suppressForUserBack = suppressConnectedPhysicalRemoteAutoRouteOnce
         suppressConnectedPhysicalRemoteAutoRouteOnce = false
         guard OnboardingFlowPolicy.shouldAutoSelectPhysicalRemote(
             at: settings.onboardingStep,
-            remoteConnected: model.isConnected,
+            remoteConnected: model.isOnboardingControlSourceConnected(.xiaomiRemote),
             suppressForUserBack: suppressForUserBack
         ) else {
             if suppressForUserBack {
@@ -2911,7 +3327,7 @@ struct OnboardingView: View {
             return
         }
         settings.setOnboardingRemoteAvailability(.hasRemote)
-        selectControlMethod(.physicalRemote)
+        selectControlSource(.xiaomiRemote)
         AppLogger.shared.write(
             "ONBOARDING NAVIGATION from=remoteAvailability to=permissions reason=connected_physical_remote"
         )
@@ -2930,14 +3346,30 @@ struct OnboardingView: View {
     }
 
     private func selectedControlAcceptsVoice(_ source: UsageEventSource?) -> Bool {
-        switch settings.onboardingControlMethod {
-        case .physicalRemote:
-            return source == .bluetoothRemote
-        case .iPhoneApp:
+        switch settings.onboardingControlSource {
+        case .xiaomiRemote, .siriRemote, .chromecastRemote:
+            return source == .bluetoothRemote &&
+                (model.activePhysicalVoiceControlSource == settings.onboardingControlSource ||
+                    selectedPhysicalRemoteProfileMatchesSource)
+        case .appleCompanion:
             return source == .nearbyPhone
         case .webRemote:
             return source == .webRemote
         case .unselected:
+            return false
+        }
+    }
+
+    private var selectedPhysicalRemoteProfileMatchesSource: Bool {
+        guard let model = settings.selectedRemoteProfile?.model else { return false }
+        switch settings.onboardingControlSource {
+        case .xiaomiRemote:
+            return !model.usesPrivateAdapter
+        case .siriRemote:
+            return model.isAppleSiriRemote
+        case .chromecastRemote:
+            return model.isChromecaseRemote
+        case .appleCompanion, .webRemote, .unselected:
             return false
         }
     }
@@ -2958,27 +3390,27 @@ struct OnboardingView: View {
 
     private func continueFlow() {
         guard canContinue else { return }
+        if settings.onboardingStep == .voiceTest {
+            settings.verifyOnboardingVoiceBinding()
+        }
         if settings.onboardingStep != .voiceTest {
             settings.recordFirstUseEvent(.passed, step: settings.onboardingStep)
         }
         if settings.onboardingStep == .remoteAvailability {
-            switch settings.onboardingRemoteAvailability {
-            case .hasRemote:
-                settings.setOnboardingControlMethod(.physicalRemote)
-                settings.setOnboardingStep(.permissions)
-            case .noRemote:
-                settings.setOnboardingControlMethod(.unselected)
-                settings.setOnboardingStep(.controlMethod)
-            case .unselected:
-                break
+            if settings.onboardingVoiceBindingPreference == .documentedDefault,
+               let plan = proposedPairingPlan {
+                settings.beginOnboardingVoiceTrial(plan)
+                model.setVoiceKeyMode(plan.binding.shortcut)
+                model.setVoiceFnTapModeEnabled(plan.fnTapModeEnabled)
+                applyChromecastModeIfNeeded(plan)
             }
+            settings.setOnboardingStep(.permissions)
             return
         }
         if settings.onboardingStep == .permissions {
             if settings.onboardingControlMethod == .physicalRemote {
                 settings.customMappingEnabled = true
             }
-            model.setVoiceFnTapModeEnabled(settings.onboardingVoiceTool == .typeless)
         }
         if settings.onboardingStep == .complete {
             settings.completeOnboarding()
@@ -2990,8 +3422,7 @@ struct OnboardingView: View {
     }
 
     private var previousStep: OnboardingStep? {
-        if settings.onboardingStep == .permissions,
-           settings.onboardingRemoteAvailability == .hasRemote {
+        if settings.onboardingStep == .permissions {
             return .remoteAvailability
         }
         return settings.onboardingStep.previous
@@ -3007,7 +3438,18 @@ struct OnboardingView: View {
             "ONBOARDING NAVIGATION from=\(settings.onboardingStep.rawValue) " +
                 "to=\(previous.rawValue) reason=user_back"
         )
+        if settings.onboardingStep == .permissions, previous == .remoteAvailability {
+            settings.discardOnboardingVoiceTrial()
+            model.applyHIDSettings()
+        }
         settings.setOnboardingStep(previous)
+    }
+
+    private func applyChromecastModeIfNeeded(_ plan: OnboardingVoicePairingPlan) {
+        guard plan.chromecastVoiceMode != nil else { return }
+        #if SAYALL_CHROMECASE_ENABLED
+        model.applyChromecaseSettings()
+        #endif
     }
 
     private func requestBluetoothPermission() {
@@ -3215,5 +3657,64 @@ private final class OnboardingTranscriptScrollView: NSScrollView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         didMoveToWindowHandler?()
+    }
+}
+
+private struct OnboardingShortcutCaptureView: NSViewRepresentable {
+    let onCapture: (CustomKeyboardShortcut) -> Void
+    let onFailure: (ShortcutCaptureStartFailure) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCapture: onCapture, onFailure: onFailure)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.startMonitoring()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onCapture = onCapture
+        context.coordinator.onFailure = onFailure
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stopMonitoring()
+    }
+
+    final class Coordinator {
+        var onCapture: (CustomKeyboardShortcut) -> Void
+        var onFailure: (ShortcutCaptureStartFailure) -> Void
+        private var monitor: ShortcutCaptureMonitor?
+
+        init(
+            onCapture: @escaping (CustomKeyboardShortcut) -> Void,
+            onFailure: @escaping (ShortcutCaptureStartFailure) -> Void
+        ) {
+            self.onCapture = onCapture
+            self.onFailure = onFailure
+        }
+
+        func startMonitoring() {
+            guard monitor == nil else { return }
+            let monitor = ShortcutCaptureMonitor(onCapture: onCapture)
+            self.monitor = monitor
+            if case let .failure(failure) = monitor.start() {
+                self.monitor = nil
+                DispatchQueue.main.async { [weak self] in
+                    self?.onFailure(failure)
+                }
+            }
+        }
+
+        func stopMonitoring() {
+            monitor?.stop()
+            monitor = nil
+        }
+
+        deinit {
+            stopMonitoring()
+        }
     }
 }
