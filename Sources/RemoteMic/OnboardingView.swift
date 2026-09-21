@@ -39,6 +39,8 @@ struct OnboardingView: View {
     @State private var voiceSamplesReceived = false
     @State private var voiceSessionEnded = false
     @State private var transcript = ""
+    @State private var transcriptCommitRequest = 0
+    @State private var lastVoiceTranscriptCandidate = ""
     @State private var manualTranscriptInputObserved = false
     @State private var lastRecordedFailure: FirstUseFailureReason?
     @State private var inputSourceSwitchResult: OnboardingInputSourceSwitchResult = .notApplicable
@@ -229,6 +231,7 @@ struct OnboardingView: View {
             )
         }
         .onChange(of: transcript) { updatedText in
+            captureVoiceTranscriptCandidate(updatedText)
             guard settings.onboardingStep == .voiceTest,
                   !updatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return
@@ -1235,7 +1238,9 @@ struct OnboardingView: View {
                 OnboardingTranscriptEditor(
                     text: $transcript,
                     focusRequest: transcriptFocusRequest,
-                    isActive: settings.onboardingStep == .voiceTest
+                    isActive: settings.onboardingStep == .voiceTest,
+                    commitRequest: transcriptCommitRequest,
+                    onTextStateChanged: captureVoiceTranscriptCandidate
                 ) { snapshot in
                     updateTranscriptFocus(snapshot)
                 }
@@ -2040,6 +2045,16 @@ struct OnboardingView: View {
         !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func captureVoiceTranscriptCandidate(_ text: String) {
+        guard settings.onboardingStep == .voiceTest,
+              voiceAttempt.phase == .recording || voiceAttempt.phase == .awaitingTranscript,
+              !manualTranscriptInputObserved,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        lastVoiceTranscriptCandidate = text
+    }
+
     private var verifiedTranscriptionAppeared: Bool {
         transcriptionAppeared && !manualTranscriptInputObserved
     }
@@ -2521,6 +2536,7 @@ struct OnboardingView: View {
         voiceSessionStarted = false
         voiceSamplesReceived = false
         voiceSessionEnded = false
+        lastVoiceTranscriptCandidate = ""
         manualTranscriptInputObserved = false
         transcript = ""
         voiceAttempt = FirstUseVoiceAttemptDiagnostic(
@@ -2603,6 +2619,7 @@ struct OnboardingView: View {
         voiceSessionStarted = true
         voiceSamplesReceived = false
         voiceSessionEnded = false
+        lastVoiceTranscriptCandidate = ""
         manualTranscriptInputObserved = false
         transcript = ""
 
@@ -2651,6 +2668,13 @@ struct OnboardingView: View {
         guard voiceAttempt.phase == .recording else { return }
         voiceSessionEnded = true
         voiceAttempt.phase = .awaitingTranscript
+        let attemptID = voiceAttempt.attemptID
+        let transcriptCandidate = lastVoiceTranscriptCandidate
+        transcriptCommitRequest &+= 1
+        scheduleTranscriptRecovery(
+            attemptID: attemptID,
+            candidate: transcriptCandidate
+        )
         let targetReadyAtEnd = transcriptEditorMounted && transcriptWindowKey && transcriptFirstResponder
         voiceAttempt.firstResponderAtEnd = targetReadyAtEnd
         voiceAttempt.focusReadyAtEnd = targetReadyAtEnd
@@ -2675,6 +2699,25 @@ struct OnboardingView: View {
             finishVoiceAttempt(result: result)
         } else {
             scheduleVoiceTranscriptDeadline(attemptID: voiceAttempt.attemptID)
+        }
+    }
+
+    private func scheduleTranscriptRecovery(attemptID: Int, candidate: String) {
+        guard !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        for delay in [0.05, 0.2, 0.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard settings.onboardingStep == .voiceTest,
+                      voiceAttempt.attemptID == attemptID,
+                      voiceSessionEnded,
+                      !manualTranscriptInputObserved,
+                      transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    return
+                }
+                transcript = candidate
+                AppLogger.shared.write(
+                    "ONBOARDING TRANSCRIPT restored_after_voice_release=true source=voice_candidate"
+                )
+            }
         }
     }
 
@@ -3054,6 +3097,8 @@ struct OnboardingTranscriptEditor: NSViewRepresentable {
     @Binding var text: String
     let focusRequest: Int
     let isActive: Bool
+    let commitRequest: Int
+    let onTextStateChanged: (String) -> Void
     let onFocusStateChanged: (OnboardingTranscriptFocusSnapshot) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -3103,6 +3148,7 @@ struct OnboardingTranscriptEditor: NSViewRepresentable {
         private weak var scrollView: OnboardingTranscriptScrollView?
         private weak var textView: NSTextView?
         private var appliedFocusRequest: Int?
+        private var appliedCommitRequest: Int?
         private var lastPublishedSnapshot: OnboardingTranscriptFocusSnapshot?
 
         init(parent: OnboardingTranscriptEditor) {
@@ -3139,8 +3185,14 @@ struct OnboardingTranscriptEditor: NSViewRepresentable {
 
         func update(parent: OnboardingTranscriptEditor) {
             self.parent = parent
-            if textView?.string != parent.text {
-                textView?.string = parent.text
+            if appliedCommitRequest != parent.commitRequest {
+                appliedCommitRequest = parent.commitRequest
+                commitMarkedTextIfNeeded()
+            }
+            if let textView,
+               !textView.hasMarkedText(),
+               textView.string != parent.text {
+                textView.string = parent.text
             }
             applyFocusRequestIfPossible()
             publishFocusSnapshot()
@@ -3154,8 +3206,11 @@ struct OnboardingTranscriptEditor: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView, parent.text != textView.string else { return }
-            parent.text = textView.string
+            guard let textView else { return }
+            let updatedText = textView.string
+            parent.onTextStateChanged(updatedText)
+            guard parent.text != updatedText else { return }
+            parent.text = updatedText
         }
 
         func textDidBeginEditing(_ notification: Notification) {
@@ -3181,6 +3236,19 @@ struct OnboardingTranscriptEditor: NSViewRepresentable {
             if window.makeFirstResponder(textView) {
                 appliedFocusRequest = parent.focusRequest
             }
+        }
+
+        private func commitMarkedTextIfNeeded() {
+            guard let textView, textView.hasMarkedText() else { return }
+            textView.unmarkText()
+            let committedText = textView.string
+            parent.onTextStateChanged(committedText)
+            if parent.text != committedText {
+                parent.text = committedText
+            }
+            AppLogger.shared.write(
+                "ONBOARDING TRANSCRIPT marked_text_commit=true"
+            )
         }
 
         private func publishFocusSnapshot() {
