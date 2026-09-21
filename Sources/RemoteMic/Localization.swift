@@ -33,14 +33,16 @@ enum RemoteMicResourceBundle {
         )
         urls.append(currentDirectory.appendingPathComponent("Resources", isDirectory: true))
 
+#if DEBUG
         // `#filePath` points into Sources/RemoteMic in local SwiftPM builds.
-        // This candidate is only used after Bundle.main failed the resource
-        // check, so it cannot override resources embedded in a shipped app.
+        // Keep this development-only fallback out of Release binaries so a
+        // shipped app never embeds the developer's absolute source path.
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         urls.append(sourceRoot.appendingPathComponent("Resources", isDirectory: true))
+#endif
         return urls.reduce(into: []) { result, url in
             guard !result.contains(url) else { return }
             result.append(url)
