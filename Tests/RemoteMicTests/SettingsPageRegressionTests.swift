@@ -532,13 +532,19 @@ struct SettingsPageRegressionTests {
             contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
             encoding: .utf8
         )
+        let sidebarStart = try #require(settingsSource.range(of: "private var sidebar: some View {"))
+        let visibleSectionsStart = try #require(settingsSource.range(
+            of: "private var visibleSections: [SettingsSection]",
+            range: sidebarStart.upperBound..<settingsSource.endIndex
+        ))
+        let sidebarSource = settingsSource[sidebarStart.lowerBound..<visibleSectionsStart.lowerBound]
 
         #expect(appSource.contains("window.isMovableByWindowBackground = false"))
         #expect(!appSource.contains("window.isMovableByWindowBackground = true"))
         #expect(settingsSource.contains("WindowDragArea()"))
         #expect(settingsSource.contains("window?.performDrag(with: event)"))
         #expect(settingsSource.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(settingsSource.contains(".ignoresSafeArea(.container, edges: .top)"))
+        #expect(!sidebarSource.contains(".ignoresSafeArea(.container, edges: .top)"))
     }
 
     @Test func settingsWindowEstablishesItsFullSizeBeforeCentering() throws {
@@ -810,7 +816,13 @@ struct SettingsPageRegressionTests {
         #expect(!source.contains("SidebarGlassModifier"))
         #expect(source.contains(".focusEffectDisabled()"))
         #expect(source.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(source.contains(".ignoresSafeArea(.container, edges: .top)"))
+        let sidebarStart = try #require(source.range(of: "private var sidebar: some View {"))
+        let visibleSectionsStart = try #require(source.range(
+            of: "private var visibleSections: [SettingsSection]",
+            range: sidebarStart.upperBound..<source.endIndex
+        ))
+        let sidebarSource = source[sidebarStart.lowerBound..<visibleSectionsStart.lowerBound]
+        #expect(!sidebarSource.contains(".ignoresSafeArea(.container, edges: .top)"))
         #expect(source.contains("showsAnchor: activeButtons.contains(placement.button)"))
         #expect(source.contains(".toggleStyle(.switch)"))
         #expect(source.contains("button_mapping.permission_prompt.open"))
@@ -1499,14 +1511,41 @@ struct SettingsPageRegressionTests {
         #expect(heatmapSource.contains("height: max(cellSize, 16)"))
         #expect(source.contains("dailyUsageStatistics(days: 26 * 7, calendar: calendar)"))
         #expect(source.contains("let rankingWidth = max(360, availableWidth * 0.42)"))
-        #expect(source.contains(".frame(width: rankingWidth, alignment: .top)"))
+        #expect(source.contains("ProposedViewSize(width: rankingWidth, height: nil)"))
         #expect(source.contains("statisticsVoiceSessionRankingPanel"))
-        #expect(source.contains("statisticsCalendarPanel\n                                statisticsVoiceSessionRankingPanel"))
+        #expect(source.contains("statisticsCalendarPanel\n                            statisticsVoiceSessionRankingPanel"))
         #expect(source.contains("entries.prefix(10)"))
         #expect(source.contains("settings.voiceSessionRanking.prefix(10)"))
         #expect(source.contains(".frame(maxWidth: .infinity, alignment: .top)"))
         #expect(source.contains(".frame(height: 250, alignment: .top)"))
         #expect(source.contains("ForEach(0..<7, id: \\.self)"))
+    }
+
+    @Test func profileStatisticsReportsIntrinsicHeightForBottomContent() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/SettingsView.swift"),
+            encoding: .utf8
+        )
+        let layoutStart = try #require(source.range(of: "private struct StatisticsColumnsLayout"))
+        let settingsStart = try #require(source.range(of: "struct SettingsView"))
+        let layoutSource = source[layoutStart.lowerBound..<settingsStart.lowerBound]
+        let statisticsStart = try #require(source.range(of: "private var statisticsPage"))
+        let summaryStart = try #require(source.range(
+            of: "private var statisticsSummaryGrid",
+            range: statisticsStart.upperBound..<source.endIndex
+        ))
+        let statisticsSource = source[statisticsStart.lowerBound..<summaryStart.lowerBound]
+
+        #expect(layoutSource.contains("max(leftSize.height, rightSize.height)"))
+        #expect(layoutSource.contains("ProposedViewSize(width: rankingWidth, height: nil)"))
+        #expect(statisticsSource.contains("StatisticsColumnsLayout"))
+        #expect(!statisticsSource.contains("GeometryReader"))
+        #expect(!statisticsSource.contains(".frame(minHeight: 648)"))
+        #expect(source.contains("statistics.ranking.view_all"))
     }
 
     @Test func corruptedSettingsBannerIsInlineAndNeverShrinksChineseBelowTwelvePoints() throws {
