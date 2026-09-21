@@ -1011,6 +1011,7 @@ final class AppSettings: ObservableObject {
 
     func setOnboardingVoiceTool(_ voiceTool: OnboardingVoiceTool) {
         guard onboardingVoiceTool != voiceTool else { return }
+        discardOnboardingVoiceTrial()
         onboardingVoiceTool = voiceTool
         onboardingVoiceBindingPreference = .documentedDefault
         onboardingPreferredGesture = nil
@@ -1019,12 +1020,14 @@ final class AppSettings: ObservableObject {
 
     func setOnboardingVoiceBindingPreference(_ preference: OnboardingVoiceBindingPreference) {
         guard onboardingVoiceBindingPreference != preference else { return }
+        discardOnboardingVoiceTrial()
         onboardingVoiceBindingPreference = preference
         stagedVoiceToolBinding = nil
     }
 
     func setOnboardingPreferredGesture(_ gesture: VoiceGestureMode?) {
         guard onboardingPreferredGesture != gesture else { return }
+        discardOnboardingVoiceTrial()
         onboardingPreferredGesture = gesture
         stagedVoiceToolBinding = nil
     }
@@ -1041,7 +1044,7 @@ final class AppSettings: ObservableObject {
         case .unselected:
             onboardingRemoteAvailability = .unselected
         }
-        stagedVoiceToolBinding = nil
+        discardOnboardingVoiceTrial()
     }
 
     func beginOnboardingVoiceTrial(_ plan: OnboardingVoicePairingPlan) {

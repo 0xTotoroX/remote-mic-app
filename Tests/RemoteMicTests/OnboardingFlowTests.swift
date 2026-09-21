@@ -608,7 +608,7 @@ struct OnboardingFlowTests {
         #expect(viewSource.contains("externalToolConfigurationConfirmed"))
         #expect(viewSource.contains("sayAllVoiceKeyConfigurationReady"))
         #expect(viewSource.contains("sayAllAudioOutputConfigurationText"))
-        #expect(viewSource.contains(".foregroundStyle(onboardingAudioReady ? Color.green : Color.red)"))
+        #expect(viewSource.contains(".foregroundStyle(isComplete ? Color.green : Color.red)"))
         #expect(viewSource.contains(".eventSourceStateID"))
         #expect(viewSource.contains(".eventSourceUnixProcessID"))
         #expect(viewSource.contains("manualTranscriptInputObserved = true"))
@@ -619,6 +619,8 @@ struct OnboardingFlowTests {
         #expect(viewSource.contains("textView.unmarkText()"))
         #expect(viewSource.contains("!textView.hasMarkedText"))
         #expect(viewSource.contains("restored_after_voice_release=true"))
+        #expect(viewSource.contains("scheduleVoiceCompletionEvaluation(attemptID: voiceAttempt.attemptID)"))
+        #expect(viewSource.contains("voiceAttempt.audioDelivery.result == .deliveredToSelectedDevice"))
     }
 
     @Test @MainActor func markedTranscriptTextCanBeCommittedWithoutChangingItsVisibleText() {
@@ -643,6 +645,28 @@ struct OnboardingFlowTests {
         #expect(!OnboardingVoiceTestConfigurationPolicy.requiresGlobalVoiceConfirmation(for: .vokie))
         #expect(!OnboardingVoiceTestConfigurationPolicy.requiresGlobalVoiceConfirmation(for: .chatterFly))
         #expect(!OnboardingVoiceTestConfigurationPolicy.requiresGlobalVoiceConfirmation(for: .other))
+    }
+
+    @Test func independentVoiceToolsMustBeRunningBeforeVoiceTestCanComplete() {
+        #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .typeless))
+        #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .vokie))
+        #expect(!OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .doubao))
+        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+            for: .typeless,
+            runtimeState: .running
+        ))
+        #expect(!OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+            for: .typeless,
+            runtimeState: .notRunning
+        ))
+        #expect(!OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+            for: .vokie,
+            runtimeState: .unknown
+        ))
+        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+            for: .doubao,
+            runtimeState: .notApplicable
+        ))
     }
 
     @Test func transcriptInputPolicyRejectsSyntheticAndUnknownEventSources() {

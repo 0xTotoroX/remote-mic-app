@@ -675,6 +675,9 @@
 "onboarding.voice_tool.other.detail" = "Test with your preferred voice input tool.";
 "onboarding.voice_tool.other.setup_detail" = "Another Voice Tool must support voice input. In that tool’s own settings, choose the correct microphone and confirm it can write text into a regular input field.";
 "onboarding.voice_tool.status.not_installed" = "Not installed";
+"onboarding.voice_tool.runtime.not_running" = "%@ is not running. Open it before testing voice input.";
+"onboarding.voice_tool.runtime.unknown" = "SayAll cannot confirm that %@ is running. Open it before testing voice input.";
+"onboarding.voice_tool.runtime.open" = "Open Tool";
 "onboarding.voice_tool.doubao.install_detail" = "Doubao Input Method is not installed. Install it, then return here and check again.";
 "onboarding.voice_tool.doubao.install" = "Install Doubao Input Method";
 "onboarding.voice_tool.typeless.fn_required" = "Typeless uses Fn/Globe taps, so this mode is fixed for compatibility.";
@@ -860,6 +863,7 @@
 "onboarding.voice_test.waiting_voice" = "Waiting for you to hold the voice key…";
 "onboarding.voice_test.receiving" = "Receiving voice audio…";
 "onboarding.voice_test.waiting_text" = "Audio received. Waiting for text to appear…";
+"onboarding.voice_test.tool_not_running" = "Open the selected voice tool before starting the test…";
 "onboarding.voice_test.manual_input" = "Keyboard input detected. Try again with the voice key.";
 "onboarding.voice_test.success" = "Voice and text input are confirmed";
 "onboarding.controls.title" = "Try your everyday control buttons";

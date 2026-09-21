@@ -327,7 +327,12 @@
 
 预期结果：首次进入、从其他 App 返回以及点击重试后，原生 `NSTextView` 都由当前窗口确认成为 `firstResponder`；无需额外点击即可让所选语音工具写入文字。只有当前所选来源的会话开始、PCM 样本数量大于零、松开后会话结束、所选 MiRemoteV 2ch 或 BlackHole 2ch 有效、单次 attempt 进入 `passed` 且文字由语音工具写入时才允许继续。进行中的正常阶段不写失败历史，每次 attempt 只产生一个 `passed` 或 `failed` 终态。每次会话的首个非空音频批次即可点亮样本检查，后续批次不会造成约 60 Hz 的整棵设置视图无效化；连续语音期间进程 CPU 不应再持续接近占满一个核心。只有确认来自 HID 系统且无用户进程来源的物理 `keyDown` 会标记手动输入；合成、combined/private、未知来源或缺少 CGEvent 的文字全部 fail-open。无线麦不读取第三方语音工具内部状态，也不记录音频内容、输入框文字或长度、输入事件来源 PID、键码、蓝牙地址、设备 UID 或前台 App。
 
-补充失败判定：语音键松开后已经显示的文字消失，或必须按回车/再次点击输入框才能保留文字，均视为失败。
+补充运行状态与配对切换检查：
+
+1. 对 Vokie 和 Typeless 分别关闭目标 App，再返回语音测试页；确认页面显示“工具未运行”并禁止继续。点击“打开工具”或手动启动后，页面状态刷新为运行中；仅已安装、可通过 URL scheme 唤起或已出现旧文字都不能绕过该门禁。
+2. 在“使用推荐配置”和“我修改过快捷键”之间切换，并在支持的工具上切换 hold/toggle；确认旧试用 Binding 被恢复，新的配对摘要和无线麦实际语音键同步，继续按钮按当前状态重新计算。
+
+补充失败判定：语音键松开后已经显示的文字消失，或必须按回车/再次点击输入框才能保留文字，均视为失败；目标 Vokie/Typeless 未运行时仍可进入页面但不能完成。
 
 自动化兼容门禁：Onboarding 文字监听必须保持 macOS 13 可编译，Intel Ventura Release 构建不得使用仅 macOS 14 可用的双参数 `onChange` 重载。
 
@@ -356,7 +361,7 @@
 - [ ] 中文与英文在 `1020 × 772` 下逐页检查，无文字或按钮裁切，无意外窗口尺寸变化。
 - [ ] 逐页检查普通用户可见的标题、正文、状态卡、按钮、提示、错误信息和帮助文案，只描述当前状态、实际影响与下一步操作，不出现“待真机验证”“需要兼容性验收”“待回归”“自动化/CI 已通过”“候选实现”“开发中”“验证中”等研发、测试或内部验收用语。
 - [ ] 未完成真实环境验收的能力未显示为支持、推荐或可正常使用；已经公开但当前不可用的能力只显示用户能理解的“暂不支持”“暂时无法使用”及可执行的替代方案或后续操作，技术原因码和验收状态仅保留在日志、复制诊断和内部验证证据中。
-- [ ] 当前流程每个控制来源均为 9 页；公开构建小米分支浅/深色共 18 张，完整包五个来源浅/深色共 90 张。所有页面在 `1020 × 772` 下不出现页面内部滚动，当前任务、修复动作和底部导航一次完整可见。
+- [ ] 当前流程每个控制来源均为 9 页；公开构建小米分支浅/深色共 18 张，完整包五个来源浅/深色共 90 张。正常状态页面在 `1020 × 772` 下完整可见；错误详情、长文案和实时检查超出可用高度时允许在当前栏垂直滚动，但不得裁切继续按钮或隐藏主要修复动作。
 - [ ] 所有中文文字最终显示字号不低于 12pt。
 - [ ] 浅色、深色、降低透明度和增强对比度下内容可读。
 - [ ] 语音测试输入框在浅色、深色下的占位符字体、光标和正文起点对齐，中文字号不低于 12pt。
@@ -377,7 +382,7 @@
 2. 使用生产隐藏入口构建一次 App，并通过 `REMOTE_MIC_ONBOARDING_SCREENSHOT_DIR`、`REMOTE_MIC_ONBOARDING_SCREENSHOT_APPEARANCE=light|dark` 生成截图；当前页面文件名第 3 页为 `03-control-source.png`。
 3. 公开构建设置 `REMOTE_MIC_ONBOARDING_SCREENSHOT_CONTROL_SOURCE=xiaomi_remote`，浅色和深色各生成 9 张。
 4. 完整 Package 构建分别设置 `REMOTE_MIC_ONBOARDING_SCREENSHOT_CONTROL_SOURCE=xiaomi_remote|siri_remote|chromecast_remote|apple_companion|web_remote`，每个来源浅色和深色各生成 9 张，共 90 张。截图前必须确认构建确实包含相应 Package，不能用公开构建伪造完整包入口。
-5. 对输入工具页额外覆盖豆包、微信、Typeless、Vokie、ChatterFly、其他工具，以及 available/not-installed/unknown；至少为“全部不可用”“Vokie 未安装”“ChatterFly unknown”生成浅/深色状态截图。
+5. 对输入工具页额外覆盖豆包、微信、Typeless、Vokie、ChatterFly、其他工具，以及 available/not-installed/unknown；至少为“全部不可用”“Vokie 未安装”“ChatterFly unknown”生成浅/深色状态截图。语音测试页另覆盖 Vokie/Typeless 未运行与运行中状态。
 6. 分别覆盖“使用推荐配置”和“我修改过快捷键”，确认推荐摘要、学习提示、hold/toggle、staged 状态和配对摘要无裁切。对 Vokie 额外覆盖 `partial`、`failed` 回流提示。
 7. 对旧正式配置设置 `REMOTE_MIC_ONBOARDING_SCREENSHOT_VOICE_KEY_MODE=left_command|right_command|right_option`，确认重新运行不会在欢迎或工具选择时立即覆盖；旧 Fn-only 迁移提示不得再被当作现行配置规则。
 8. 逐张用图像查看工具检查窗口 chrome、标题、导航、状态卡、右栏、裁切、对比度和中文字号，并在执行前后核对用户正式 Onboarding 进度未变化。

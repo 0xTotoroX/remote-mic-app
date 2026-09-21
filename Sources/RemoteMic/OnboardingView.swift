@@ -53,6 +53,7 @@ struct OnboardingView: View {
     @State private var lastRecordedFailure: FirstUseFailureReason?
     @State private var inputSourceSwitchResult: OnboardingInputSourceSwitchResult = .notApplicable
     @State private var voiceToolAvailability: [OnboardingVoiceTool: OnboardingVoiceToolAvailability] = [:]
+    @State private var voiceToolRuntimeState: [OnboardingVoiceTool: OnboardingVoiceToolRuntimeState] = [:]
     @State private var systemFunctionKeyUsage = OnboardingSystemFunctionKeyUsage.current
     @State private var voiceKeyMigrationSource: VoiceKeyMode?
     @State private var selectedInputMethodGuideStep = 0
@@ -124,6 +125,9 @@ struct OnboardingView: View {
             refreshPermissionStates()
             if settings.onboardingStep == .voiceTool {
                 refreshSystemFunctionKeyUsage()
+            }
+            if settings.onboardingStep == .voiceTest {
+                refreshSelectedVoiceToolRuntimeState()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -222,6 +226,7 @@ struct OnboardingView: View {
             resetExternalToolVoiceKeyConfirmation(reason: "voice_tool_changed")
             resetExternalToolGlobalVoiceConfirmation(reason: "voice_tool_changed")
             resetExternalToolMicrophoneConfirmation(reason: "voice_tool_changed")
+            refreshSelectedVoiceToolRuntimeState()
         }
         .onChange(of: settings.selectedAudioDeviceUID) { _ in
             resetExternalToolMicrophoneConfirmation(reason: "audio_device_changed")
@@ -273,6 +278,8 @@ struct OnboardingView: View {
             refreshVoiceAttemptObservableState(atDeadline: false)
             if voiceAttempt.audioDelivery.result == .deliveredToSelectedDevice {
                 finishVoiceAttempt(result: .passed)
+            } else {
+                scheduleVoiceCompletionEvaluation(attemptID: voiceAttempt.attemptID)
             }
         }
         .onChange(of: failureReason) { failure in
@@ -330,13 +337,17 @@ struct OnboardingView: View {
                 Color.clear.frame(height: 40)
             }
 
-            VStack(alignment: .leading, spacing: 18) {
-                stepContent
-                if let failureReason {
-                    recoveryCard(for: failureReason)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 18) {
+                    stepContent
+                    if let failureReason {
+                        recoveryCard(for: failureReason)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .scrollIndicators(.visible)
 
             HStack {
                 Spacer()
@@ -551,33 +562,37 @@ struct OnboardingView: View {
                     .font(.system(size: 13, weight: .semibold))
                 Spacer(minLength: 4)
                 Button {
-                    settings.setOnboardingVoiceBindingPreference(.documentedDefault)
+                    selectVoiceBindingPreference(.documentedDefault)
                 } label: {
-                    Label(
-                        "onboarding.voice_tool.binding.recommended",
-                        systemImage: settings.onboardingVoiceBindingPreference == .documentedDefault
+                    Label {
+                        Text(verbatim: localization.text("onboarding.voice_tool.binding.recommended"))
+                    } icon: {
+                        Image(systemName: settings.onboardingVoiceBindingPreference == .documentedDefault
                             ? "checkmark.circle.fill"
-                            : "circle"
-                    )
+                            : "circle")
+                    }
                 }
                 .buttonStyle(.bordered)
 
                 Button {
-                    settings.setOnboardingVoiceBindingPreference(.learnCurrent)
+                    selectVoiceBindingPreference(.learnCurrent)
                 } label: {
-                    Label(
-                        "onboarding.voice_tool.binding.learn",
-                        systemImage: settings.onboardingVoiceBindingPreference == .learnCurrent
+                    Label {
+                        Text(verbatim: localization.text("onboarding.voice_tool.binding.learn"))
+                    } icon: {
+                        Image(systemName: settings.onboardingVoiceBindingPreference == .learnCurrent
                             ? "checkmark.circle.fill"
-                            : "circle"
-                    )
+                            : "circle")
+                    }
                 }
                 .buttonStyle(.bordered)
             }
 
-            Text(settings.onboardingVoiceBindingPreference == .learnCurrent
-                ? "onboarding.voice_tool.binding.learn_detail"
-                : "onboarding.voice_tool.binding.recommended_detail")
+            Text(verbatim: localization.text(
+                settings.onboardingVoiceBindingPreference == .learnCurrent
+                    ? "onboarding.voice_tool.binding.learn_detail"
+                    : "onboarding.voice_tool.binding.recommended_detail"
+            ))
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -761,7 +776,7 @@ struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(VoiceGestureMode.allCases) { mode in
                     Button {
-                        settings.setOnboardingPreferredGesture(mode)
+                        selectPreferredGesture(mode)
                     } label: {
                         Label(
                             localization.text("onboarding.gesture.\(mode.rawValue)"),
@@ -810,9 +825,11 @@ struct OnboardingView: View {
             }
             if plan.binding.tool == .vokie {
                 HStack(spacing: 8) {
-                    Button("onboarding.vokie.open") {
+                    Button {
                         guard let url = VokieDeepLink.launchURL(for: plan) else { return }
                         NSWorkspace.shared.open(url)
+                    } label: {
+                        Text(verbatim: localization.text("onboarding.vokie.open"))
                     }
                     .buttonStyle(.bordered)
                     if let vokieDeepLinkStatus {
@@ -1018,8 +1035,10 @@ struct OnboardingView: View {
             Spacer(minLength: 8)
 
             if inputSourceSwitchResult == .unavailable || inputSourceSwitchResult == .failed {
-                Button("onboarding.voice_tool.switch.retry") {
+                Button {
                     switchToSelectedInputMethod()
+                } label: {
+                    Text(verbatim: localization.text("onboarding.voice_tool.switch.retry"))
                 }
                 .buttonStyle(.bordered)
             }
@@ -1072,8 +1091,10 @@ struct OnboardingView: View {
                 }
                 Spacer(minLength: 8)
                 if !systemFunctionKeyAvailable {
-                    Button("onboarding.voice_tool.system_fn.open_settings") {
+                    Button {
                         openKeyboardSettings()
+                    } label: {
+                        Text(verbatim: localization.text("onboarding.voice_tool.system_fn.open_settings"))
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -1162,11 +1183,15 @@ struct OnboardingView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.green)
             } else {
-                Button(isCapturingVoiceShortcut
-                    ? "onboarding.shortcut_learning.waiting"
-                    : "onboarding.shortcut_learning.start") {
+                Button {
                     shortcutCaptureErrorKey = nil
                     isCapturingVoiceShortcut = true
+                } label: {
+                    Text(verbatim: localization.text(
+                        isCapturingVoiceShortcut
+                            ? "onboarding.shortcut_learning.waiting"
+                            : "onboarding.shortcut_learning.start"
+                    ))
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!accessibilityGranted || !inputMonitoringGranted)
@@ -1360,8 +1385,10 @@ struct OnboardingView: View {
             )
 
             if !model.webRemoteState.isEnabled {
-                Button("onboarding.web_remote.retry") {
+                Button {
                     model.enableWebRemoteConnection()
+                } label: {
+                    Text(verbatim: localization.text("onboarding.web_remote.retry"))
                 }
                 .buttonStyle(.bordered)
             }
@@ -1388,7 +1415,11 @@ struct OnboardingView: View {
     }
 
     private var openBluetoothSettingsButton: some View {
-        Button("onboarding.remote.open_bluetooth") { openBluetoothSettings() }
+        Button {
+            openBluetoothSettings()
+        } label: {
+            Text(verbatim: localization.text("onboarding.remote.open_bluetooth"))
+        }
             .buttonStyle(.bordered)
     }
 
@@ -1426,8 +1457,10 @@ struct OnboardingView: View {
 
             if failureReason == .audioNoOutputDevice ||
                 failureReason == .audioSelectedDeviceMissing {
-                Button("audio.compatibility.open_install_guide") {
+                Button {
                     model.openDoubaoDriverInstructions(using: localization)
+                } label: {
+                    Text(verbatim: localization.text("audio.compatibility.open_install_guide"))
                 }
                 .buttonStyle(.bordered)
             }
@@ -1521,6 +1554,7 @@ struct OnboardingView: View {
                 Text(voiceTestStatusText)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -1550,32 +1584,36 @@ struct OnboardingView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(verbatim: localization.text("onboarding.voice_test.configuration.sayall_voice_key"))
-                    .font(.system(size: 12, weight: .medium))
-                Spacer(minLength: 8)
-                Label(
-                    sayAllVoiceKeyConfigurationText,
-                    systemImage: sayAllVoiceKeyConfigurationReady
-                        ? "checkmark.circle.fill"
-                        : "xmark.circle.fill"
-                )
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(sayAllVoiceKeyConfigurationReady ? Color.green : Color.red)
-            }
+            configurationStatusRow(
+                label: localization.text("onboarding.voice_test.configuration.sayall_voice_key"),
+                value: sayAllVoiceKeyConfigurationText,
+                isComplete: sayAllVoiceKeyConfigurationReady
+            )
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(verbatim: localization.text("onboarding.voice_test.configuration.sayall_audio_output"))
-                    .font(.system(size: 12, weight: .medium))
-                Spacer(minLength: 8)
-                Label(
-                    sayAllAudioOutputConfigurationText,
-                    systemImage: onboardingAudioReady
-                        ? "checkmark.circle.fill"
-                        : "xmark.circle.fill"
-                )
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(onboardingAudioReady ? Color.green : Color.red)
+            configurationStatusRow(
+                label: localization.text("onboarding.voice_test.configuration.sayall_audio_output"),
+                value: sayAllAudioOutputConfigurationText,
+                isComplete: onboardingAudioReady
+            )
+
+            if let runtimeStatus = selectedVoiceToolRuntimeStatusText {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: selectedVoiceToolRuntimeReady ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(selectedVoiceToolRuntimeReady ? Color.green : Color.red)
+                    Text(runtimeStatus)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(selectedVoiceToolRuntimeReady ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !selectedVoiceToolRuntimeReady {
+                        Button {
+                            openSelectedVoiceTool()
+                        } label: {
+                            Text(verbatim: localization.text("onboarding.voice_tool.runtime.open"))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
 
             Divider()
@@ -1639,6 +1677,21 @@ struct OnboardingView: View {
         }
     }
 
+    private func configurationStatusRow(
+        label: String,
+        value: String,
+        isComplete: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+            Label(value, systemImage: isComplete ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isComplete ? Color.green : Color.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var controlsContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             onboardingTitle("onboarding.controls.title")
@@ -1672,11 +1725,11 @@ struct OnboardingView: View {
                         .font(.system(size: 18))
                         .foregroundStyle(testedControlButtons.count > index ? Color.green : Color.secondary)
                 }
-                Text(
+                Text(verbatim: localization.text(
                     testedControlButtons.count >= 3
                         ? "onboarding.controls.ready"
                         : "onboarding.controls.waiting"
-                )
+                ))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
             }
@@ -1724,6 +1777,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(localization.text("onboarding.recovery.\(failure.rawValue).title"))
                         .font(.system(size: 14, weight: .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(localization.text("onboarding.recovery.\(failure.rawValue).detail"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
@@ -1740,8 +1794,10 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("onboarding.diagnostics.copy") {
+                Button {
                     copyDiagnosticSummary()
+                } label: {
+                    Text(verbatim: localization.text("onboarding.diagnostics.copy"))
                 }
                 .buttonStyle(.bordered)
             }
@@ -1769,22 +1825,27 @@ struct OnboardingView: View {
                 .blur(radius: 10)
                 .offset(x: 110, y: -210)
 
-            if settings.onboardingStep == .voiceTool,
-               settings.onboardingVoiceTool.requiresFunctionKeySetup {
-                inputMethodGuide(for: settings.onboardingVoiceTool)
-                    .frame(maxWidth: 440)
-                    .padding(28)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else if settings.onboardingStep == .welcome || settings.onboardingStep == .voiceTool {
-                welcomeIllustration
-            } else if settings.onboardingStep == .remoteAvailability {
-                selectedControlSourceIllustration
-            } else if settings.onboardingStep == .controlMethod {
-                controlMethodIllustration
-            } else if settings.onboardingStep == .complete {
-                completeIllustration
-            } else {
-                selectedControlIllustration
+            ScrollView(.vertical, showsIndicators: false) {
+                Group {
+                    if settings.onboardingStep == .voiceTool,
+                       settings.onboardingVoiceTool.requiresFunctionKeySetup {
+                        inputMethodGuide(for: settings.onboardingVoiceTool)
+                            .frame(maxWidth: 440)
+                            .padding(28)
+                    } else if settings.onboardingStep == .welcome || settings.onboardingStep == .voiceTool {
+                        welcomeIllustration
+                    } else if settings.onboardingStep == .remoteAvailability {
+                        selectedControlSourceIllustration
+                    } else if settings.onboardingStep == .controlMethod {
+                        controlMethodIllustration
+                    } else if settings.onboardingStep == .complete {
+                        completeIllustration
+                    } else {
+                        selectedControlIllustration
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(minHeight: 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2082,6 +2143,7 @@ struct OnboardingView: View {
             Text(localization.text(titleKey))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
@@ -2229,7 +2291,11 @@ struct OnboardingView: View {
         if settings.onboardingStep == .voiceTest {
             return policyAllowsContinue &&
                 voiceAttempt.phase == .passed &&
-                externalToolConfigurationConfirmed
+                externalToolConfigurationConfirmed &&
+                OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+                    for: settings.onboardingVoiceTool,
+                    runtimeState: voiceToolRuntimeState[settings.onboardingVoiceTool] ?? .unknown
+                )
         }
         if settings.onboardingStep == .remoteAvailability {
             return settings.onboardingControlSource != .unselected &&
@@ -2527,7 +2593,45 @@ struct OnboardingView: View {
             externalToolMicrophoneConfirmed
     }
 
+    private var selectedVoiceToolRuntimeReady: Bool {
+        OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+            for: settings.onboardingVoiceTool,
+            runtimeState: voiceToolRuntimeState[settings.onboardingVoiceTool] ?? .unknown
+        )
+    }
+
+    private var selectedVoiceToolRuntimeStatusText: String? {
+        switch voiceToolRuntimeState[settings.onboardingVoiceTool] ?? .unknown {
+        case .running, .notApplicable:
+            return nil
+        case .notRunning:
+            return LocalizedMessage(
+                "onboarding.voice_tool.runtime.not_running",
+                arguments: [localization.text(settings.onboardingVoiceTool.titleKey)]
+            ).text(using: localization)
+        case .unknown:
+            guard OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(
+                for: settings.onboardingVoiceTool
+            ) else { return nil }
+            return LocalizedMessage(
+                "onboarding.voice_tool.runtime.unknown",
+                arguments: [localization.text(settings.onboardingVoiceTool.titleKey)]
+            ).text(using: localization)
+        }
+    }
+
+    private func openSelectedVoiceTool() {
+        guard let applicationURL = OnboardingInputSourceSwitcher.applicationURL(
+            for: settings.onboardingVoiceTool
+        ) else { return }
+        NSWorkspace.shared.open(applicationURL)
+        refreshSelectedVoiceToolRuntimeState()
+    }
+
     private var voiceTestStatusText: String {
+        if !selectedVoiceToolRuntimeReady {
+            return localization.text("onboarding.voice_test.tool_not_running")
+        }
         if manualTranscriptInputObserved {
             return localization.text("onboarding.voice_test.manual_input")
         }
@@ -2688,6 +2792,25 @@ struct OnboardingView: View {
         refreshSystemFunctionKeyUsage()
     }
 
+    private func selectVoiceBindingPreference(_ preference: OnboardingVoiceBindingPreference) {
+        settings.setOnboardingVoiceBindingPreference(preference)
+        stageCurrentDocumentedPairingPlanIfPossible()
+    }
+
+    private func selectPreferredGesture(_ gesture: VoiceGestureMode) {
+        settings.setOnboardingPreferredGesture(gesture)
+        stageCurrentDocumentedPairingPlanIfPossible()
+    }
+
+    private func stageCurrentDocumentedPairingPlanIfPossible() {
+        guard settings.onboardingVoiceBindingPreference == .documentedDefault,
+              let plan = proposedPairingPlan else { return }
+        settings.beginOnboardingVoiceTrial(plan)
+        model.setVoiceKeyMode(plan.binding.shortcut)
+        model.setVoiceFnTapModeEnabled(plan.fnTapModeEnabled)
+        applyChromecastModeIfNeeded(plan)
+    }
+
     private func enforceOnboardingVoiceKeyPolicy() {
         if let pending = settings.consumePendingOnboardingVoiceKeyMigration() {
             voiceKeyMigrationSource = pending
@@ -2697,6 +2820,7 @@ struct OnboardingView: View {
     private func refreshVoiceToolAvailability() {
         if let voiceToolAvailabilityOverride {
             voiceToolAvailability = voiceToolAvailabilityOverride
+            refreshSelectedVoiceToolRuntimeState()
             return
         }
         var availability: [OnboardingVoiceTool: OnboardingVoiceToolAvailability] = [:]
@@ -2706,14 +2830,17 @@ struct OnboardingView: View {
             availability[tool] = OnboardingInputSourceSwitcher.availability(for: tool)
         }
         voiceToolAvailability = availability
+        refreshSelectedVoiceToolRuntimeState()
+    }
+
+    private func refreshSelectedVoiceToolRuntimeState() {
+        let tool = settings.onboardingVoiceTool
+        voiceToolRuntimeState[tool] = OnboardingInputSourceSwitcher.runtimeState(for: tool)
     }
 
     private func selectControlSource(_ source: OnboardingControlSource) {
-        if settings.stagedVoiceToolBinding != nil {
-            settings.discardOnboardingVoiceTrial()
-            model.applyHIDSettings()
-        }
         settings.setOnboardingControlSource(source)
+        model.applyHIDSettings()
         if source.supportedGestureModes.count == 1 {
             settings.setOnboardingPreferredGesture(source.supportedGestureModes.first)
         } else {
@@ -2722,6 +2849,7 @@ struct OnboardingView: View {
         observedRemoteButtons.removeAll()
         remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
         testedControlButtons.removeAll()
+        stageCurrentDocumentedPairingPlanIfPossible()
     }
 
     private func handleLearnedShortcut(_ shortcut: CustomKeyboardShortcut) {
@@ -2845,6 +2973,7 @@ struct OnboardingView: View {
         case .audio:
             model.refreshAudioDevices()
         case .voiceTest:
+            refreshSelectedVoiceToolRuntimeState()
             resetVoiceTestForRetry()
         case .controls:
             testedControlButtons.removeAll()
@@ -3122,6 +3251,25 @@ struct OnboardingView: View {
                 AppLogger.shared.write(
                     "ONBOARDING TRANSCRIPT restored_after_voice_release=true source=voice_candidate"
                 )
+            }
+        }
+    }
+
+    private func scheduleVoiceCompletionEvaluation(attemptID: Int) {
+        for delay in [0.05, 0.2, 0.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard settings.onboardingStep == .voiceTest,
+                      voiceAttempt.attemptID == attemptID,
+                      voiceAttempt.phase == .awaitingTranscript,
+                      voiceSessionEnded,
+                      !manualTranscriptInputObserved,
+                      transcriptionAppeared else {
+                    return
+                }
+                refreshVoiceAttemptObservableState(atDeadline: false)
+                if voiceAttempt.audioDelivery.result == .deliveredToSelectedDevice {
+                    finishVoiceAttempt(result: .passed)
+                }
             }
         }
     }

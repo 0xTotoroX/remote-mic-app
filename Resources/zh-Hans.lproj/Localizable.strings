@@ -675,6 +675,9 @@
 "onboarding.voice_tool.other.detail" = "在你常用的语音输入工具中测试。";
 "onboarding.voice_tool.other.setup_detail" = "其他语音工具必须支持语音输入。请在该工具自己的设置中选择正确的麦克风，并确认它能在普通输入框中写入文字。";
 "onboarding.voice_tool.status.not_installed" = "尚未安装";
+"onboarding.voice_tool.runtime.not_running" = "%@ 当前没有运行。请先打开它，再进行语音测试。";
+"onboarding.voice_tool.runtime.unknown" = "无法确认 %@ 是否正在运行。请先打开它，再进行语音测试。";
+"onboarding.voice_tool.runtime.open" = "打开工具";
 "onboarding.voice_tool.doubao.install_detail" = "豆包输入法未安装，安装后回到此页重新检测。";
 "onboarding.voice_tool.doubao.install" = "安装豆包输入法";
 "onboarding.voice_tool.typeless.fn_required" = "Typeless 需要使用 Fn/地球键点按，已为你固定此模式。";
@@ -860,6 +863,7 @@
 "onboarding.voice_test.waiting_voice" = "等待你按住语音键开始说话…";
 "onboarding.voice_test.receiving" = "正在接收声音…";
 "onboarding.voice_test.waiting_text" = "已收到声音，正在等待文字出现…";
+"onboarding.voice_test.tool_not_running" = "请先打开所选语音工具，再开始测试…";
 "onboarding.voice_test.manual_input" = "检测到键盘输入，请重新用语音键说一句";
 "onboarding.voice_test.success" = "语音与文字输入都已确认";
 "onboarding.controls.title" = "试试常用的控制按键";

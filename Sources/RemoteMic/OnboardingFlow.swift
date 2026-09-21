@@ -505,6 +505,31 @@ enum OnboardingVoiceToolAvailability: String, Equatable, Hashable {
     case unknown
 }
 
+enum OnboardingVoiceToolRuntimeState: String, Equatable, Hashable {
+    case running
+    case notRunning = "not_running"
+    case unknown
+    case notApplicable = "not_applicable"
+}
+
+enum OnboardingVoiceToolRuntimePolicy {
+    static func requiresRunningApplication(for tool: OnboardingVoiceTool) -> Bool {
+        switch VoiceToolAdapterProfile.profile(for: tool).installationProbe {
+        case .applicationBundle, .publicURLScheme:
+            return true
+        case .inputSource, .none:
+            return false
+        }
+    }
+
+    static func allowsVoiceTestCompletion(
+        for tool: OnboardingVoiceTool,
+        runtimeState: OnboardingVoiceToolRuntimeState
+    ) -> Bool {
+        !requiresRunningApplication(for: tool) || runtimeState == .running
+    }
+}
+
 struct OnboardingCapabilities: Equatable {
     var systemFunctionKeyAvailable = false
     var bluetoothGranted = false
