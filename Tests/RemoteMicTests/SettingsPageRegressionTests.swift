@@ -538,7 +538,7 @@ struct SettingsPageRegressionTests {
         #expect(settingsSource.contains("WindowDragArea()"))
         #expect(settingsSource.contains("window?.performDrag(with: event)"))
         #expect(settingsSource.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(settingsSource.contains(".ignoresSafeArea(.container, edges: .top)"))
+        #expect(!settingsSource.contains(".ignoresSafeArea(.container, edges: .top)"))
     }
 
     @Test func settingsWindowEstablishesItsFullSizeBeforeCentering() throws {
@@ -810,7 +810,7 @@ struct SettingsPageRegressionTests {
         #expect(!source.contains("SidebarGlassModifier"))
         #expect(source.contains(".focusEffectDisabled()"))
         #expect(source.contains("SettingsPageBehavior.sidebarTopDragHeight"))
-        #expect(source.contains(".ignoresSafeArea(.container, edges: .top)"))
+        #expect(!source.contains(".ignoresSafeArea(.container, edges: .top)"))
         #expect(source.contains("showsAnchor: activeButtons.contains(placement.button)"))
         #expect(source.contains(".toggleStyle(.switch)"))
         #expect(source.contains("button_mapping.permission_prompt.open"))

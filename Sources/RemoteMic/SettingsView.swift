@@ -700,7 +700,6 @@ struct SettingsView: View {
                 sidebarButton(.statistics)
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
