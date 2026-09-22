@@ -526,7 +526,10 @@ enum OnboardingVoiceToolRuntimePolicy {
         for tool: OnboardingVoiceTool,
         runtimeState: OnboardingVoiceToolRuntimeState
     ) -> Bool {
-        !requiresRunningApplication(for: tool) || runtimeState == .running
+        // Vokie/Typeless are launched automatically when the voice-test page opens.
+        // The real voice attempt and external-tool confirmations are the completion
+        // evidence; a transient process-state observation must not strand the user.
+        true
     }
 }
 

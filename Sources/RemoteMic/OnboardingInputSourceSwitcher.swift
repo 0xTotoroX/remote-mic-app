@@ -5,6 +5,7 @@ import Foundation
 enum OnboardingInputSourceSwitchResult: String, Equatable {
     case notApplicable
     case selected
+    case notSelected = "not_selected"
     case unavailable
     case failed
 }
@@ -58,6 +59,36 @@ enum OnboardingInputSourceSwitcher {
             return application.bundleURL?.standardizedFileURL == applicationURL.standardizedFileURL
         }
         return isRunning ? .running : .notRunning
+    }
+
+    static func selectionState(
+        for voiceTool: OnboardingVoiceTool
+    ) -> OnboardingInputSourceSwitchResult {
+        guard let inputSourceID = voiceTool.preferredInputSourceID else {
+            return .notApplicable
+        }
+        guard inputSource(withID: inputSourceID, includeAllInstalled: true) != nil else {
+            return .unavailable
+        }
+        return isSelected(voiceTool) ? .selected : .notSelected
+    }
+
+    @discardableResult
+    static func launchApplication(
+        for voiceTool: OnboardingVoiceTool,
+        activates: Bool,
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
+        guard let applicationURL = applicationURL(for: voiceTool) else {
+            completion?(false)
+            return false
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = activates
+        NSWorkspace.shared.openApplication(at: applicationURL, configuration: configuration) { app, error in
+            completion?(app != nil && error == nil)
+        }
+        return true
     }
 
     static func availability(

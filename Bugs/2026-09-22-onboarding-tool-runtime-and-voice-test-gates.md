@@ -8,6 +8,8 @@
 
 现场反馈包含四类现象：选择 Vokie 后 App 实际没有运行；Typeless 可能有同样问题；语音测试输入框已有文字但“继续”仍不可用；切换推荐/学习或手势选项后按钮状态不刷新。语音测试页的红色“当前/应为”文案和底部状态提示也被裁切。
 
+同一轮现场日志还显示，用户在工具页反复切换豆包、微信、Vokie、Typeless 和其他工具时，单次选择后短时间内会产生多次 `ONBOARDING INPUT SOURCE ... result=selected`。这与选择动作触发输入源切换、系统前台变化和输入源排序重算相符。
+
 ## 复现与代码证据
 
 1. Vokie 的原实现只用公开 URL scheme 判断“已安装”，Typeless 只用公开 bundle identifier 判断“已安装”，两者都没有区分 App 是否正在运行。
@@ -16,16 +18,18 @@
 
 ## 修复
 
-- 通过公开的应用 URL、Bundle 和 `NSWorkspace.runningApplications` 增加 Vokie/Typeless 运行状态；未运行或状态未知时，语音测试不能完成，并提供打开工具入口。没有读取第三方 App 私有文件、数据库或协议。
+- 通过公开的应用 URL、Bundle 和 `NSWorkspace.runningApplications` 增加 Vokie/Typeless 运行状态；进入语音测试页时未运行或状态未知会触发后台启动，并提供打开工具入口。运行状态只作为诊断提示，不再绕过真实语音测试而单独阻止继续。没有读取第三方 App 私有文件、数据库或协议。
 - 统一在切换输入工具、Binding 来源、手势和控制来源时恢复旧试用配置，再重新生成并应用当前 staged 配对计划，避免旧 Fn hold/tap 状态残留。
 - 将配置状态改为可换行的纵向状态行，错误和底部状态文案使用完整高度；左右内容增加垂直滚动保护，避免恢复卡和实时检查在小窗口中被裁切。
+- 工具卡片改为固定顺序；选择豆包/微信时只观察当前输入源，只有用户明确点击切换按钮才调用公开输入源 API，避免 Radio 选择造成页面跳动和系统确认/设置界面。
+- 进入 Typeless/Vokie 语音测试页时通过公开 Bundle ID/URL Scheme 后台启动目标 App，不激活目标窗口；启动结果异步刷新运行状态，失败时仍保留手动打开入口。
 
 ## 验证
 
-- `swift test --disable-keychain --filter OnboardingFlowTests`：50 项通过。
-- `swift test --disable-keychain`：672 项、53 个测试套件通过。
+- `swift test --disable-keychain --filter OnboardingFlowTests`：待本轮修改后复跑。
+- `swift test --disable-keychain`：待本轮修改后复跑。
 - `git diff --check`：通过。
-- 生产 `OnboardingView` 离屏浅色截图已生成到 `Screenshots/design-drafts/onboarding-tool-binding-fixes/vokie-light/`，9 张 PNG 均为 2040×1608，并已查看 Vokie 语音测试页确认红色文案完整、未运行提示可见、底部按钮未被裁切。
+- 生产 `OnboardingView` 离屏截图已更新到 `Screenshots/design-drafts/onboarding-tool-binding-fixes/vokie-light-3/`、`vokie-dark-2/`，并额外生成豆包工具页浅/深色截图；每张 PNG 均为 2040×1608，已查看工具卡固定顺序、配置文案和底部按钮未被裁切。
 
 ## 验收边界
 

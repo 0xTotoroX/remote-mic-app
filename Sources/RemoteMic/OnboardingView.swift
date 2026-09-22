@@ -135,7 +135,7 @@ struct OnboardingView: View {
             switch settings.onboardingStep {
             case .voiceTool:
                 refreshVoiceToolAvailability()
-                switchToSelectedInputMethod()
+                refreshSelectedInputMethodStatus()
                 refreshSystemFunctionKeyUsage()
             case .voiceTest:
                 requestTranscriptFocus()
@@ -1036,9 +1036,22 @@ struct OnboardingView: View {
 
             if inputSourceSwitchResult == .unavailable || inputSourceSwitchResult == .failed {
                 Button {
-                    switchToSelectedInputMethod()
+                    activateSelectedInputMethod()
                 } label: {
-                    Text(verbatim: localization.text("onboarding.voice_tool.switch.retry"))
+                    Text(verbatim: localization.text(
+                        inputSourceSwitchResult == .failed
+                            ? "onboarding.voice_tool.switch.retry"
+                            : "onboarding.voice_tool.switch.select"
+                    ))
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if inputSourceSwitchResult == .notSelected {
+                Button {
+                    activateSelectedInputMethod()
+                } label: {
+                    Text(verbatim: localization.text("onboarding.voice_tool.switch.select"))
                 }
                 .buttonStyle(.bordered)
             }
@@ -2291,11 +2304,7 @@ struct OnboardingView: View {
         if settings.onboardingStep == .voiceTest {
             return policyAllowsContinue &&
                 voiceAttempt.phase == .passed &&
-                externalToolConfigurationConfirmed &&
-                OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-                    for: settings.onboardingVoiceTool,
-                    runtimeState: voiceToolRuntimeState[settings.onboardingVoiceTool] ?? .unknown
-                )
+                externalToolConfigurationConfirmed
         }
         if settings.onboardingStep == .remoteAvailability {
             return settings.onboardingControlSource != .unselected &&
@@ -2311,16 +2320,9 @@ struct OnboardingView: View {
     }
 
     private var visibleVoiceTools: [OnboardingVoiceTool] {
-        let fixedOrder: [OnboardingVoiceTool] = [
+        [
             .vokie, .doubao, .weixin, .typeless, .chatterFly, .other,
         ]
-        let currentInputSourceID = OnboardingInputSourceSwitcher.currentInputSourceID()
-        return fixedOrder.sorted { lhs, rhs in
-            let lhsRank = voiceToolSortRank(lhs, currentInputSourceID: currentInputSourceID)
-            let rhsRank = voiceToolSortRank(rhs, currentInputSourceID: currentInputSourceID)
-            if lhsRank != rhsRank { return lhsRank < rhsRank }
-            return fixedOrder.firstIndex(of: lhs)! < fixedOrder.firstIndex(of: rhs)!
-        }
     }
 
     private var allRecognizedVoiceToolsUnavailable: Bool {
@@ -2339,20 +2341,6 @@ struct OnboardingView: View {
             return voiceToolAvailability[settings.onboardingVoiceTool] != .notInstalled
         case .doubao, .weixin, .typeless, .vokie:
             return voiceToolAvailability[settings.onboardingVoiceTool] == .available
-        }
-    }
-
-    private func voiceToolSortRank(
-        _ tool: OnboardingVoiceTool,
-        currentInputSourceID: String?
-    ) -> Int {
-        if tool.preferredInputSourceID == currentInputSourceID, currentInputSourceID != nil {
-            return 0
-        }
-        switch voiceToolAvailability[tool] ?? .unknown {
-        case .available: return 1
-        case .unknown: return 2
-        case .notInstalled: return 3
         }
     }
 
@@ -2594,10 +2582,10 @@ struct OnboardingView: View {
     }
 
     private var selectedVoiceToolRuntimeReady: Bool {
-        OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-            for: settings.onboardingVoiceTool,
-            runtimeState: voiceToolRuntimeState[settings.onboardingVoiceTool] ?? .unknown
-        )
+        let tool = settings.onboardingVoiceTool
+        let runtimeState = voiceToolRuntimeState[tool] ?? .unknown
+        return !OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: tool) ||
+            runtimeState == .running
     }
 
     private var selectedVoiceToolRuntimeStatusText: String? {
@@ -2621,11 +2609,29 @@ struct OnboardingView: View {
     }
 
     private func openSelectedVoiceTool() {
-        guard let applicationURL = OnboardingInputSourceSwitcher.applicationURL(
-            for: settings.onboardingVoiceTool
-        ) else { return }
-        NSWorkspace.shared.open(applicationURL)
-        refreshSelectedVoiceToolRuntimeState()
+        let tool = settings.onboardingVoiceTool
+        _ = OnboardingInputSourceSwitcher.launchApplication(for: tool, activates: true) { success in
+            DispatchQueue.main.async {
+                AppLogger.shared.write(
+                    "ONBOARDING VOICE_TOOL open tool=\(tool.rawValue) success=\(success)"
+                )
+                refreshSelectedVoiceToolRuntimeState()
+            }
+        }
+    }
+
+    private func ensureSelectedVoiceToolRunning() {
+        let tool = settings.onboardingVoiceTool
+        guard OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: tool),
+              voiceToolRuntimeState[tool] != .running else { return }
+        _ = OnboardingInputSourceSwitcher.launchApplication(for: tool, activates: false) { success in
+            DispatchQueue.main.async {
+                AppLogger.shared.write(
+                    "ONBOARDING VOICE_TOOL auto_launch tool=\(tool.rawValue) success=\(success)"
+                )
+                refreshSelectedVoiceToolRuntimeState()
+            }
+        }
     }
 
     private var voiceTestStatusText: String {
@@ -2788,7 +2794,7 @@ struct OnboardingView: View {
             "ONBOARDING VOICE_TOOL selected=\(tool.rawValue) binding_policy=profile_or_learned"
         )
         selectedInputMethodGuideStep = 0
-        switchToSelectedInputMethod()
+        refreshSelectedInputMethodStatus()
         refreshSystemFunctionKeyUsage()
     }
 
@@ -2911,13 +2917,23 @@ struct OnboardingView: View {
         testedControlButtons.removeAll()
     }
 
-    private func switchToSelectedInputMethod() {
+    private func refreshSelectedInputMethodStatus() {
         guard settings.onboardingStep == .voiceTool else { return }
         let tool = settings.onboardingVoiceTool
         guard tool.requiresFunctionKeySetup else {
             inputSourceSwitchResult = .notApplicable
             return
         }
+        inputSourceSwitchResult = OnboardingInputSourceSwitcher.selectionState(for: tool)
+        AppLogger.shared.write(
+            "ONBOARDING INPUT SOURCE tool=\(tool.rawValue) observed=\(inputSourceSwitchResult.rawValue)"
+        )
+    }
+
+    private func activateSelectedInputMethod() {
+        guard settings.onboardingStep == .voiceTool else { return }
+        let tool = settings.onboardingVoiceTool
+        guard tool.requiresFunctionKeySetup else { return }
         guard allowsInputSourceSwitching else {
             inputSourceSwitchResult = .selected
             return
@@ -2925,7 +2941,7 @@ struct OnboardingView: View {
 
         inputSourceSwitchResult = OnboardingInputSourceSwitcher.selectIfNeeded(tool)
         AppLogger.shared.write(
-            "ONBOARDING INPUT SOURCE tool=\(tool.rawValue) result=\(inputSourceSwitchResult.rawValue)"
+            "ONBOARDING INPUT SOURCE tool=\(tool.rawValue) action=explicit_user result=\(inputSourceSwitchResult.rawValue)"
         )
     }
 
@@ -2935,6 +2951,8 @@ struct OnboardingView: View {
         switch inputSourceSwitchResult {
         case .selected:
             key = "onboarding.voice_tool.switch.selected"
+        case .notSelected:
+            key = "onboarding.voice_tool.switch.not_selected"
         case .unavailable:
             key = "onboarding.voice_tool.switch.unavailable"
         case .failed:
@@ -2961,7 +2979,7 @@ struct OnboardingView: View {
         switch step {
         case .voiceTool:
             refreshVoiceToolAvailability()
-            switchToSelectedInputMethod()
+            refreshSelectedInputMethodStatus()
             refreshSystemFunctionKeyUsage()
         case .remoteAvailability:
             routeConnectedPhysicalRemoteIfNeeded()
@@ -2974,6 +2992,7 @@ struct OnboardingView: View {
             model.refreshAudioDevices()
         case .voiceTest:
             refreshSelectedVoiceToolRuntimeState()
+            ensureSelectedVoiceToolRunning()
             resetVoiceTestForRetry()
         case .controls:
             testedControlButtons.removeAll()

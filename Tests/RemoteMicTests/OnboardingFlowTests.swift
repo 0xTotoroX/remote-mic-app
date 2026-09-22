@@ -545,8 +545,12 @@ struct OnboardingFlowTests {
                 ))
             }
         }
-        #expect(viewSource.contains("switchToSelectedInputMethod()"))
+        #expect(viewSource.contains("refreshSelectedInputMethodStatus()"))
+        #expect(viewSource.contains("activateSelectedInputMethod()"))
         #expect(viewSource.contains("OnboardingInputSourceSwitcher.selectIfNeeded(tool)"))
+        #expect(viewSource.contains("OnboardingInputSourceSwitcher.selectionState(for: tool)"))
+        #expect(viewSource.contains("ensureSelectedVoiceToolRunning()"))
+        #expect(!viewSource.contains("voiceToolSortRank"))
         #expect(viewSource.contains("openKeyboardSettings()"))
         #expect(!viewSource.contains("\n            ScrollView {"))
         #expect(viewSource.contains("GridItem(.flexible(), spacing: 8, alignment: .top)"))
@@ -596,6 +600,7 @@ struct OnboardingFlowTests {
         #expect(viewSource.contains(".onAppear {\n                    requestTranscriptFocus()"))
         #expect(viewSource.contains("case .voiceTest:\n                requestTranscriptFocus()"))
         #expect(!viewSource.contains("case .voiceTest:\n                switchToSelectedInputMethod()"))
+        #expect(viewSource.contains("case .voiceTest:\n            refreshSelectedVoiceToolRuntimeState()\n            ensureSelectedVoiceToolRunning()"))
         #expect(viewSource.contains("guard settings.onboardingStep == .voiceTool else { return }"))
         #expect(viewSource.contains("private func requestTranscriptFocus()"))
         #expect(viewSource.contains("transcriptFocusRequest &+= 1"))
@@ -647,7 +652,28 @@ struct OnboardingFlowTests {
         #expect(!OnboardingVoiceTestConfigurationPolicy.requiresGlobalVoiceConfirmation(for: .other))
     }
 
-    @Test func independentVoiceToolsMustBeRunningBeforeVoiceTestCanComplete() {
+    @Test func selectingVoiceToolDoesNotChangeInputSourceOrReorderCards() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/OnboardingView.swift"),
+            encoding: .utf8
+        )
+        let selectionStart = try #require(source.range(of: "private func selectVoiceTool"))
+        let selectionEnd = try #require(source.range(
+            of: "private func selectVoiceBindingPreference",
+            range: selectionStart.upperBound..<source.endIndex
+        ))
+        let selectionBody = String(source[selectionStart.lowerBound..<selectionEnd.lowerBound])
+        #expect(selectionBody.contains("refreshSelectedInputMethodStatus()"))
+        #expect(!selectionBody.contains("activateSelectedInputMethod()"))
+        #expect(!selectionBody.contains("selectIfNeeded(tool)"))
+        #expect(source.contains("private var visibleVoiceTools: [OnboardingVoiceTool] {\n        ["))
+    }
+
+    @Test func independentVoiceToolsAreAutoLaunchedAndRuntimeIsAdvisory() {
         #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .typeless))
         #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .vokie))
         #expect(!OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .doubao))
@@ -655,11 +681,11 @@ struct OnboardingFlowTests {
             for: .typeless,
             runtimeState: .running
         ))
-        #expect(!OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
             for: .typeless,
             runtimeState: .notRunning
         ))
-        #expect(!OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
+        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
             for: .vokie,
             runtimeState: .unknown
         ))
