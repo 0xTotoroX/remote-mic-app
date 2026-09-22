@@ -522,15 +522,6 @@ enum OnboardingVoiceToolRuntimePolicy {
         }
     }
 
-    static func allowsVoiceTestCompletion(
-        for tool: OnboardingVoiceTool,
-        runtimeState: OnboardingVoiceToolRuntimeState
-    ) -> Bool {
-        // Vokie/Typeless are launched automatically when the voice-test page opens.
-        // The real voice attempt and external-tool confirmations are the completion
-        // evidence; a transient process-state observation must not strand the user.
-        true
-    }
 }
 
 struct OnboardingCapabilities: Equatable {

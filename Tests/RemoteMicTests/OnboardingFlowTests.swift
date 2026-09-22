@@ -673,26 +673,19 @@ struct OnboardingFlowTests {
         #expect(source.contains("private var visibleVoiceTools: [OnboardingVoiceTool] {\n        ["))
     }
 
-    @Test func independentVoiceToolsAreAutoLaunchedAndRuntimeIsAdvisory() {
+    @Test func independentVoiceToolsAreAutoLaunchedWithoutARuntimeGate() throws {
         #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .typeless))
         #expect(OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .vokie))
         #expect(!OnboardingVoiceToolRuntimePolicy.requiresRunningApplication(for: .doubao))
-        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-            for: .typeless,
-            runtimeState: .running
-        ))
-        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-            for: .typeless,
-            runtimeState: .notRunning
-        ))
-        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-            for: .vokie,
-            runtimeState: .unknown
-        ))
-        #expect(OnboardingVoiceToolRuntimePolicy.allowsVoiceTestCompletion(
-            for: .doubao,
-            runtimeState: .notApplicable
-        ))
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/OnboardingView.swift"),
+            encoding: .utf8
+        )
+        #expect(!source.contains("allowsVoiceTestCompletion("))
     }
 
     @Test func transcriptInputPolicyRejectsSyntheticAndUnknownEventSources() {
