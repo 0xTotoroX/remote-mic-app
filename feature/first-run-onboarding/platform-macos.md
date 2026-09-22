@@ -33,7 +33,7 @@
 - 当前可学习并注入的语音键限于 Fn、左/右 Command 与右 Option；不能表达的组合必须明确提示，不得静默降级。
 - 豆包和微信只能通过公开 Text Input Sources API 按精确 Input Source ID 选择；不得按显示名称模糊匹配。Onboarding 选择工具时只观察当前输入源，不自动启用或切换；用户明确点击后才执行一次切换，避免 Radio 选择触发系统确认或设置界面。
 - Typeless、Vokie、ChatterFly 和其他独立工具不执行系统输入源切换。
-- 进入 Typeless 或 Vokie 的语音测试页时，可以通过公开 Bundle ID/URL Scheme 后台启动目标 App，但不得抢走 SayAll 输入框焦点；启动失败仍必须显示可执行的打开操作，并保留真实语音文字门禁。
+- 进入 Typeless 或 Vokie 的语音测试页时，必须通过公开 Bundle ID/URL Scheme 尝试后台启动目标 App，但不得抢走 SayAll 输入框焦点；自动拉起失败、状态未知或目标仍未运行时必须阻止完成并显示“重新打开”，运行后仍保留真实语音文字门禁。
 - SayAll 不读取任何第三方工具的私有配置；语音识别键、全局唤起和麦克风只能显示期望值并由用户确认。
 - `sayall://launch` 只负责激活与 Vokie 状态回流；received/configured/ready 都不能替代真实语音文字门禁。
 

@@ -675,9 +675,9 @@
 "onboarding.voice_tool.other.detail" = "在你常用的语音输入工具中测试。";
 "onboarding.voice_tool.other.setup_detail" = "其他语音工具必须支持语音输入。请在该工具自己的设置中选择正确的麦克风，并确认它能在普通输入框中写入文字。";
 "onboarding.voice_tool.status.not_installed" = "尚未安装";
-"onboarding.voice_tool.runtime.not_running" = "%@ 尚未运行。进入语音测试时会尝试在后台打开；如果仍未启动，可点击“打开工具”。";
-"onboarding.voice_tool.runtime.unknown" = "暂时无法确认 %@ 是否正在运行。进入语音测试时会尝试在后台打开；如果仍未启动，可点击“打开工具”。";
-"onboarding.voice_tool.runtime.open" = "打开工具";
+"onboarding.voice_tool.runtime.not_running" = "%@ 尚未运行。无线麦已尝试在后台打开；请点击“重新打开”后再测试。";
+"onboarding.voice_tool.runtime.unknown" = "暂时无法确认 %@ 是否正在运行。请点击“重新打开”，确认工具启动后再测试。";
+"onboarding.voice_tool.runtime.reopen" = "重新打开";
 "onboarding.voice_tool.doubao.install_detail" = "豆包输入法未安装，安装后回到此页重新检测。";
 "onboarding.voice_tool.doubao.install" = "安装豆包输入法";
 "onboarding.voice_tool.typeless.fn_required" = "Typeless 需要使用 Fn/地球键点按，已为你固定此模式。";

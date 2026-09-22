@@ -1621,7 +1621,7 @@ struct OnboardingView: View {
                         Button {
                             openSelectedVoiceTool()
                         } label: {
-                            Text(verbatim: localization.text("onboarding.voice_tool.runtime.open"))
+                            Text(verbatim: localization.text("onboarding.voice_tool.runtime.reopen"))
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -2304,7 +2304,8 @@ struct OnboardingView: View {
         if settings.onboardingStep == .voiceTest {
             return policyAllowsContinue &&
                 voiceAttempt.phase == .passed &&
-                externalToolConfigurationConfirmed
+                externalToolConfigurationConfirmed &&
+                selectedVoiceToolRuntimeReady
         }
         if settings.onboardingStep == .remoteAvailability {
             return settings.onboardingControlSource != .unselected &&

@@ -675,9 +675,9 @@
 "onboarding.voice_tool.other.detail" = "Test with your preferred voice input tool.";
 "onboarding.voice_tool.other.setup_detail" = "Another Voice Tool must support voice input. In that tool’s own settings, choose the correct microphone and confirm it can write text into a regular input field.";
 "onboarding.voice_tool.status.not_installed" = "Not installed";
-"onboarding.voice_tool.runtime.not_running" = "%@ is not running yet. SayAll will try to open it in the background when voice testing starts; use “Open Tool” if it does not start.";
-"onboarding.voice_tool.runtime.unknown" = "SayAll cannot confirm that %@ is running yet. It will try to open it in the background when voice testing starts; use “Open Tool” if it does not start.";
-"onboarding.voice_tool.runtime.open" = "Open Tool";
+"onboarding.voice_tool.runtime.not_running" = "%@ is not running. SayAll already tried to open it in the background; choose “Reopen” before testing again.";
+"onboarding.voice_tool.runtime.unknown" = "SayAll cannot confirm that %@ is running. Choose “Reopen”, then test again after the tool starts.";
+"onboarding.voice_tool.runtime.reopen" = "Reopen";
 "onboarding.voice_tool.doubao.install_detail" = "Doubao Input Method is not installed. Install it, then return here and check again.";
 "onboarding.voice_tool.doubao.install" = "Install Doubao Input Method";
 "onboarding.voice_tool.typeless.fn_required" = "Typeless uses Fn/Globe taps, so this mode is fixed for compatibility.";
