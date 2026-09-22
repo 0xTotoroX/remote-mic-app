@@ -26,8 +26,8 @@
 
 ## 验证
 
-- `swift test --disable-keychain --filter OnboardingFlowTests`：待本轮修改后复跑。
-- `swift test --disable-keychain`：待本轮修改后复跑。
+- `swift test --disable-keychain --filter OnboardingFlowTests`：51 项通过。
+- `swift test --disable-keychain`：673 项、53 个测试套件通过。
 - `git diff --check`：通过。
 - 生产 `OnboardingView` 离屏截图已更新到 `Screenshots/design-drafts/onboarding-tool-binding-fixes/vokie-light-3/`、`vokie-dark-2/`，并额外生成豆包工具页浅/深色截图；每张 PNG 均为 2040×1608，已查看工具卡固定顺序、配置文案和底部按钮未被裁切。
 
