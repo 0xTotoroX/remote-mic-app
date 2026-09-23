@@ -13,7 +13,7 @@
 
 | 项目 | 值 |
 | --- | --- |
-| App | `/Users/andy/MySrc/remote-mic-app-chromecast/dist/SayAll.app` |
+| App | `/Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` |
 | 构建时间 | 2026-09-16 19:17（CST） |
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（197） |
@@ -40,7 +40,7 @@
 
 > **同一台机器上还有一份 `/Applications/SayAll.app`（1.9.21 build 181，无 Chromecast）。**
 > 它的构建号比本测试包更大，但没有 `SayAllChromecastIncluded` 标记，从启动台或 Spotlight
-> 打开它**不会出现遥控器面板**。测试必须显式打开本表的 `dist/SayAll.app`。
+> 打开它**不会出现该遥控器**（没有 `SayAllChromecastIncluded` 标记）。测试必须显式打开本表的 `dist/SayAll.app`。
 >
 > 版本历史（每一步都对应一次真实缺陷）：
 > - `bc0dac56…`（00:25）：缺少「取回系统已连接设备」的发现路径，遥控器一旦在系统蓝牙里配对上就连不上。
@@ -88,7 +88,7 @@
 
 `AB5E0001-5A21-4F05-BC7D-AF01F617B664` 是**通用 ATVV 服务**，不是本品专有：同一仓库的
 小米语音遥控器用的就是它。因此 `retrieveConnectedPeripherals(withServices:)` 会一次取回
-**两台**遥控器；若把「服务存在」当成型号身份，就会连上错误的设备——面板显示「已连接」，
+**两台**遥控器；若把「服务存在」当成型号身份，就会连上错误的设备——界面显示「已连接」，
 而真遥控器按语音键毫无反应。
 
 区分设备只看 `name=` 与 `frame=`：
@@ -229,7 +229,7 @@ hold**：
 
 > 「我们通过开关来控制是按住还是按一次了，不需要这个延迟判断。有了这个延迟判断，使用体验太差了。」
 
-这个判断是对的：用户在设置页已经显式选定了模式，**时长不携带任何额外意图信息**——
+这个判断是对的：用户已经显式选定了模式，**时长不携带任何额外意图信息**——
 「按一次」的自然时长在这台遥控器上在 **1.12~5.76 秒**之间跳动，那是人手抖动，不是信号。
 任何阈值都只是把一部分正常操作误判掉，而它的误伤方式（松键即结束）恰好把用户随后说的话全部丢掉，
 症状看起来像「功能没生效」，而不是「判定偏了」。
@@ -393,13 +393,13 @@ CHROMECAST VOICE phase=started result=triggered audio_source=chromecast_micropho
 ### 重新构建
 
 ```sh
-cd /Users/andy/MySrc/remote-mic-app-chromecast
+cd /Users/andy/MySrc/remote-mic-app-chromecase
 SAYALL_CHROMECAST_PACKAGE_PATH=/Users/andy/MySrc/sayall-private-platform/packages/audio-input-kit/chromecast \
 CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   ./scripts/build-app.sh
 ```
 
-不带 `SAYALL_CHROMECAST_PACKAGE_PATH` 时，构建产物与未接入该硬件前完全一致（`SayAllChromecastIncluded=false`，界面不显示该面板）。这是必须回归的约束。
+不带 `SAYALL_CHROMECAST_PACKAGE_PATH` 时，构建产物与未接入该硬件前完全一致（`SayAllChromecastIncluded=false`，界面不出现该型号的任何入口）。这是必须回归的约束。
 
 ⚠️ **`CODE_SIGN_IDENTITY` 必须显式给**：`build-app.sh` 里 `SIGNING_IDENTITY="${CODE_SIGN_IDENTITY:--}"`，
 不传就打成 adhoc 签名，与历史真机包不一致（会引入额外的权限/授权变量）。
@@ -411,7 +411,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 ```sh
 cd /Users/andy/MySrc/sayall-private-platform
 git worktree add --detach /private/tmp/chromecast-<shortsha> <commit>
-cd /Users/andy/MySrc/remote-mic-app-chromecast
+cd /Users/andy/MySrc/remote-mic-app-chromecase
 SAYALL_CHROMECAST_PACKAGE_PATH=/private/tmp/chromecast-<shortsha>/packages/audio-input-kit/chromecast \
 CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   ./scripts/build-app.sh
@@ -424,15 +424,17 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 1. 退出其他无线麦SayAll.app 实例，只保留待测包。
    - 特别注意别打开 `/Applications/SayAll.app`（构建号更大但**不含 Chromecast**）。用
-     `open /Users/andy/MySrc/remote-mic-app-chromecast/dist/SayAll.app` 显式打开本表那份。
+     `open /Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` 显式打开本表那份。
 2. 确认已安装 `MiRemoteV 2ch` 音频设备（侧边栏「连接」→「连接与语音」页的「音频输入与兼容」面板应显示已就绪）。本次不安装任何 helper。
 3. 在侧边栏「设置」页的「权限与隐私」区授予蓝牙、输入监控和辅助功能权限，然后完全退出并重新打开 App。
 4. 打开 `~/Library/Logs/RemoteMic/runtime.log`，保留现有文件，不清空、不覆盖。
    - 建议直接双击 `Testing/启动Chromecast真机测试.command`，它会实时过滤出本手册用到的日志行，并在桌面留一份会话记录。
-5. 进入侧边栏**「连接」**（链接图标，页面标题「连接与语音」），在右列第三块找到「Chromecast 遥控器」面板——总开关在**这一页**，不在「设置」页（「设置」页只有权限、通用、诊断与日志）。
-   - 面板长相见 `Testing/artifacts/chromecast-layout/`（由 App 自带离屏渲染导出，非截图拼贴）：
-     `connection-zh-Hans-light-1400x2000.png` 是「连接与语音」页，`settings-zh-Hans-light-1400x2000.png`
-     是「设置」页——后者没有该面板，正是本条要说明的对照。
+5. 进入侧边栏**「连接」**（链接图标，页面标题「连接与语音」）：**左列的设备面板**显示当前遥控器、照片与三行状态（连接状态 / 语音状态 / 语音快捷），**「重新连接」按钮也在这块面板上**。
+   - ⚠️ 侧边栏**没有**单独的「Chromecast 遥控器」面板，也没有总开关：总开关已按产品要求移除，**恒为常开**；语音键模式**不在这一页**，在「按键映射」页底部（见用例 2）。
+   - 界面长相见 `Testing/artifacts/chromecast-layout/`（由 App 自带离屏渲染导出，非截图拼贴）：
+     `connection-zh-Hans-light-1400x2000.png` 是「连接与语音」页，
+     `mapping-zh-Hans-light-1400x2000.png` 是「按键映射」页——语音键模式在该页底部。两张图都按
+     `REMOTE_MIC_SETTINGS_SCREENSHOT_*`（light / zh-Hans / 1400x2000 / `CHROMECAST=1`）导出。
 6. 确认遥控器可被 App 发现。**这里有两种情况，都必须能连上**：
 
    | 情况 | 遥控器状态 | App 应走的发现路径 |
@@ -458,16 +460,16 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 | 组合 | 期望行为 |
 | --- | --- |
-| 只有 Chromecast | 该面板可见可用；Siri Remote 相关界面与代码路径完全不存在（本包 `SayAllSiriRemoteIncluded=false`）。 |
+| 只有 Chromecast | 该遥控器可被发现、连接与收音；Siri Remote 相关界面与代码路径完全不存在（本包 `SayAllSiriRemoteIncluded=false`）。 |
 | 两个都有 | 两套链路各自独立工作；同时收音时语音键按引用计数保持按下，互不取消。 |
-| 都没有 | `SayAllChromecastIncluded=false`，该面板不出现，启动、运行、打包与未接入前一致。 |
+| 都没有 | `SayAllChromecastIncluded=false`，界面不出现该型号入口，启动、运行、打包与未接入前一致。 |
 
 ## 实机测试矩阵
 
 ### 用例 1：连接、重连与设备识别
 
 1. 启动 App，等待状态从「正在搜索遥控器」变为「已连接」。
-2. 在面板点「重新连接」。
+2. 在「连接」页左列的设备面板上点「重新连接」。
 3. 关闭再打开遥控器，观察是否自动恢复。
 4. **系统已连接场景**：在「系统设置 → 蓝牙」里把遥控器连上（或先移除再重新配对），回到 App 点「重新连接」。
 
@@ -481,7 +483,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 2：toggle 模式——按一下开始、再按一下结束（默认模式）
 
-确认面板（侧边栏「连接」→「连接与语音」页 →「Chromecast 遥控器」）语音键模式为「按一次说话」。
+确认语音键模式为「按一次说话」：在侧边栏**「按键映射」**页底部（选中本遥控器档案时才出现该区）。
 
 1. **点按**遥控器语音键（按下后立刻松开，**全程短于 2 秒**；真机实测最快约 1.3 秒），
    **松键之后**再说一句话，说完停顿几秒（**先不要**再按）。
@@ -506,7 +508,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 - 后续每 4 秒一条 `ATVV MIC_EXTEND stream=0`（把远端的「音频传输超时」顶回去）。
 - 完整序列：`CHROMECAST VOICE phase=started` → `CHROMECAST VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECAST VOICE playback_stop phase=waiting_for_drain` → `CHROMECAST AUDIO playback_stop phase=completed result=drained`。
 
-✅ **按多久都可以**：本版已彻底移除按键时长判定——模式由设置页开关决定，时长不再是判据。
+✅ **按多久都可以**：本版已彻底移除按键时长判定——模式由「按键映射」页底部的「语音键模式」决定，时长不再是判据。
 历史上一版用 0.55 秒、下一版用 2.0 秒，两次都在真机上误伤了「按一次」（用户的自然按下时长在
 1.12~5.76 秒之间跳动），详见「根因 #3」。第 1 次按下松键一律进入持续收音，第 2 次一律结束，
 与你按了 1.1 秒还是 5.7 秒无关。
@@ -537,7 +539,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 3：hold 模式
 
-把模式切到「按住说话」。切换后**立即生效**，无需重启（面板改动会即时同步到运行时）。
+把模式切到「按住说话」（「按键映射」页底部）。切换后**立即生效**，无需重启（改动会即时同步到运行时）。
 
 1. 按住语音键说话，中途松开。
 
@@ -597,7 +599,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 1. 让它进入广播范围。
 
-预期：在**扫描阶段**就被判为不支持并拒绝连接，面板显示「该样机不受支持」及原因；日志为 `state=unavailable`。不得静默升采样，也不得把它当成受支持型号。
+预期：在**扫描阶段**就被判为不支持并拒绝连接；日志为 `state=unavailable` 并给出拒绝原因。不得静默升采样，也不得把它当成受支持型号连上（界面不得把它显示成已识别的型号）。
 
 失败判定：连接成功但没有声音；或出现升采样后的可用音频。
 
@@ -627,18 +629,18 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 或者先 `cp -R dist/SayAll.app /tmp/SayAll-chromecast.app` 留一份。
 
 ```sh
-cd /Users/andy/MySrc/remote-mic-app-chromecast
+cd /Users/andy/MySrc/remote-mic-app-chromecase
 env -u SAYALL_CHROMECAST_PACKAGE_PATH -u SAYALL_ENABLE_SIRI_REMOTE \
   SAYALL_CHROMECAST_PACKAGE_PATH= ./scripts/build-app.sh
 plutil -extract SayAllChromecastIncluded raw -o - "dist/SayAll.app/Contents/Info.plist"
 ```
 
-预期：未提供私有包时构建仍然成功，输出 `false`，App 正常启动，设置页连接页不出现 Chromecast 面板。
+预期：未提供私有包时构建仍然成功，输出 `false`，App 正常启动，界面不出现该型号的任何入口。
 
 若要同时确认"没有私有仓库权限"的场景，应在一个只有公开仓库访问权限的账号或干净机器上完成
 resolve、测试与 Release 构建；本机已持有私有包路径，不能替代该验证。
 
-失败判定：构建报错，或缺少私有包时启动异常、设置页出现空面板。
+失败判定：构建报错，或缺少私有包时启动异常、界面出现该型号的空壳入口。
 
 ### 用例 11：普通按键与键位映射页（新增能力，未上真机）
 
@@ -686,7 +688,7 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 
 判读要点：`ATVV VOICE gesture` 的 `action=` 决定后面一切——`latch` = 本次松键开始了持续收音
 （后面就该有音频），`stop` = 本次是「关」，`none` = 无匹配手势。`duration_ms` 只记录用户按了多久，
-**不参与判定**：`action` 完全由模式开关决定。
+**不参与判定**：`action` 完全由「语音键模式」决定。
 
 `ATVV MIC_OPEN written` 与 `ATVV AUDIO notify` 是两条互相独立的证据：前者只说明宿主发了命令，
 后者才是远端真的在推流。**toggle 的通过路径是：`action=latch` → `ATVV MIC_OPEN written bytes=0c00`
