@@ -636,30 +636,9 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// 一次性把旧拼写（`chromecase` → `chromecast`，2026-09-24 改名）的持久化键搬到新键。
-    ///
-    /// 只在新键缺失、旧键存在时复制；**旧键保留不删**，这样用户回滚到旧版本仍能读回自己的设置。
-    /// 新旧键都在、或都不在时不写任何东西，避免每次启动都产生一次无意义写入。
-    ///
-    /// 注意：下面四个旧键名是**迁移用的输入**，不是可用的键名，不要「顺手统一」成新拼写。
-    private static func migrateLegacyChromecastKeys(in defaults: UserDefaults) {
-        let pairs: [(current: String, legacy: String)] = [
-            (Keys.chromecastAllowSystemReservedKeys, "chromecase.allowSystemReservedKeys"),
-            (Keys.chromecastSystemReservedExceptions, "chromecase.systemReservedExceptions"),
-            (Keys.chromecastEnabled, "chromecase.enabled"),
-            (Keys.chromecastVoiceMode, "chromecase.voiceMode"),
-        ]
-        for pair in pairs {
-            guard defaults.object(forKey: pair.current) == nil,
-                  let legacyValue = defaults.object(forKey: pair.legacy) else { continue }
-            defaults.set(legacyValue, forKey: pair.current)
-        }
-    }
-
     init(defaults: UserDefaults = .standard) {
         var corruptedKeys: [String] = []
         self.defaults = defaults
-        Self.migrateLegacyChromecastKeys(in: defaults)
         remoteDeviceProfiles = []
         selectedRemoteProfileID = nil
         gainDB = defaults.object(forKey: Keys.gainDB) == nil
