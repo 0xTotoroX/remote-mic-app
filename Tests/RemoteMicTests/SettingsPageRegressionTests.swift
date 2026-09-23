@@ -267,7 +267,7 @@ struct SettingsPageRegressionTests {
         #expect(macro.contains("func executeBoundAction("))
         #expect(macro.contains("#if canImport(SayAllButtonProfiles)"))
         #expect(!macro.contains("canImport(SayAllMembershipCore)"))
-        #expect(macro.contains(".chromecaseVoiceRemote"))
+        #expect(macro.contains(".chromecastVoiceRemote"))
         #expect(macro.contains("buttonProfilesFeature.executeBoundAction("))
         #expect(macro.contains("feature.executeBoundMacro("))
         #expect(macro.contains("return false"))

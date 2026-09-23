@@ -35,9 +35,9 @@ struct RemoteDeviceNamePolicyTests {
         #expect(RemoteDeviceNamePolicy.customName(from: "Apple Remote Lightning", model: .appleSiriRemoteA2540) == "")
     }
 
-    @Test func chromecaseDisplayNamesAreFactoryAliases() {
-        for name in ["Chromecase Remote", "Chromecase 遥控器"] {
-            #expect(RemoteDeviceNamePolicy.customName(from: name, model: .chromecaseVoiceRemote) == "")
+    @Test func chromecastDisplayNamesAreFactoryAliases() {
+        for name in ["Chromecast Remote", "Chromecast 遥控器"] {
+            #expect(RemoteDeviceNamePolicy.customName(from: name, model: .chromecastVoiceRemote) == "")
         }
     }
 
@@ -82,18 +82,18 @@ struct RemoteDeviceNamePolicyTests {
             model: .appleSiriRemoteA2854,
             name: "客厅"
         )
-        let chromecase = makeProfile(
+        let chromecast = makeProfile(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             name: "Bedroom"
         )
 
         let sorted = RemoteDeviceNamePolicy.sortedForCards(
-            [xiaomi, apple, chromecase],
+            [xiaomi, apple, chromecast],
             modelName: { profile in
                 switch profile.model {
                 case .appleSiriRemoteA2854: return "苹果遥控器 Type-C"
-                case .chromecaseVoiceRemote: return "Chromecase 遥控器"
+                case .chromecastVoiceRemote: return "Chromecast 遥控器"
                 case .rc003: return "小米蓝牙遥控器 2 Pro"
                 default: return "未知"
                 }
@@ -101,7 +101,7 @@ struct RemoteDeviceNamePolicyTests {
             systemName: { $0.customName }
         )
 
-        #expect(sorted.map(\.id) == [chromecase.id, apple.id, xiaomi.id])
+        #expect(sorted.map(\.id) == [chromecast.id, apple.id, xiaomi.id])
     }
 
     @Test func cardOrderUsesSystemNamePinyinThenStableIDForTheSameModel() {
@@ -238,7 +238,7 @@ struct RemoteDeviceNamePolicyTests {
     }
 
     @Test func serialNameRuleDoesNotChangeOtherRemoteModels() {
-        for model in [XiaomiRemoteModel.rc001, .rc003, .unknown, .chromecaseVoiceRemote] {
+        for model in [XiaomiRemoteModel.rc001, .rc003, .unknown, .chromecastVoiceRemote] {
             #expect(RemoteDeviceNamePolicy.customName(
                 from: "TESTSERIAL001", model: model, serialNumber: "TESTSERIAL001"
             ) == "TESTSERIAL001")
