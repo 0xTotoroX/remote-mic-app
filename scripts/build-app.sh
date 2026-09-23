@@ -27,6 +27,7 @@ SAYALL_MAC_REMOTE_PACKAGE_PATH="${SAYALL_MAC_REMOTE_PACKAGE_PATH:-}"
 SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH="${SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH:-}"
 SAYALL_SIRI_REMOTE_PACKAGE_PATH="${SAYALL_SIRI_REMOTE_PACKAGE_PATH:-}"
 SAYALL_CHROMECAST_PACKAGE_PATH="${SAYALL_CHROMECAST_PACKAGE_PATH:-}"
+SAYALL_MEMBERSHIP_API_BASE_URL="${SAYALL_MEMBERSHIP_API_BASE_URL:-}"
 RELEASE_STAGE_TIMEOUTS="${RELEASE_STAGE_TIMEOUTS:-0}"
 RELEASE_SWIFT_BUILD_TIMEOUT_SECONDS="${RELEASE_SWIFT_BUILD_TIMEOUT_SECONDS:-300}"
 RELEASE_CODESIGN_TIMEOUT_SECONDS="${RELEASE_CODESIGN_TIMEOUT_SECONDS:-45}"
@@ -289,6 +290,21 @@ if [[ "$REQUIRE_SAYALL_BUTTON_PROFILES" == "1" &&
   print -u2 "A SayAll button profiles package is required for this build"
   exit 1
 fi
+if [[ -n "$SAYALL_MEMBERSHIP_API_BASE_URL" ]] && ! print -r -- "$SAYALL_MEMBERSHIP_API_BASE_URL" | \
+    rg -q '^(https://[^[:space:]]+|http://127\.0\.0\.1(:[0-9]+)?(/[^[:space:]]*)?)$'; then
+  print -u2 "SAYALL_MEMBERSHIP_API_BASE_URL must use HTTPS or local http://127.0.0.1"
+  exit 1
+fi
+if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
+      "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" == "true" ]]; then
+  SAYALL_MEMBERSHIP_RESOURCE_BUNDLE="$SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH/Resources/SayAllMembership_SayAllMembershipUI.bundle"
+  if [[ ! -d "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE" ||
+        ! -f "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources/MembershipCenterCopy.json" ||
+        ! -f "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources/AppIcon.png" ]]; then
+    print -u2 "Prepared private artifacts are missing the SayAll membership resource bundle"
+    exit 1
+  fi
+fi
 if [[ -n "$SAYALL_MAC_REMOTE_PACKAGE_PATH" ]]; then
   if [[ ! -f "$SAYALL_MAC_REMOTE_PACKAGE_PATH/Package.swift" ]]; then
     print -u2 "SAYALL_MAC_REMOTE_PACKAGE_PATH must contain Package.swift"
@@ -426,6 +442,11 @@ plutil -insert SayAllButtonProfilesIncluded -bool "$SAYALL_BUTTON_PROFILES_INCLU
 plutil -remove SayAllPrivateArtifactsIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 plutil -insert SayAllPrivateArtifactsIncluded -bool "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" \
   "$APP_DIR/Contents/Info.plist"
+if [[ -n "$SAYALL_MEMBERSHIP_API_BASE_URL" ]]; then
+  plutil -remove SayAllMembershipAPIBaseURL "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+  plutil -insert SayAllMembershipAPIBaseURL -string "$SAYALL_MEMBERSHIP_API_BASE_URL" \
+    "$APP_DIR/Contents/Info.plist"
+fi
 plutil -remove SayAllSiriRemoteIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 plutil -insert SayAllSiriRemoteIncluded -bool "$SAYALL_SIRI_REMOTE_INCLUDED" \
   "$APP_DIR/Contents/Info.plist"
@@ -585,6 +606,12 @@ if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" ]]; then
   ditto --norsrc --noextattr --noqtn --noacl \
     "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE" \
     "$APP_DIR/Contents/Resources/SayAllButtonProfiles_SayAllButtonProfiles.bundle"
+fi
+if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
+      "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" == "true" ]]; then
+  ditto --norsrc --noextattr --noqtn --noacl \
+    "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE" \
+    "$APP_DIR/Contents/Resources/SayAllMembership_SayAllMembershipUI.bundle"
 fi
 SPARKLE_VERSION_DIR="$APP_DIR/Contents/Frameworks/Sparkle.framework/Versions/B"
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
