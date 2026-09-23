@@ -63,6 +63,8 @@ test -x "$BINARY"
 test -x "$MCP_HELPER"
 SAYALL_SIRI_REMOTE_INCLUDED="$(plutil -extract SayAllSiriRemoteIncluded raw -o - "$PLIST" 2>/dev/null || true)"
 SAYALL_SIRI_REMOTE_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllSiriRemote_SayAllSiriRemote.bundle"
+SAYALL_CHROMECASE_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllChromecase_SayAllChromecase.bundle"
+SAYALL_CHROMECAST_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllChromecast_SayAllChromecast.bundle"
 case "$SAYALL_SIRI_REMOTE_INCLUDED" in
   true)
     test -x "$APPLE_REMOTE_AUDIO_HELPER"
@@ -94,6 +96,27 @@ test -d "$SPARKLE_FRAMEWORK"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Sparkle"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Updater.app/Contents/MacOS/Updater"
+SAYALL_CHROMECASE_INCLUDED="$(plutil -extract SayAllChromecaseIncluded raw -o - "$PLIST" 2>/dev/null || true)"
+case "$SAYALL_CHROMECASE_INCLUDED" in
+  true)
+    if [[ -d "$SAYALL_CHROMECASE_RESOURCE_BUNDLE" && -d "$SAYALL_CHROMECAST_RESOURCE_BUNDLE" ]]; then
+      print -u2 "both legacy and canonical Chromecast resource bundles are present"
+      exit 1
+    fi
+    if [[ ! -d "$SAYALL_CHROMECASE_RESOURCE_BUNDLE" && ! -d "$SAYALL_CHROMECAST_RESOURCE_BUNDLE" ]]; then
+      print -u2 "Chromecast resource bundle is missing"
+      exit 1
+    fi
+    ;;
+  false|"")
+    test ! -e "$SAYALL_CHROMECASE_RESOURCE_BUNDLE"
+    test ! -e "$SAYALL_CHROMECAST_RESOURCE_BUNDLE"
+    ;;
+  *)
+    print -u2 "invalid SayAllChromecaseIncluded marker"
+    exit 1
+    ;;
+esac
 if [[ -n "$(find "$APP" -type d ! -perm 0755 -print -quit)" ]]; then
   print -u2 "app bundle contains a directory without 0755 permissions"
   exit 1
@@ -307,6 +330,7 @@ if [[ "$REQUIRE_SAYALL_COMBINATION_ACTIONS" == "1" && \
 fi
 SAYALL_BUTTON_PROFILES_INCLUDED="$(plutil -extract SayAllButtonProfilesIncluded raw -o - "$PLIST" 2>/dev/null || true)"
 SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllButtonProfiles_SayAllButtonProfiles.bundle"
+SAYALL_MEMBERSHIP_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllMembership_SayAllMembershipUI.bundle"
 if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" ]]; then
   test -d "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE"
   if [[ -d "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE/Contents/Resources" ]]; then
@@ -324,8 +348,19 @@ if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" ]]; then
     print -u2 "SayAll button profiles Chinese localization is missing"
     exit 1
   fi
+  test -d "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE"
+  if [[ -d "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources" ]]; then
+    SAYALL_MEMBERSHIP_RESOURCE_ROOT="$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources"
+  else
+    SAYALL_MEMBERSHIP_RESOURCE_ROOT="$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE"
+  fi
+  test -f "$SAYALL_MEMBERSHIP_RESOURCE_ROOT/MembershipCenterCopy.json"
+  test -f "$SAYALL_MEMBERSHIP_RESOURCE_ROOT/AppIcon.png"
 elif [[ -e "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE" ]]; then
   print -u2 "SayAll button profiles resource bundle exists without the inclusion marker"
+  exit 1
+elif [[ -e "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE" ]]; then
+  print -u2 "SayAll membership resource bundle exists without the button profiles marker"
   exit 1
 fi
 if [[ "$REQUIRE_SAYALL_BUTTON_PROFILES" == "1" && \

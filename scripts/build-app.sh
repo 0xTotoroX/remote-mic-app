@@ -27,6 +27,7 @@ SAYALL_MAC_REMOTE_PACKAGE_PATH="${SAYALL_MAC_REMOTE_PACKAGE_PATH:-}"
 SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH="${SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH:-}"
 SAYALL_SIRI_REMOTE_PACKAGE_PATH="${SAYALL_SIRI_REMOTE_PACKAGE_PATH:-}"
 SAYALL_CHROMECASE_PACKAGE_PATH="${SAYALL_CHROMECASE_PACKAGE_PATH:-}"
+SAYALL_MEMBERSHIP_API_BASE_URL="${SAYALL_MEMBERSHIP_API_BASE_URL:-}"
 RELEASE_STAGE_TIMEOUTS="${RELEASE_STAGE_TIMEOUTS:-0}"
 RELEASE_SWIFT_BUILD_TIMEOUT_SECONDS="${RELEASE_SWIFT_BUILD_TIMEOUT_SECONDS:-300}"
 RELEASE_CODESIGN_TIMEOUT_SECONDS="${RELEASE_CODESIGN_TIMEOUT_SECONDS:-45}"
@@ -170,8 +171,20 @@ if [[ -n "$SAYALL_CHROMECASE_PACKAGE_PATH" ]]; then
   SAYALL_CHROMECASE_INCLUDED=true
   # 按键页的遥控器素材随私有包打进 App，因此解析器必须优先读 App 的 Resources；
   # 退回 SwiftPM 内嵌的构建机路径会让发布包找不到图片，界面只会显示占位块。
-  CHROMECASE_SOURCE_ROOT="$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecase"
-  CHROMECASE_RESOURCE_RESOLVER="$CHROMECASE_SOURCE_ROOT/ChromecaseResources.swift"
+  if [[ -d "$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecast" ]]; then
+    CHROMECASE_SOURCE_ROOT="$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecast"
+    CHROMECASE_RESOURCE_RESOLVER="$CHROMECASE_SOURCE_ROOT/ChromecastResources.swift"
+    CHROMECASE_MAPPING_SOURCE="ChromecastMappingPage.swift"
+    CHROMECASE_RESOURCE_BUNDLE_NAME="SayAllChromecast_SayAllChromecast.bundle"
+  elif [[ -d "$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecase" ]]; then
+    CHROMECASE_SOURCE_ROOT="$SAYALL_CHROMECASE_PACKAGE_PATH/Sources/SayAllChromecase"
+    CHROMECASE_RESOURCE_RESOLVER="$CHROMECASE_SOURCE_ROOT/ChromecaseResources.swift"
+    CHROMECASE_MAPPING_SOURCE="ChromecaseMappingPage.swift"
+    CHROMECASE_RESOURCE_BUNDLE_NAME="SayAllChromecase_SayAllChromecase.bundle"
+  else
+    print -u2 "Chromecast package source root is missing"
+    exit 1
+  fi
   if [[ ! -f "$CHROMECASE_RESOURCE_RESOLVER" ]] || \
       ! /usr/bin/grep -Eq 'Bundle\.main\.resourceURL' "$CHROMECASE_RESOURCE_RESOLVER"; then
     print -u2 "Chromecase resource resolver is missing or does not prefer the packaged App resource bundle"
@@ -179,7 +192,7 @@ if [[ -n "$SAYALL_CHROMECASE_PACKAGE_PATH" ]]; then
   fi
   # 只检查画布源文件；解析器本身必须保留 `Bundle.module` 作为兜底分支。
   for chromecase_source in \
-    ChromecaseMappingPage.swift; do
+    "$CHROMECASE_MAPPING_SOURCE"; do
     if /usr/bin/grep -Eq 'Bundle\.module' "$CHROMECASE_SOURCE_ROOT/$chromecase_source"; then
       print -u2 "Chromecase source bypasses the packaged resource resolver: $chromecase_source"
       exit 1
@@ -289,6 +302,21 @@ if [[ "$REQUIRE_SAYALL_BUTTON_PROFILES" == "1" &&
   print -u2 "A SayAll button profiles package is required for this build"
   exit 1
 fi
+if [[ -n "$SAYALL_MEMBERSHIP_API_BASE_URL" ]] && ! print -r -- "$SAYALL_MEMBERSHIP_API_BASE_URL" | \
+    rg -q '^(https://[^[:space:]]+|http://127\.0\.0\.1(:[0-9]+)?(/[^[:space:]]*)?)$'; then
+  print -u2 "SAYALL_MEMBERSHIP_API_BASE_URL must use HTTPS or local http://127.0.0.1"
+  exit 1
+fi
+if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
+      "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" == "true" ]]; then
+  SAYALL_MEMBERSHIP_RESOURCE_BUNDLE="$SAYALL_PRIVATE_ARTIFACT_PACKAGE_PATH/Resources/SayAllMembership_SayAllMembershipUI.bundle"
+  if [[ ! -d "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE" ||
+        ! -f "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources/MembershipCenterCopy.json" ||
+        ! -f "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE/Contents/Resources/AppIcon.png" ]]; then
+    print -u2 "Prepared private artifacts are missing the SayAll membership resource bundle"
+    exit 1
+  fi
+fi
 if [[ -n "$SAYALL_MAC_REMOTE_PACKAGE_PATH" ]]; then
   if [[ ! -f "$SAYALL_MAC_REMOTE_PACKAGE_PATH/Package.swift" ]]; then
     print -u2 "SAYALL_MAC_REMOTE_PACKAGE_PATH must contain Package.swift"
@@ -359,7 +387,7 @@ if [[ "$SAYALL_SIRI_REMOTE_INCLUDED" == "true" ]]; then
   SIRI_REMOTE_RESOURCE_BUNDLE="$BIN_DIR/SayAllSiriRemote_SayAllSiriRemote.bundle"
 fi
 if [[ "$SAYALL_CHROMECASE_INCLUDED" == "true" ]]; then
-  CHROMECASE_RESOURCE_BUNDLE="$BIN_DIR/SayAllChromecase_SayAllChromecase.bundle"
+  CHROMECASE_RESOURCE_BUNDLE="$BIN_DIR/$CHROMECASE_RESOURCE_BUNDLE_NAME"
 fi
 
 case "$APP_DIR" in
@@ -410,7 +438,7 @@ if [[ "$SAYALL_CHROMECASE_INCLUDED" == "true" ]]; then
     exit 1
   fi
   ditto --norsrc --noextattr --noqtn --noacl \
-    "$CHROMECASE_RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/SayAllChromecase_SayAllChromecase.bundle"
+    "$CHROMECASE_RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/$CHROMECASE_RESOURCE_BUNDLE_NAME"
 fi
 ditto --norsrc --noextattr --noqtn --noacl \
   "$ROOT/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
@@ -426,6 +454,11 @@ plutil -insert SayAllButtonProfilesIncluded -bool "$SAYALL_BUTTON_PROFILES_INCLU
 plutil -remove SayAllPrivateArtifactsIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 plutil -insert SayAllPrivateArtifactsIncluded -bool "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" \
   "$APP_DIR/Contents/Info.plist"
+if [[ -n "$SAYALL_MEMBERSHIP_API_BASE_URL" ]]; then
+  plutil -remove SayAllMembershipAPIBaseURL "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+  plutil -insert SayAllMembershipAPIBaseURL -string "$SAYALL_MEMBERSHIP_API_BASE_URL" \
+    "$APP_DIR/Contents/Info.plist"
+fi
 plutil -remove SayAllSiriRemoteIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 plutil -insert SayAllSiriRemoteIncluded -bool "$SAYALL_SIRI_REMOTE_INCLUDED" \
   "$APP_DIR/Contents/Info.plist"
@@ -585,6 +618,12 @@ if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" ]]; then
   ditto --norsrc --noextattr --noqtn --noacl \
     "$SAYALL_BUTTON_PROFILES_RESOURCE_BUNDLE" \
     "$APP_DIR/Contents/Resources/SayAllButtonProfiles_SayAllButtonProfiles.bundle"
+fi
+if [[ "$SAYALL_BUTTON_PROFILES_INCLUDED" == "true" &&
+      "$SAYALL_PRIVATE_ARTIFACT_INCLUDED" == "true" ]]; then
+  ditto --norsrc --noextattr --noqtn --noacl \
+    "$SAYALL_MEMBERSHIP_RESOURCE_BUNDLE" \
+    "$APP_DIR/Contents/Resources/SayAllMembership_SayAllMembershipUI.bundle"
 fi
 SPARKLE_VERSION_DIR="$APP_DIR/Contents/Frameworks/Sparkle.framework/Versions/B"
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
