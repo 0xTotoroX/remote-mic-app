@@ -63,7 +63,6 @@ test -x "$BINARY"
 test -x "$MCP_HELPER"
 SAYALL_SIRI_REMOTE_INCLUDED="$(plutil -extract SayAllSiriRemoteIncluded raw -o - "$PLIST" 2>/dev/null || true)"
 SAYALL_SIRI_REMOTE_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllSiriRemote_SayAllSiriRemote.bundle"
-SAYALL_CHROMECASE_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllChromecase_SayAllChromecase.bundle"
 SAYALL_CHROMECAST_RESOURCE_BUNDLE="$APP/Contents/Resources/SayAllChromecast_SayAllChromecast.bundle"
 case "$SAYALL_SIRI_REMOTE_INCLUDED" in
   true)
@@ -96,24 +95,16 @@ test -d "$SPARKLE_FRAMEWORK"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Sparkle"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
 test -x "$SPARKLE_FRAMEWORK/Versions/B/Updater.app/Contents/MacOS/Updater"
-SAYALL_CHROMECASE_INCLUDED="$(plutil -extract SayAllChromecaseIncluded raw -o - "$PLIST" 2>/dev/null || true)"
-case "$SAYALL_CHROMECASE_INCLUDED" in
+SAYALL_CHROMECAST_INCLUDED="$(plutil -extract SayAllChromecastIncluded raw -o - "$PLIST" 2>/dev/null || true)"
+case "$SAYALL_CHROMECAST_INCLUDED" in
   true)
-    if [[ -d "$SAYALL_CHROMECASE_RESOURCE_BUNDLE" && -d "$SAYALL_CHROMECAST_RESOURCE_BUNDLE" ]]; then
-      print -u2 "both legacy and canonical Chromecast resource bundles are present"
-      exit 1
-    fi
-    if [[ ! -d "$SAYALL_CHROMECASE_RESOURCE_BUNDLE" && ! -d "$SAYALL_CHROMECAST_RESOURCE_BUNDLE" ]]; then
-      print -u2 "Chromecast resource bundle is missing"
-      exit 1
-    fi
+    test -d "$SAYALL_CHROMECAST_RESOURCE_BUNDLE"
     ;;
   false|"")
-    test ! -e "$SAYALL_CHROMECASE_RESOURCE_BUNDLE"
     test ! -e "$SAYALL_CHROMECAST_RESOURCE_BUNDLE"
     ;;
   *)
-    print -u2 "invalid SayAllChromecaseIncluded marker"
+    print -u2 "invalid SayAllChromecastIncluded marker"
     exit 1
     ;;
 esac

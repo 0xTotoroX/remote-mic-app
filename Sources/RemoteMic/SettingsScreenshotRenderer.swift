@@ -62,8 +62,8 @@ enum SettingsScreenshotRenderer {
         let usesSiriRemote = ProcessInfo.processInfo.environment[
             "REMOTE_MIC_SETTINGS_SCREENSHOT_SIRI_REMOTE"
         ] == "1"
-        let usesChromecase = ProcessInfo.processInfo.environment[
-            "REMOTE_MIC_SETTINGS_SCREENSHOT_CHROMECASE"
+        let usesChromecast = ProcessInfo.processInfo.environment[
+            "REMOTE_MIC_SETTINGS_SCREENSHOT_CHROMECAST"
         ] == "1"
         let showsRemoteCards = ProcessInfo.processInfo.environment[
             "REMOTE_MIC_SETTINGS_SCREENSHOT_REMOTE_CARDS"
@@ -93,20 +93,20 @@ enum SettingsScreenshotRenderer {
             settings.bindHIDFingerprint("settings-screenshot-xiaomi", to: xiaomiID)
             let appleID = settings.registerHIDRemote(fingerprint: "settings-screenshot-apple-remote")
             settings.updateRemoteProfileModel(appleID, model: .appleSiriRemoteA2854)
-            let chromecaseID = settings.registerChromecaseRemote()
+            let chromecastID = settings.registerChromecastRemote()
             settings.selectRemoteProfile(appleID)
             remoteCardSystemNames = [
                 xiaomiID: "书房遥控器",
                 appleID: "客厅 Apple TV",
-                chromecaseID: "Bedroom Remote",
+                chromecastID: "Bedroom Remote",
             ]
             remoteCardBatteryLevels = [
                 xiaomiID: 78,
-                chromecaseID: 42,
+                chromecastID: 42,
             ]
             remoteCardPowerStates = [
                 xiaomiID: .charging,
-                chromecaseID: .onBattery,
+                chromecastID: .onBattery,
             ]
         }
 #if SAYALL_SIRI_REMOTE_ENABLED
@@ -119,13 +119,13 @@ enum SettingsScreenshotRenderer {
 #else
         _ = usesSiriRemote
 #endif
-#if SAYALL_CHROMECASE_ENABLED
-        if usesChromecase {
-            let profileID = settings.registerChromecaseRemote()
+#if SAYALL_CHROMECAST_ENABLED
+        if usesChromecast {
+            let profileID = settings.registerChromecastRemote()
             settings.selectRemoteProfile(profileID)
         }
 #else
-        _ = usesChromecase
+        _ = usesChromecast
 #endif
         if opensShortcutEditor {
             settings.customMappingEnabled = true

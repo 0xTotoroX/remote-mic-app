@@ -1,7 +1,7 @@
 import Foundation
 
 /// 语音键在目标工具上的一次事件。
-enum ChromecaseFunctionKeyEvent: Equatable {
+enum ChromecastFunctionKeyEvent: Equatable {
     case press
     case release
 }
@@ -18,14 +18,14 @@ enum ChromecaseFunctionKeyEvent: Equatable {
 /// 即豆包「免按模式」只在**按下**时切换状态。若沿用 `hold`（一个会话只发一次按下、松开一次），
 /// 豆包的状态每**两个**会话才翻转一次——真机表现就是「按一下结束，电平图不消失；再按一下才结束，
 /// 但遥控器灯又亮了（因为那一次已经是下一个会话的开始）」。
-struct ChromecaseFunctionKeyDrive: Equatable {
+struct ChromecastFunctionKeyDrive: Equatable {
     /// 开始收音时要发出的事件序列。
-    let startEvents: [ChromecaseFunctionKeyEvent]
+    let startEvents: [ChromecastFunctionKeyEvent]
     /// 结束收音时要发出的事件序列。
-    let stopEvents: [ChromecaseFunctionKeyEvent]
+    let stopEvents: [ChromecastFunctionKeyEvent]
 
     /// 按住—松开：开始按下（保持按住），结束松开。
-    static let hold = ChromecaseFunctionKeyDrive(
+    static let hold = ChromecastFunctionKeyDrive(
         startEvents: [.press],
         stopEvents: [.release]
     )
@@ -34,7 +34,7 @@ struct ChromecaseFunctionKeyDrive: Equatable {
     ///
     /// 开始处必须**松开**：否则 Fn 修饰位在整个会话期间一直被按住，用户此时打字会变成 Fn 组合键
     /// （例如 Fn+Delete 是前向删除），而点按式工具根本不需要这个按住状态。
-    static let taps = ChromecaseFunctionKeyDrive(
+    static let taps = ChromecastFunctionKeyDrive(
         startEvents: [.press, .release],
         stopEvents: [.press, .release]
     )
@@ -47,11 +47,11 @@ struct ChromecaseFunctionKeyDrive: Equatable {
     ///   「按住说话」用按住—松开（与豆包「长按模式」同构）。
     ///
     /// 注意：这里**不再读**「语音键模拟 Fn 点按」开关。那个开关是为「只会按住收音」的遥控器准备的
-    /// （界面也只在那些遥控器上显示），Chromecase 自己就能按一次收音，不需要它。
+    /// （界面也只在那些遥控器上显示），Chromecast 自己就能按一次收音，不需要它。
     static func resolve(
-        voiceMode: ChromecaseVoiceMode,
+        voiceMode: ChromecastVoiceMode,
         toolSupportsHoldVoiceRecording: Bool
-    ) -> ChromecaseFunctionKeyDrive {
+    ) -> ChromecastFunctionKeyDrive {
         guard toolSupportsHoldVoiceRecording else { return .taps }
         return voiceMode == .toggle ? .taps : .hold
     }

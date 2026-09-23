@@ -1,4 +1,4 @@
-# Chromecase 样机记录：2026-09-22 接入的这只（按键通道不可用）
+# Chromecast 样机记录：2026-09-22 接入的这只（按键通道不可用）
 
 本文只记录**这一只**样机的身份信息、判定结论与取证方法。它是一只**按键不可用**的设备样本，
 不代表、也不改变此前各只样机的结论。
@@ -41,7 +41,7 @@
 ### 3.1 历史基线对比（最直接的一条）
 
 把日志目录下的 4 个文件合并（`runtime.log` 及其轮转文件 `.1` `.2` `.3`），
-按天统计 `CHROMECASE HID press` 的出现次数：
+按天统计 `CHROMECAST HID press` 的出现次数：
 
 | 日期 | 上报次数 | 说明 |
 | --- | --- | --- |
@@ -92,9 +92,9 @@
 ### 3.5 故障发生前的最后一次上报：只有按下、没有抬起
 
 ```
-12:38:36.788Z  CHROMECASE HID press usage=0x0d control=volume_down
+12:38:36.788Z  CHROMECAST HID press usage=0x0d control=volume_down
                （之后 13 秒内：没有任何事件）
-12:38:49.864Z  CHROMECASE CONTROL cancelled control=volume_down reason=disconnected
+12:38:49.864Z  CHROMECAST CONTROL cancelled control=volume_down reason=disconnected
 ```
 
 宿主一直停在「按住」状态，直到用户扣电池断开链路。**macOS 对处于按住状态的音量键会自动重复**，
@@ -148,10 +148,10 @@ hidutil list | grep 9450
 # 按键上报次数（含轮转日志）
 cd ~/Library/Logs/RemoteMic
 cat runtime.log.3 runtime.log.2 runtime.log.1 runtime.log | \
-  grep -a "CHROMECASE HID press" | grep -aoE "^[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | uniq -c
+  grep -a "CHROMECAST HID press" | grep -aoE "^[0-9]{4}-[0-9]{2}-[0-9]{2}" | sort | uniq -c
 
 # 宿主侧按键事件（判据关键字）
-grep -aE "CHROMECASE HID (press|release)|CHROMECASE ACTION|CHROMECASE CONTROL" runtime.log
+grep -aE "CHROMECAST HID (press|release)|CHROMECAST ACTION|CHROMECAST CONTROL" runtime.log
 ```
 
 **独立观察进程的要点**（用于区分「设备没发」与「宿主没接好」）：

@@ -81,10 +81,10 @@ let sourceMacroCapabilitiesAvailable = combinationActionsPackagePath.map {
 } ?? false
 let privateArtifactsAvailable = !(privateArtifactPackagePath ?? "").isEmpty
 let macroCapabilitiesAvailable = sourceMacroCapabilitiesAvailable || privateArtifactsAvailable
-let chromecasePackagePath = ProcessInfo.processInfo.environment[
-    "SAYALL_CHROMECASE_PACKAGE_PATH"
+let chromecastPackagePath = ProcessInfo.processInfo.environment[
+    "SAYALL_CHROMECAST_PACKAGE_PATH"
 ]
-let chromecaseEnabled = !(chromecasePackagePath ?? "").isEmpty
+let chromecastEnabled = !(chromecastPackagePath ?? "").isEmpty
 let macOSPlatform: SupportedPlatform = ProcessInfo.processInfo.environment["RELEASE_VARIANT"] == "intel"
     ? .macOS(.v13)
     : .macOS(.v14)
@@ -92,8 +92,8 @@ var remoteMicSwiftSettings: [SwiftSetting] = []
 if siriRemoteEnabled {
     remoteMicSwiftSettings.append(.define("SAYALL_SIRI_REMOTE_ENABLED"))
 }
-if chromecaseEnabled {
-    remoteMicSwiftSettings.append(.define("SAYALL_CHROMECASE_ENABLED"))
+if chromecastEnabled {
+    remoteMicSwiftSettings.append(.define("SAYALL_CHROMECAST_ENABLED"))
 }
 if macRemoteEnabled {
     remoteMicSwiftSettings.append(.define("SAYALL_MAC_REMOTE_ENABLED"))
@@ -129,18 +129,18 @@ if let siriRemotePath = siriRemotePackagePath, !siriRemotePath.isEmpty {
     )
 }
 
-if let chromecasePath = chromecasePackagePath, !chromecasePath.isEmpty {
-    let packageIdentity = URL(fileURLWithPath: chromecasePath)
+if let chromecastPath = chromecastPackagePath, !chromecastPath.isEmpty {
+    let packageIdentity = URL(fileURLWithPath: chromecastPath)
         .lastPathComponent
         .lowercased()
-    packageDependencies.append(.package(path: chromecasePath))
+    packageDependencies.append(.package(path: chromecastPath))
     remoteMicDependencies.append(
-        .product(name: "SayAllChromecase", package: packageIdentity)
+        .product(name: "SayAllChromecast", package: packageIdentity)
     )
     // 测试目标也要能引用私有包：能力矩阵要与型号自报的能力声明做跨仓一致性校验
-    // （见 Tests/RemoteMicTests/ChromecaseCapabilityContractTests.swift）。
+    // （见 Tests/RemoteMicTests/ChromecastCapabilityContractTests.swift）。
     remoteMicTestDependencies.append(
-        .product(name: "SayAllChromecase", package: packageIdentity)
+        .product(name: "SayAllChromecast", package: packageIdentity)
     )
 }
 
@@ -317,8 +317,8 @@ let package = Package(
                 if siriRemoteEnabled {
                     settings.append(.define("SAYALL_SIRI_REMOTE_ENABLED"))
                 }
-                if chromecaseEnabled {
-                    settings.append(.define("SAYALL_CHROMECASE_ENABLED"))
+                if chromecastEnabled {
+                    settings.append(.define("SAYALL_CHROMECAST_ENABLED"))
                 }
                 return settings
             }()

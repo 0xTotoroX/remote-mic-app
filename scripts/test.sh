@@ -23,7 +23,7 @@ xcrun swiftc \
   "$ROOT/Sources/RemoteMic/OnboardingFlow.swift" \
   "$ROOT/Sources/RemoteMic/VoiceKeyMode.swift" \
   "$ROOT/Sources/RemoteMic/AppSettings.swift" \
-  "$ROOT/Sources/RemoteMic/ChromecaseFeatureIntegration.swift" \
+  "$ROOT/Sources/RemoteMic/ChromecastFeatureIntegration.swift" \
   "$ROOT/Sources/RemoteMic/AppLinks.swift" \
   "$ROOT/Sources/RemoteMic/Localization.swift" \
   "$ROOT/Sources/RemoteMic/VoiceFunctionKeyLatch.swift" \

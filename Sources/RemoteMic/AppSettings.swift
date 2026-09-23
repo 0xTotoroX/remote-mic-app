@@ -305,12 +305,12 @@ final class AppSettings: ObservableObject {
         static let checksForPreReleaseUpdates = "checksForPreReleaseUpdates"
         static let experimentalContinuousRecordingEnabled = "experimentalContinuousRecordingEnabled"
         static let voiceFnTapModeEnabled = "voiceFnTapModeEnabled"
-        static let chromecaseAllowSystemReservedKeys = "chromecase.allowSystemReservedKeys"
-        static let chromecaseSystemReservedExceptions = "chromecase.systemReservedExceptions"
+        static let chromecastAllowSystemReservedKeys = "chromecast.allowSystemReservedKeys"
+        static let chromecastSystemReservedExceptions = "chromecast.systemReservedExceptions"
         static let voiceKeyMode = "voiceKeyMode"
         static let siriRemoteScrollArrowReversed = "siriRemote.scrollArrowReversed"
-        static let chromecaseEnabled = "chromecase.enabled"
-        static let chromecaseVoiceMode = "chromecase.voiceMode"
+        static let chromecastEnabled = "chromecast.enabled"
+        static let chromecastVoiceMode = "chromecast.voiceMode"
         static let localTranscriptHistoryEnabled = "localTranscriptHistoryEnabled"
         static let localOriginalAudioRecordingEnabled = "localOriginalAudioRecordingEnabled"
         static let continuousRecordingPowerBindingBackup = "continuousRecordingPowerBindingBackup"
@@ -441,17 +441,17 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// 放开 Chromecase「系统占用键」（left/right/select）的接管限制。
+    /// 放开 Chromecast「系统占用键」（left/right/select）的接管限制。
     ///
     /// 默认关闭：这三颗键在旧款遥控器上被 macOS 配件服务（BT-AACP）在 CGEvent 之外直接消费成
     /// 媒体控制，接管只会双执行。新款遥控器是否真的被系统占用只能真机验证——打开此开关后
     /// 画布不再置灰、运行时不再跳过，若系统仍在消费则会出现「双执行」，这本身就是判据。
     /// 不进入导入/导出配置：这是针对具体遥控器硬件的临时豁免，不是用户偏好。
-    @Published var chromecaseAllowSystemReservedKeys: Bool {
+    @Published var chromecastAllowSystemReservedKeys: Bool {
         didSet {
             defaults.set(
-                chromecaseAllowSystemReservedKeys,
-                forKey: Keys.chromecaseAllowSystemReservedKeys
+                chromecastAllowSystemReservedKeys,
+                forKey: Keys.chromecastAllowSystemReservedKeys
             )
         }
     }
@@ -460,11 +460,11 @@ final class AppSettings: ObservableObject {
     ///
     /// 三颗键的系统代价不同（左/右=播放时切歌；OK=任何时候拉起音乐 App），全有全无的开关
     /// 无法表达这种取舍。与主开关相加生效：任一途径放开的键都由 App 接管。
-    @Published var chromecaseSystemReservedExceptions: Set<String> {
+    @Published var chromecastSystemReservedExceptions: Set<String> {
         didSet {
             defaults.set(
-                chromecaseSystemReservedExceptions.sorted().joined(separator: ","),
-                forKey: Keys.chromecaseSystemReservedExceptions
+                chromecastSystemReservedExceptions.sorted().joined(separator: ","),
+                forKey: Keys.chromecastSystemReservedExceptions
             )
         }
     }
@@ -484,17 +484,17 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Chromecase 遥控器总开关。私有包缺失时该设置无副作用，设置页也不会展示。
-    @Published var chromecaseEnabled: Bool {
+    /// Chromecast 遥控器总开关。私有包缺失时该设置无副作用，设置页也不会展示。
+    @Published var chromecastEnabled: Bool {
         didSet {
-            defaults.set(chromecaseEnabled, forKey: Keys.chromecaseEnabled)
+            defaults.set(chromecastEnabled, forKey: Keys.chromecastEnabled)
         }
     }
 
-    /// Chromecase 语音手势模式。默认 `toggle`（按一下开始、再按一下结束）。
-    @Published var chromecaseVoiceMode: ChromecaseVoiceMode {
+    /// Chromecast 语音手势模式。默认 `toggle`（按一下开始、再按一下结束）。
+    @Published var chromecastVoiceMode: ChromecastVoiceMode {
         didSet {
-            defaults.set(chromecaseVoiceMode.rawValue, forKey: Keys.chromecaseVoiceMode)
+            defaults.set(chromecastVoiceMode.rawValue, forKey: Keys.chromecastVoiceMode)
         }
     }
 
@@ -753,11 +753,11 @@ final class AppSettings: ObservableObject {
             forKey: Keys.experimentalContinuousRecordingEnabled
         )
         voiceFnTapModeEnabled = defaults.bool(forKey: Keys.voiceFnTapModeEnabled)
-        chromecaseAllowSystemReservedKeys = defaults.bool(
-            forKey: Keys.chromecaseAllowSystemReservedKeys
+        chromecastAllowSystemReservedKeys = defaults.bool(
+            forKey: Keys.chromecastAllowSystemReservedKeys
         )
-        chromecaseSystemReservedExceptions = Set(
-            (defaults.string(forKey: Keys.chromecaseSystemReservedExceptions) ?? "")
+        chromecastSystemReservedExceptions = Set(
+            (defaults.string(forKey: Keys.chromecastSystemReservedExceptions) ?? "")
                 .split(separator: ",")
                 .map(String.init)
         )
@@ -768,11 +768,11 @@ final class AppSettings: ObservableObject {
             forKey: Keys.siriRemoteScrollArrowReversed
         )
         // 首次运行默认开启：私有包只会被编入有该硬件的构建，让用户先找开关再测试没有意义。
-        chromecaseEnabled = defaults.object(forKey: Keys.chromecaseEnabled) == nil
+        chromecastEnabled = defaults.object(forKey: Keys.chromecastEnabled) == nil
             ? true
-            : defaults.bool(forKey: Keys.chromecaseEnabled)
-        chromecaseVoiceMode = ChromecaseVoiceMode(
-            rawValue: defaults.string(forKey: Keys.chromecaseVoiceMode) ?? ""
+            : defaults.bool(forKey: Keys.chromecastEnabled)
+        chromecastVoiceMode = ChromecastVoiceMode(
+            rawValue: defaults.string(forKey: Keys.chromecastVoiceMode) ?? ""
         ) ?? .productDefault
         localTranscriptHistoryEnabled = defaults.bool(
             forKey: Keys.localTranscriptHistoryEnabled
@@ -1210,24 +1210,24 @@ final class AppSettings: ObservableObject {
 #endif
     }
 
-    /// 注册 Chromecase 遥控器的设备档案。
+    /// 注册 Chromecast 遥控器的设备档案。
     ///
     /// 按**型号**识别，不存任何设备标识：私有包给的 `instanceKey` 是进程内的，写进偏好会每次
     /// 启动都生成新档案，用户的映射就丢了。苹果遥控器用 HID fingerprint，本型号没有稳定的
     /// 宿主侧 HID 指纹，因此以型号为准（同时最多只有一台该型号遥控器）。
     @discardableResult
-    func registerChromecaseRemote() -> UUID {
-        if let existing = remoteDeviceProfiles.first(where: { $0.model == .chromecaseVoiceRemote }) {
+    func registerChromecastRemote() -> UUID {
+        if let existing = remoteDeviceProfiles.first(where: { $0.model == .chromecastVoiceRemote }) {
             return existing.id
         }
         if let index = remoteDeviceProfiles.firstIndex(where: {
             $0.bluetoothIdentifier == nil && $0.hidFingerprint == nil && $0.model == .unknown
         }) {
-            remoteDeviceProfiles[index].model = .chromecaseVoiceRemote
+            remoteDeviceProfiles[index].model = .chromecastVoiceRemote
             return remoteDeviceProfiles[index].id
         }
         let profile = RemoteDeviceProfile(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             mappings: mappingsForNewRemote()
         )
         remoteDeviceProfiles.append(profile)

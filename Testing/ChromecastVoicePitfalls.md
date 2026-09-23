@@ -1,7 +1,7 @@
-# Chromecase 语音链路踩坑清单（2026-09-15 验收日）
+# Chromecast 语音链路踩坑清单（2026-09-15 验收日）
 
 按踩到的时间序记录，供后续回顾与避免。根因详情见
-`Testing/ChromecaseHardwareInterface.md` 的「根因 #1~#5」小节。
+`Testing/ChromecastHardwareInterface.md` 的「根因 #1~#5」小节。
 
 ## 协议与固件
 
@@ -23,7 +23,7 @@
 
 - **音频出口引擎会启动失败且无自愈**：AVAudioEngine 偶尔 startup 时没起来（`engine_running=false`），
   之后每次 REBIND 都无法恢复，`enqueue_failures` 恒等于 `audio_batches`（100% 丢弃）。
-  对策：链路就绪即预热（`reason=chromecase_link_ready`），别等首次按键。
+  对策：链路就绪即预热（`reason=chromecast_link_ready`），别等首次按键。
 - **BlackHole 型环回设备没有回放缓冲**：写入端（宿主写虚拟设备输出端）比读取端（输入法
   打开输入流）先启动，读端开流之前写入的数据直接消失。对策：音频预卷缓冲——会话开头
   0.5s 先攒在宿主内存，到期一次性排入 AVAudioPlayerNode（按实时消费排队 buffer，
@@ -53,7 +53,7 @@
 
 ## 硬件真伪
 
-- **当前用于真机实验的 Chromecase 遥控器是假冒品**（2026-09-15 确认）。本文档与手册中
+- **当前用于真机实验的 Chromecast 遥控器是假冒品**（2026-09-15 确认）。本文档与手册中
   所有「固件行为」结论（330ms 推流窗口、VAD 门控、<1s 轻点不上报、幽灵 0x04、拆流不回
   `MIC_OPEN_ERROR` 等）均基于该假冒品的实测。**之后需要换真货重新验证**，上述结论在真货上
   可能不成立，验收前先确认手里的遥控器是否为正品。
@@ -80,26 +80,26 @@
 
 ### 正品遥控器实测（2026-09-16，替换假冒品后）
 
-- **正品可被独占采集**：`CHROMECASE HID phase=connected mode=mapped seized=true`，管理级与设备级
+- **正品可被独占采集**：`CHROMECAST HID phase=connected mode=mapped seized=true`，管理级与设备级
   seize 均成功——假冒品做不到（两级都被 `NotPrivileged` 拒绝）。**seize 能力差异是真伪的判据之一**。
 - **报告格式**：`reportID=0x01 len=3 head=01 XX 00`（首字节是 reportID，第二字节 usage，
-  第三字节 0），与 `ChromecaseHIDUsage` 表完全对得上（0x06=right / 0x08=mute / 0x0a=home /
-  0x0e=youtube）。按键映射执行链路 `CHROMECASE ACTION phase=completed result=dispatched` 正常。
+  第三字节 0），与 `ChromecastHIDUsage` 表完全对得上（0x06=right / 0x08=mute / 0x0a=home /
+  0x0e=youtube）。按键映射执行链路 `CHROMECAST ACTION phase=completed result=dispatched` 正常。
 - **seize 不足以阻止系统消费按键**：正品在 `seized=true` 下，静音/左右等键仍会触发系统原本行为
   （系统静音、焦点移动）。必须叠加第二道保险——与小米/苹果链路一致，在按键边沿调用
   `hidEventSuppressor.arm(nativeEvents:edge:)` 让 CGEventTap 吞掉随之到达的原生事件。
-  **Chromecase 链路此前漏了这一步（HID FILTER 从未启动）**，修复见 build 186。
+  **Chromecast 链路此前漏了这一步（HID FILTER 从未启动）**，修复见 build 186。
 
 ### 正品按键的原生事件实测表（2026-09-16，`HID FILTER arm/miss/suppressed` 日志为证）
 
-| 按键 | 通用表（小米 RC003） | 正品 Chromecase 实测 | 结果 |
+| 按键 | 通用表（小米 RC003） | 正品 Chromecast 实测 | 结果 |
 | --- | --- | --- | --- |
 | 音量 +/− | `systemKey(0/1)` | `systemKey(0/1)` | 抑制命中（`suppressed`），无系统副作用 |
 | **静音** | `systemKey(3)` | **`systemKey(7)`** | 沿用通用表必然 miss → 系统音量 HUD 照常出现 |
 | 方向（上/下/左/右） | `keyCode 126/125/123/124` | 系统侧**不产生事件** | tap 零记录，无副作用，无需抑制 |
 | 确认（OK） | `keyCode 36` | 系统侧**不产生事件** | 同上 |
 
-- 修复：静音按设备单独映射 `chromecaseNativeEvents(for:)`（build 190）。
+- 修复：静音按设备单独映射 `chromecastNativeEvents(for:)`（build 190）。
 - 教训：**通用 `RemoteButton.nativeEvent` 表是小米 RC003 的实测值，换遥控器必须重新实测**；
   诊断「抑制无效」时，命中与未命中都要留日志（`suppressed`/`miss`），只看 miss 会漏掉
   「键码完全对不上」的情况。**注意区分「自定义动作效果」与「系统原本功能」**——本次
@@ -148,16 +148,16 @@ ioreg 取证（VID 0x18D1/PID 0x9450）：
 AACP 侧的虚拟 HID 事件服务上。至此用户态手段全部穷尽（seize / CGEventTap 两层 /
 hidutil 设备属性 / hidutil usage 重映射），结论不变：**要消除三键的系统侧行为只有 DriverKit
 系统扩展（Karabiner 方案）一条路**。三键在 App 内的自定义映射一切正常
-（`CHROMECASE ACTION result=dispatched` 全部命中）。
+（`CHROMECAST ACTION result=dispatched` 全部命中）。
 
 系统副作用的实际边界（2026-09-19 用户实测更正）：**不只在播放时**——OK 键（Menu Left）被
 AACP 当作播放/暂停，**没有媒体会话时会拉起音乐 App**；左/右（Menu Up/Down → 上一首/下一首）
 只在有播放会话时可感知。因此三键的代价不同：左/右 = 播放时切歌；OK = 任何时候拉起音乐。
-据此把豁免做成按键级（`chromecase.systemReservedExceptions`，CSV），可按键取舍。
+据此把豁免做成按键级（`chromecast.systemReservedExceptions`，CSV），可按键取舍。
 
 ### 补充：参考实现要点与「删除系统配对」实验结论（2026-09-16）
 
-参考文档：私有包 `packages/audio-input-kit/chromecase/Referance/google-tv-remote.md`
+参考文档：私有包 `packages/audio-input-kit/chromecast/Referance/google-tv-remote.md`
 （Vokie `google-tv-remote-helper` 的实机记录），可直接采纳的结论：
 
 - **HID 采集不可靠**：该设备的 HID 接口被 macOS HID 事件服务占用，用户态
@@ -170,7 +170,7 @@ AACP 当作播放/暂停，**没有媒体会话时会拉起音乐 App**；左/�
   → 本文档早前「固件不上报 <1s 按键」的说法应以此更正。
 - **语音音频走 GATT（0x003c/0x0054）**：IMA ADPCM 16 kHz / 4 bit / 128 字节帧、无帧头、
   编码器每次语音会话重置（我们的 ATVV 实现与之等价，可作交叉验证）。
-- **移除系统配对不可行（2026-09-16 实测）**：本仓库 `ChromecaseAdapter` 早就注释过
+- **移除系统配对不可行（2026-09-16 实测）**：本仓库 `ChromecastAdapter` 早就注释过
   「已被系统持有的遥控器不再广播，`scanForPeripherals` 永远发现不了它」，只能靠
   「系统已连接的设备」取回。删除配对后设备既不广播也不在系统列表 → App 完全够不着，
   **语音链路一并失效**，实测确认。排查此类问题前不要动系统配对；恢复方法是系统蓝牙
@@ -287,7 +287,7 @@ latch 期间 ATVV AUDIO notify = 1 条；audio_batches=24/11520 ≈ 0.36s（会�
 - 注：本文档早前记录的假冒品 **54 次 `hostRequested` 流**说明「非同型号固件行为不可互推」——
   假冒品容忍了违规 `MIC_OPEN`，正品按规范拒绝。
 
-#### 声明值可测：`/tmp/chromecase_declared_models`（2026-09-18，build 208→209）
+#### 声明值可测：`/tmp/chromecast_declared_models`（2026-09-18，build 208→209）
 
 规范 3：`GET_CAPS` 末字节是**宿主声明支持的交互模型**（`0x00` 仅 On-request、`0x01` PTT+On-request、
 `0x03` HTT+PTT+On-request），远端在 `CAPS_RESP` 里回报它**实际采用**的模型——即模型由宿主声明、
@@ -303,7 +303,7 @@ latch 期间 ATVV AUDIO notify = 1 条；audio_batches=24/11520 ≈ 0.36s（会�
 2. **「HTT 流进行中补发 `MIC_OPEN`」**：规范 4.7.4/4.7.5 规定远端只应回 `MIC_OPEN_ERROR(0x0F80)`，
    且**不得打断正在进行的流**——即便回的是错误码，也拿不到持续流。
 
-**诊断开关**：`/tmp/chromecase_declared_models` 内容为 `00`/`01`/`03` 时覆盖声明值（默认 `0x03`）；
+**诊断开关**：`/tmp/chromecast_declared_models` 内容为 `00`/`01`/`03` 时覆盖声明值（默认 `0x03`）；
 覆盖期间不再发 0x00 重协商探针（两条冲突声明会污染实验）。声明值同时进入**回退能力**——
 远端在声明非 HTT 时完全不回 `CAPS_RESP`（实测），若回退退回 HTT，客户端就永远按 HTT 处理，
 「声明 PTT 后按键会怎样」根本走不到。
@@ -345,7 +345,7 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
 #### 根因确认：物理流必须用「精确 stream id」关掉，`MIC_OPEN` 才被接受（2026-09-18，build 212→213）
 
 **修复**：物理流（HTT/PTT）在 `AUDIO_STOP` 时，宿主用它的**精确 stream id** 补一条 `MIC_CLOSE`，
-且必须在 latch 的 `MIC_OPEN` **之前**（`ChromecaseAudioClient` 的 `.audioStop` 分支，build 213 起为默认行为）。
+且必须在 latch 的 `MIC_OPEN` **之前**（`ChromecastAudioClient` 的 `.audioStop` 分支，build 213 起为默认行为）。
 
 **机制**：不关流时遥远端一直停留在「助手键按下」状态，此后所有 `MIC_OPEN` 都被**静默忽略**——
 连规范 4.7.5 要求的 `MIC_OPEN_ERROR(0xF80)` 都不回。这正是此前「远端从不响应宿主开麦」的真因，
@@ -424,7 +424,7 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
 修复（build 216）：
 
 - 断开链路**之前**先关远端麦（日志 `origin=host_shutdown`）；
-- **持久化最后一个远端 stream id**（`UserDefaults`，键 `chromecase.lastRemoteStreamID`）：本固件只认
+- **持久化最后一个远端 stream id**（`UserDefaults`，键 `chromecast.lastRemoteStreamID`）：本固件只认
   精确 id（`0x00`/`0xFF` 都关不掉），App 重启后必须能拿回它才能关掉遗留流；
 - 启动/连接后若检测到「宿主无会话却在推流」，用该 id 关闭一次并留证（`origin=stale_stream_cleanup`）；
 - 该丢弃路径的日志改为节流（首 3 条 + 每 500 条），不再刷屏。
@@ -446,7 +446,7 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
 
 - 每次结束，宿主侧步骤齐全、顺序正确、无失败：`MIC_CLOSE(精确 physical stream id)` →
   `MIC_CLOSE(0d00 origin=host_requested)` → 排空 `playback_stop phase=completed result=drained
-  pending_before_buffers=0` → `VOICE KEY mode=fn edge=up` → `CHROMECASE VOICE phase=completed
+  pending_before_buffers=0` → `VOICE KEY mode=fn edge=up` → `CHROMECAST VOICE phase=completed
   result=stopped`（`enqueue_failures=0`）；停止后 ATVV 音频帧计数不再增长（远端确实停流）。
 - 12 次按键只对应 **6 次 Fn down + 6 次 Fn up**：一次「按下」落在 latch（会话开始），一次「松开」
   落在 stop（会话结束）。**每个会话只发一次 Fn 按下**。
@@ -480,7 +480,7 @@ PTT 期间宿主绝不补发 `MIC_OPEN`。判定远端实际模型只看 `AUDIO_
   让它产生真正的修饰键转移。
 - 实体 Fn 长按、松开后面板也不消失 → 豆包当前绑定的是「点按」模式 → 两条路：
   ①把豆包「长按模式」快捷键设为 fn、清空点按绑定（产品既有设计就是按住—松开）；
-  ②宿主侧把 Chromecase 的 toggle 模式改为「成对 Fn 点按」驱动（仓库已有 Fn 点按机制可复用）。
+  ②宿主侧把 Chromecast 的 toggle 模式改为「成对 Fn 点按」驱动（仓库已有 Fn 点按机制可复用）。
 
 排查纪律：遇到「结束后面板/收音不消失」，先用 `Testing/VoiceKeyFnPanelProbe.swift` 量一次
 「按下 / 松开 / 再按下」三态，确认豆包当前是长按还是点按语义，再决定改哪一侧；不要先改宿主结束逻辑
@@ -517,20 +517,20 @@ Fn 松开（等 2.5s） → 面板仍在        ← 免按模式忽略松开
 才翻转一次——第 2 次按键（我们判定的「结束」）被忽略，第 3 次按键（下一次开始）才让它关闭。
 ⇒ 用户看到的「必须再按一下」就是下一次开始；同一机制还让豆包只录到**隔一个**的会话。
 
-**修复（build 220/221）**：`ChromecaseFunctionKeyDrive` 把语音键驱动分成两态，驱动方式由
+**修复（build 220/221）**：`ChromecastFunctionKeyDrive` 把语音键驱动分成两态，驱动方式由
 **遥控器自己的语音模式 + 目标工具是否支持长按**推导（单一事实源：
 `Sources/RemoteMic/VoiceInputCapabilityMatrix.swift` 与公开仓 `remote/遥控器与输入工具能力矩阵.md`）：
 - `taps`：遥控器「按一次说话」；或工具根本不吃长按（Typeless）——开始一次点按、结束再一次点按；
 - `hold`：遥控器「按住说话」且工具支持长按——开始按下、结束松开。
-Chromecase 页面**不再出现**「语音键模拟 Fn 点按」：那个开关只为「只能按住收音」的遥控器
+Chromecast 页面**不再出现**「语音键模拟 Fn 点按」：那个开关只为「只能按住收音」的遥控器
 （小米/苹果 + Typeless 这类工具）存在。开始的点按必须自己松开，否则 Fn 修饰位在整个会话期间被按住
 （用户此时打字会变 Fn 组合键）。
 
 **接线盲区（build 220 一并补上）**：该开关此前只接在**小米蓝牙**链路（`VoiceFnTapSessionController` 的调用点
-全在 `bluetoothVoice*`），Chromecase 的 ATVV 语音链路**从未读取它**——所以开关开着也不生效。
-现在 `beginChromecaseVoice` / `completeChromecaseVoiceStop` 走同一套驱动决策，日志留痕
-`CHROMECASE VOICE fn_drive=taps phase=start_tap|start_released|stop_tap`。build 221 起该驱动
-不再读那个开关，改由能力矩阵推导（界面对应地不再在 Chromecase 页面显示它）。
+全在 `bluetoothVoice*`），Chromecast 的 ATVV 语音链路**从未读取它**——所以开关开着也不生效。
+现在 `beginChromecastVoice` / `completeChromecastVoiceStop` 走同一套驱动决策，日志留痕
+`CHROMECAST VOICE fn_drive=taps phase=start_tap|start_released|stop_tap`。build 221 起该驱动
+不再读那个开关，改由能力矩阵推导（界面对应地不再在 Chromecast 页面显示它）。
 
 **排查纪律**：报告「结束不生效」时，先问目标工具当前是哪一种模式（豆包设置里就是这两个开关），
 再用探针量三态，最后才动代码——本次若先猜「关流/排空/防抖」都会改错地方。
@@ -539,11 +539,11 @@ Chromecase 页面**不再出现**「语音键模拟 Fn 点按」：那个开关�
 
 旧款遥控器真机实测：这三颗键的 HID usage 是 Menu Up/Down/Left，macOS 配件服务（BT-AACP）
 在 CGEvent 之外直接消费成媒体控制，用户态无法拦截——因此默认置灰 + 运行时跳过
-（`ChromecaseRemoteControl.systemReservedControls`）。
+（`ChromecastRemoteControl.systemReservedControls`）。
 
 该结论是**按遥控器型号/固件而定**的，不是协议常态。新款遥控器是否真的被系统占用只能真机验证：
-`defaults write com.hd838a.RemoteMic chromecase.allowSystemReservedKeys -bool YES` 后重启，
-画布三键不再置灰、运行时不再跳过（`CHROMECASE ACTION result=system_reserved` 不再出现）。
+`defaults write com.hd838a.RemoteMic chromecast.allowSystemReservedKeys -bool YES` 后重启，
+画布三键不再置灰、运行时不再跳过（`CHROMECAST ACTION result=system_reserved` 不再出现）。
 
 判据：若系统仍在消费 → 按一下出现**双执行**（App 自定义动作 + 系统媒体控制各一次），
 此时应关回开关；若无系统反应且自定义动作正常 → 该遥控器可以接管，考虑按能力位放开。

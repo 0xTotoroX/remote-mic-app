@@ -452,8 +452,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     @Published private(set) var isVoiceTriggerEnabled = false
     @Published private(set) var activeRemoteButtons = Set<RemoteButton>()
     @Published private(set) var activeAppleRemoteControlIDs = Set<String>()
-    /// Chromecase 画布的活动按键（控制 ID）。与苹果遥控器链路完全隔离，互不清除。
-    @Published private(set) var activeChromecaseControlIDs = Set<String>()
+    /// Chromecast 画布的活动按键（控制 ID）。与苹果遥控器链路完全隔离，互不清除。
+    @Published private(set) var activeChromecastControlIDs = Set<String>()
     @Published private(set) var lastRemoteButtonPress: RemoteButton?
     @Published private(set) var connectedRemoteProfileIDs = Set<UUID>()
     @Published private(set) var remoteBatteryLevels: [UUID: Int] = [:]
@@ -657,55 +657,55 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     private var appleRemoteAudioStopInterruptedSamples = 0
     private var loggedAppleRemoteAudioDevice = false
 
-    // MARK: - Chromecase（可选私有包）
+    // MARK: - Chromecast（可选私有包）
 
     /// 私有包缺失时该实例内部全部退化为 no-op，宿主行为与未接入前完全一致。
-    private lazy var chromecaseFeature = ChromecaseFeatureIntegration()
-    /// 当前是否有活跃的 Chromecase 收音会话。
-    private var chromecaseVoiceActive = false
-    private var chromecaseVoiceStopping = false
-    private var chromecaseVoiceStopOperation: UInt64 = 0
-    private var chromecaseAudioBatchCount = 0
-    private var chromecaseAudioSampleCount = 0
-    private var chromecaseAudioEnqueueFailureCount = 0
-    private var loggedChromecaseAudioDevice = false
+    private lazy var chromecastFeature = ChromecastFeatureIntegration()
+    /// 当前是否有活跃的 Chromecast 收音会话。
+    private var chromecastVoiceActive = false
+    private var chromecastVoiceStopping = false
+    private var chromecastVoiceStopOperation: UInt64 = 0
+    private var chromecastAudioBatchCount = 0
+    private var chromecastAudioSampleCount = 0
+    private var chromecastAudioEnqueueFailureCount = 0
+    private var loggedChromecastAudioDevice = false
     /// 设置页展示用。私有包缺失时恒为 `.unavailable`，界面据此隐藏整块内容。
-    @Published private(set) var chromecaseStatus: ChromecaseLinkStatus =
-        ChromecaseFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
+    @Published private(set) var chromecastStatus: ChromecastLinkStatus =
+        ChromecastFeatureIntegration.isPackageIncluded ? .disabled : .unavailable
     /// 遥控器**自报**的能力位；链路不可用时为空集合。
     ///
     /// 界面与语音键驱动都读它（经 `RemoteVoiceCapabilities.resolve`），宿主不再维护第二份型号能力表。
-    @Published private(set) var chromecaseDeclaredCapabilities: ChromecaseDeclaredCapabilities = []
+    @Published private(set) var chromecastDeclaredCapabilities: ChromecastDeclaredCapabilities = []
     /// 苹果遥控器**自报**的能力位；链路不可用时为空集合（同上）。
     @Published private(set) var siriDeclaredCapabilities: SiriRemoteDeclaredCapabilities = []
 
     /// 当前选中遥控器档案的语音能力：**该遥控器所在链路的自报**优先，自报缺失才回退型号默认表。
     ///
-    /// 两条链路各自上报（Chromecase 走 ATVV、苹果遥控器走 HID），必须按型号取对应的那一份，
+    /// 两条链路各自上报（Chromecast 走 ATVV、苹果遥控器走 HID），必须按型号取对应的那一份，
     /// 不能混用——串用会让不具备该能力的遥控器凭空多出功能入口。
     var selectedRemoteVoiceCapabilities: RemoteVoiceCapabilities {
         let model = settings.selectedRemoteProfile?.model
-        var declared: ChromecaseDeclaredCapabilities = []
+        var declared: ChromecastDeclaredCapabilities = []
         if let model {
-            if model.isChromecaseRemote {
-                declared = chromecaseDeclaredCapabilities
+            if model.isChromecastRemote {
+                declared = chromecastDeclaredCapabilities
             } else if model.isAppleSiriRemote {
                 declared = siriDeclaredCapabilities.asDeclaredVoiceCapabilities
             }
         }
         return .resolve(model: model, declared: declared)
     }
-    /// 当前是否有活跃的 Chromecase 收音会话（按键页用它点亮固定的语音键卡片）。
-    @Published private(set) var isChromecaseVoiceActive = false
-    /// Chromecase 遥控器对应的设备档案。按型号识别，不存设备标识。
-    private var chromecaseProfileID: UUID?
-    /// 已连接的 Chromecase 档案，用于设备选择器与「已连接」状态。
-    private var connectedChromecaseProfileIDs = Set<UUID>()
-    /// 当前按下的 Chromecase 按键（画布控制 ID）。
-    private var chromecasePressedControls = Set<String>()
-    private var chromecaseButtonGestureRecognizer = RemoteButtonGestureRecognizer()
-    private var chromecaseDoubleClickTimers: [RemoteButton: DispatchSourceTimer] = [:]
-    private var chromecaseLongPressTimers: [RemoteButton: DispatchSourceTimer] = [:]
+    /// 当前是否有活跃的 Chromecast 收音会话（按键页用它点亮固定的语音键卡片）。
+    @Published private(set) var isChromecastVoiceActive = false
+    /// Chromecast 遥控器对应的设备档案。按型号识别，不存设备标识。
+    private var chromecastProfileID: UUID?
+    /// 已连接的 Chromecast 档案，用于设备选择器与「已连接」状态。
+    private var connectedChromecastProfileIDs = Set<UUID>()
+    /// 当前按下的 Chromecast 按键（画布控制 ID）。
+    private var chromecastPressedControls = Set<String>()
+    private var chromecastButtonGestureRecognizer = RemoteButtonGestureRecognizer()
+    private var chromecastDoubleClickTimers: [RemoteButton: DispatchSourceTimer] = [:]
+    private var chromecastLongPressTimers: [RemoteButton: DispatchSourceTimer] = [:]
     private var hidPowerKeySuppressed = false
     private var hidAllowedLocationIDs: Set<UInt32>?
     private var started = false
@@ -824,43 +824,43 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             self?.handleAppleRemotePowerSnapshot(snapshot)
         }
 #endif
-#if SAYALL_CHROMECASE_ENABLED
+#if SAYALL_CHROMECAST_ENABLED
         // 适配层固定使用主队列，因此这里必须**同步**调用：
         // 包在发出 startRecognition 意图之后才写 MIC_OPEN，宿主必须在那之前备好音频出口，
         // 否则最早几帧会落在还没有出口的时刻（首字丢失）。
-        chromecaseFeature.onStatusChange = { [weak self] status in
-            self?.handleChromecaseStatusChange(status)
+        chromecastFeature.onStatusChange = { [weak self] status in
+            self?.handleChromecastStatusChange(status)
         }
-        chromecaseFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
+        chromecastFeature.onDeclaredCapabilitiesChange = { [weak self] declared in
             guard let self else { return }
-            guard self.chromecaseDeclaredCapabilities != declared else { return }
-            self.chromecaseDeclaredCapabilities = declared
+            guard self.chromecastDeclaredCapabilities != declared else { return }
+            self.chromecastDeclaredCapabilities = declared
             // 能力变化会改变「按一次说话」这类选项的可用性，必须立即同步到运行时与界面。
             AppLogger.shared.write(
-                "CHROMECASE CAPABILITIES declared=\(Self.describe(declared))"
+                "CHROMECAST CAPABILITIES declared=\(Self.describe(declared))"
             )
-            self.syncChromecaseRuntimeState()
+            self.syncChromecastRuntimeState()
         }
-        chromecaseFeature.onVoiceStart = { [weak self] in
-            self?.beginChromecaseVoice()
+        chromecastFeature.onVoiceStart = { [weak self] in
+            self?.beginChromecastVoice()
         }
-        chromecaseFeature.onVoiceSustain = { [weak self] in
+        chromecastFeature.onVoiceSustain = { [weak self] in
             // 远端换流不产生第二次用户可见动作，否则豆包侧识别会被立刻关掉。
-            self?.logChromecaseSustain()
+            self?.logChromecastSustain()
         }
-        chromecaseFeature.onVoiceStop = { [weak self] reason in
-            self?.endChromecaseVoice(reason: reason)
+        chromecastFeature.onVoiceStop = { [weak self] reason in
+            self?.endChromecastVoice(reason: reason)
         }
-        chromecaseFeature.onSamples = { [weak self] samples, _ in
-            self?.receiveChromecaseAudio(samples)
+        chromecastFeature.onSamples = { [weak self] samples, _ in
+            self?.receiveChromecastAudio(samples)
         }
-        chromecaseFeature.onControlEvent = { [weak self] event in
-            self?.handleChromecaseControlEvent(event)
+        chromecastFeature.onControlEvent = { [weak self] event in
+            self?.handleChromecastControlEvent(event)
         }
-        chromecaseFeature.onHIDPresenceChange = { [weak self] isPresent in
-            AppLogger.shared.write("CHROMECASE HID DEVICE present=\(isPresent)")
+        chromecastFeature.onHIDPresenceChange = { [weak self] isPresent in
+            AppLogger.shared.write("CHROMECAST HID DEVICE present=\(isPresent)")
         }
-        chromecaseFeature.onLog = { message in
+        chromecastFeature.onLog = { message in
             AppLogger.shared.write(message)
         }
 #endif
@@ -1170,16 +1170,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         siriRemoteCursorFeedback.stop()
         resetAllAppleRemoteState(reason: "app_stop")
 #endif
-#if SAYALL_CHROMECASE_ENABLED
-        chromecaseVoiceStopOperation &+= 1
-        chromecaseVoiceActive = false
-        isChromecaseVoiceActive = false
-        chromecaseVoiceStopping = false
+#if SAYALL_CHROMECAST_ENABLED
+        chromecastVoiceStopOperation &+= 1
+        chromecastVoiceActive = false
+        isChromecastVoiceActive = false
+        chromecastVoiceStopping = false
         // 按键通道必须先清干净再停 HID：否则残留的「按住」状态会拖到下一次启动。
-        resetChromecaseButtonState(reason: "app_stop")
-        connectedChromecaseProfileIDs.removeAll()
-        chromecaseFeature.stop()
-        chromecaseStatus = .disabled
+        resetChromecastButtonState(reason: "app_stop")
+        connectedChromecastProfileIDs.removeAll()
+        chromecastFeature.stop()
+        chromecastStatus = .disabled
 #endif
         bluetoothBridges.removeAll()
         bluetoothBridgeStates.removeAll()
@@ -2251,8 +2251,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         refreshAppleRemoteHIDStatus()
 #endif
-#if SAYALL_CHROMECASE_ENABLED
-        syncChromecaseRuntimeState()
+#if SAYALL_CHROMECAST_ENABLED
+        syncChromecastRuntimeState()
 #endif
         completeHIDMappingRecoveryIfNeeded()
     }
@@ -2352,7 +2352,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         if settings.customMappingEnabled { _ = hidEventSuppressor.start() }
         for profile in settings.remoteDeviceProfiles {
-            // 苹果遥控器与 Chromecase 都由各自的私有链路驱动；它们的档案不能被小米 HID
+            // 苹果遥控器与 Chromecast 都由各自的私有链路驱动；它们的档案不能被小米 HID
             // 发现链路当成候选，否则会给一个不存在的小米设备建监视器。
             guard !profile.model.usesPrivateAdapter,
                   let fingerprint = profile.hidFingerprint
@@ -2788,20 +2788,20 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         })
         connectedRemoteProfileIDs = connectedBluetoothProfileIDs
             .union(connectedAppleRemoteProfileIDs)
-            .union(connectedChromecaseProfileIDs)
+            .union(connectedChromecastProfileIDs)
         let bluetoothIsReady = allStates.contains { state in
             if case .ready = state { return true }
             return false
         }
         isConnected = bluetoothIsReady
             || !connectedAppleRemoteProfileIDs.isEmpty
-            || !connectedChromecaseProfileIDs.isEmpty
+            || !connectedChromecastProfileIDs.isEmpty
         if let selectedRemoteProfileID = settings.selectedRemoteProfileID,
            connectedAppleRemoteProfileIDs.contains(selectedRemoteProfileID) {
             connectionStatus = LocalizedMessage("connection.status.apple_remote_connected")
         } else if let selectedRemoteProfileID = settings.selectedRemoteProfileID,
-                  connectedChromecaseProfileIDs.contains(selectedRemoteProfileID) {
-            connectionStatus = LocalizedMessage("connection.status.chromecase_connected")
+                  connectedChromecastProfileIDs.contains(selectedRemoteProfileID) {
+            connectionStatus = LocalizedMessage("connection.status.chromecast_connected")
         } else if let selectedBluetoothBridge,
            let state = bluetoothBridgeStates[ObjectIdentifier(selectedBluetoothBridge)] {
             connectionStatus = state.message
@@ -2812,8 +2812,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             connectionStatus = ready.message
         } else if !connectedAppleRemoteProfileIDs.isEmpty {
             connectionStatus = LocalizedMessage("connection.status.apple_remote_connected")
-        } else if !connectedChromecaseProfileIDs.isEmpty {
-            connectionStatus = LocalizedMessage("connection.status.chromecase_connected")
+        } else if !connectedChromecastProfileIDs.isEmpty {
+            connectionStatus = LocalizedMessage("connection.status.chromecast_connected")
         } else if let state = allStates.first {
             connectionStatus = state.message
         } else {
@@ -5656,8 +5656,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         guard !bluetoothVoiceActive,
               appleRemoteVoiceDevices.isEmpty,
               !appleRemoteVoiceStopping,
-              !chromecaseVoiceActive,
-              !chromecaseVoiceStopping,
+              !chromecastVoiceActive,
+              !chromecastVoiceStopping,
               activeMobileVoiceSource == nil,
               isStreaming
         else { return }
@@ -5690,14 +5690,14 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if sessionID != nil {
             recordingAssetCoordinator.finish(endedAt: endedAt)
         }
-        // 会话因别的原因结束（用户关闭语音、切换输入源）时，必须让 Chromecase 包内的
+        // 会话因别的原因结束（用户关闭语音、切换输入源）时，必须让 Chromecast 包内的
         // latched 状态同步清空；否则下一次点按会被误判成「结束」而不是「开始」。
-        chromecaseFeature.notifyHostVoiceSessionEnded()
+        chromecastFeature.notifyHostVoiceSessionEnded()
     }
 
     private var currentVoiceUsageSource: UsageEventSource {
         if bluetoothVoiceActive || !appleRemoteVoiceDevices.isEmpty || appleRemoteVoiceStopping
-            || chromecaseVoiceActive || chromecaseVoiceStopping {
+            || chromecastVoiceActive || chromecastVoiceStopping {
             return .bluetoothRemote
         }
         switch activeMobileVoiceSource {
@@ -5892,99 +5892,99 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 
-    // MARK: - Chromecase 硬件（可选私有包）
+    // MARK: - Chromecast 硬件（可选私有包）
     //
-    // 与 Siri Remote 链路完全隔离：独立 owner（`.chromecase`）、独立会话与排空操作号，
+    // 与 Siri Remote 链路完全隔离：独立 owner（`.chromecast`）、独立会话与排空操作号，
     // 一方结束不会取消另一方。私有包缺失时本段全部不会被编译进来。
 
-    #if SAYALL_CHROMECASE_ENABLED
+    #if SAYALL_CHROMECAST_ENABLED
     /// 设置页「重新连接」。
-    func reconnectChromecase() {
-        chromecaseFeature.reconnect()
+    func reconnectChromecast() {
+        chromecastFeature.reconnect()
     }
 
-    /// 设置页 Chromecase 面板的改动立即作用于运行时。
+    /// 设置页 Chromecast 面板的改动立即作用于运行时。
     ///
     /// 开关决定链路启停、模式决定语音键语义，二者都不能等下次启动才生效：
     /// 否则界面显示「按住说话」而运行时仍按「点按开关」处理，真机验收会得出错误结论。
-    func applyChromecaseSettings() {
-        syncChromecaseRuntimeState()
+    func applyChromecastSettings() {
+        syncChromecastRuntimeState()
     }
 
-    /// 按设置页开关启停 Chromecase 运行时。幂等，可安全重复调用。
-    private func syncChromecaseRuntimeState() {
+    /// 按设置页开关启停 Chromecast 运行时。幂等，可安全重复调用。
+    private func syncChromecastRuntimeState() {
         guard started else { return }
-        chromecaseFeature.setVoiceMode(effectiveChromecaseVoiceMode)
+        chromecastFeature.setVoiceMode(effectiveChromecastVoiceMode)
         // 映射总开关决定 HID 通道是否独占设备：它必须即时生效，否则界面上「已开启映射」
         // 而系统仍在消费这些按键，用户会以为映射没生效。
-        chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)
-        if settings.chromecaseEnabled {
-            chromecaseFeature.start()
+        chromecastFeature.setControlMappingEnabled(settings.customMappingEnabled)
+        if settings.chromecastEnabled {
+            chromecastFeature.start()
         } else {
-            chromecaseFeature.stop()
-            chromecaseStatus = .disabled
+            chromecastFeature.stop()
+            chromecastStatus = .disabled
         }
     }
 
-    private func handleChromecaseStatusChange(_ status: ChromecaseLinkStatus) {
+    private func handleChromecastStatusChange(_ status: ChromecastLinkStatus) {
         // 用户关闭开关后链路回调仍可能上报 disconnected，此时保持「未启用」。
-        if !settings.chromecaseEnabled, !status.isActive {
-            chromecaseStatus = .disabled
-            endChromecaseVoice(reason: .hostStop)
-            disconnectChromecaseProfile(reason: "feature_disabled")
+        if !settings.chromecastEnabled, !status.isActive {
+            chromecastStatus = .disabled
+            endChromecastVoice(reason: .hostStop)
+            disconnectChromecastProfile(reason: "feature_disabled")
             return
         }
-        chromecaseStatus = status
-        AppLogger.shared.write("CHROMECASE LINK state=\(status)")
+        chromecastStatus = status
+        AppLogger.shared.write("CHROMECAST LINK state=\(status)")
         if status.isConnected {
             // 与苹果遥控器一致：链路一可用就注册档案，按键页的设备选择器里立刻能选到它。
-            _ = ensureChromecaseProfile()
-            AppLogger.shared.write("CHROMECASE REMOTE phase=completed result=profile_ready")
+            _ = ensureChromecastProfile()
+            AppLogger.shared.write("CHROMECAST REMOTE phase=completed result=profile_ready")
             // 音频出口预热：否则首次按键要在「按下」的同时做一轮 REBIND（真机实测 ~30ms），
             // 更关键的是根因 #4 那种「引擎在 startup 时没起来且无人修复」的竞态会在按键瞬间
             // 才暴露（enqueue_failures 全量丢弃）。链路就绪即准备好出口，按键时只剩纯音频往返。
-            ensureVirtualAudioOutputReady(reason: "chromecase_link_ready")
+            ensureVirtualAudioOutputReady(reason: "chromecast_link_ready")
         } else {
-            disconnectChromecaseProfile(reason: "link_unavailable")
+            disconnectChromecastProfile(reason: "link_unavailable")
         }
         switch status {
         case .disconnected, .unauthorized, .unsupported:
             // 链路在可用之后丢失，或型号被判为不支持：必须结束活动收音并释放 owner。
-            endChromecaseVoice(reason: .cancelled("link_unavailable"))
+            endChromecastVoice(reason: .cancelled("link_unavailable"))
         default:
             break
         }
     }
 
     /// 链路不再可用时把档案从「已连接」里摘掉，但保留档案本身（用户的映射不能跟着丢）。
-    private func disconnectChromecaseProfile(reason: String) {
-        guard !connectedChromecaseProfileIDs.isEmpty else { return }
-        connectedChromecaseProfileIDs.removeAll()
-        resetChromecaseButtonState(reason: reason)
+    private func disconnectChromecastProfile(reason: String) {
+        guard !connectedChromecastProfileIDs.isEmpty else { return }
+        connectedChromecastProfileIDs.removeAll()
+        resetChromecastButtonState(reason: reason)
         refreshBluetoothPresentation()
     }
 
-    private func logChromecaseSustain() {
+    private func logChromecastSustain() {
         AppLogger.shared.write(
-            "CHROMECASE VOICE phase=sustain result=no_visible_change"
+            "CHROMECAST VOICE phase=sustain result=no_visible_change"
         )
     }
 
     // MARK: 语音键驱动（长按式 vs 点按式目标工具）
     //
-    // 目标工具分两类，语音键的语义必须跟着分（见 `ChromecaseFunctionKeyDrive`）：
+    // 目标工具分两类，语音键的语义必须跟着分（见 `ChromecastFunctionKeyDrive`）：
     // 长按式（豆包「长按模式」）按住—松开；点按式（豆包「免按模式」、Typeless）只认按下，
     // 必须「开始一次点按、结束再一次点按」。真机实测见 `Testing/VoiceKeyFnPanelProbe.swift`。
 
     /// 「开始那次点按」的延迟松开（仅点按式驱动使用）。
-    private var chromecaseFunctionKeyTapRelease: DispatchWorkItem?
+    private var chromecastFunctionKeyTapRelease: DispatchWorkItem?
     /// 一次点按的按下时长：与小米蓝牙链路的 `VoiceFnTapSessionController` 保持一致。
-    private static let chromecaseFunctionKeyTapDuration: TimeInterval = 0.12
+    private static let chromecastFunctionKeyTapDuration: TimeInterval = 0.12
 
     /// 当前应使用的驱动方式：由遥控器自己的语音模式 + 目标工具是否支持长按推导（见能力矩阵）。
-    private var chromecaseFunctionKeyDrive: ChromecaseFunctionKeyDrive {
+    private var chromecastFunctionKeyDrive: ChromecastFunctionKeyDrive {
         .resolve(
-            voiceMode: effectiveChromecaseVoiceMode,
+            voiceMode: effectiveChromecastVoiceMode,
             toolSupportsHoldVoiceRecording: settings.onboardingVoiceTool
                 .supportsHoldVoiceRecording
         )
@@ -5992,16 +5992,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
     /// 生效的语音模式：设备**自报**不支持「按一次收音」时，即使设置里存着 toggle 也按「按住说话」执行。
     /// 这样能力不足的型号不会因为一份历史设置而走进它做不到的路径（设置里的原值保留，不静默改写）。
-    var effectiveChromecaseVoiceMode: ChromecaseVoiceMode {
-        let declared = chromecaseDeclaredCapabilities
+    var effectiveChromecastVoiceMode: ChromecastVoiceMode {
+        let declared = chromecastDeclaredCapabilities
         guard !declared.isEmpty, !declared.contains(.toggleVoiceGesture) else {
-            return settings.chromecaseVoiceMode
+            return settings.chromecastVoiceMode
         }
         return .hold
     }
 
     /// 自报能力的日志标记（真机核对用）。
-    private static func describe(_ declared: ChromecaseDeclaredCapabilities) -> String {
+    private static func describe(_ declared: ChromecastDeclaredCapabilities) -> String {
         var names: [String] = []
         if declared.contains(.controlEdges) { names.append("control_edges") }
         if declared.contains(.voiceStream) { names.append("voice_stream") }
@@ -6013,144 +6013,144 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
     /// 开始收音时驱动语音键。返回 false 表示按下失败（调用方按既有逻辑报失败）。
     @discardableResult
-    private func beginChromecaseFunctionKeyDrive() -> Bool {
-        let drive = chromecaseFunctionKeyDrive
+    private func beginChromecastFunctionKeyDrive() -> Bool {
+        let drive = chromecastFunctionKeyDrive
         if drive.startEvents.contains(.press) {
             guard updateVoiceKeyState(
                 streaming: true,
                 forceSoftware: true,
-                owner: .chromecase
+                owner: .chromecast
             ) else { return false }
         }
         guard drive.startEvents.contains(.release) else { return true }
         // 点按式：延迟一个按下时长后松开，把「长按」变成一次点按。
         // 不这样做的话 Fn 修饰位会在整个会话期间被按住，用户此时打字会变成 Fn 组合键。
         AppLogger.shared.write(
-            "CHROMECASE VOICE fn_drive=taps phase=start_tap release_after_ms="
-                + "\(Int(Self.chromecaseFunctionKeyTapDuration * 1_000))"
+            "CHROMECAST VOICE fn_drive=taps phase=start_tap release_after_ms="
+                + "\(Int(Self.chromecastFunctionKeyTapDuration * 1_000))"
         )
-        scheduleChromecaseFunctionKeyTapRelease()
+        scheduleChromecastFunctionKeyTapRelease()
         return true
     }
 
     /// 结束收音时驱动语音键。点按式工具必须再收到一次**按下 + 松开**才结束（松开对它是空操作）。
     /// 返回值沿用既有判据：松开是否成功（`phase=completed result=stopped|release_failed`）。
     @discardableResult
-    private func finishChromecaseFunctionKeyDrive() -> Bool {
-        let drive = chromecaseFunctionKeyDrive
-        chromecaseFunctionKeyTapRelease?.cancel()
-        chromecaseFunctionKeyTapRelease = nil
+    private func finishChromecastFunctionKeyDrive() -> Bool {
+        let drive = chromecastFunctionKeyDrive
+        chromecastFunctionKeyTapRelease?.cancel()
+        chromecastFunctionKeyTapRelease = nil
         if drive.stopEvents.contains(.press) {
             let pressed = updateVoiceKeyState(
                 streaming: true,
                 forceSoftware: true,
-                owner: .chromecase
+                owner: .chromecast
             )
             AppLogger.shared.write(
-                "CHROMECASE VOICE fn_drive=taps phase=stop_tap pressed=\(pressed)"
+                "CHROMECAST VOICE fn_drive=taps phase=stop_tap pressed=\(pressed)"
             )
         }
-        return releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
+        return releaseVoiceKeyIfNeeded(owner: .chromecast, forceSoftware: true)
     }
 
-    private func scheduleChromecaseFunctionKeyTapRelease() {
-        chromecaseFunctionKeyTapRelease?.cancel()
+    private func scheduleChromecastFunctionKeyTapRelease() {
+        chromecastFunctionKeyTapRelease?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self,
-                  self.chromecaseVoiceActive || self.chromecaseVoiceStopping
+                  self.chromecastVoiceActive || self.chromecastVoiceStopping
             else { return }
-            self.chromecaseFunctionKeyTapRelease = nil
-            _ = self.releaseVoiceKeyIfNeeded(owner: .chromecase, forceSoftware: true)
-            AppLogger.shared.write("CHROMECASE VOICE fn_drive=taps phase=start_released")
+            self.chromecastFunctionKeyTapRelease = nil
+            _ = self.releaseVoiceKeyIfNeeded(owner: .chromecast, forceSoftware: true)
+            AppLogger.shared.write("CHROMECAST VOICE fn_drive=taps phase=start_released")
         }
-        chromecaseFunctionKeyTapRelease = work
+        chromecastFunctionKeyTapRelease = work
         DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.chromecaseFunctionKeyTapDuration,
+            deadline: .now() + Self.chromecastFunctionKeyTapDuration,
             execute: work
         )
     }
 
-    /// 预卷缓冲：会话开头 prerollDelay 秒的音频先攒后灌（见 receiveChromecaseAudio 注释）。
-    private var chromecaseAudioPrerollOpenedAt: TimeInterval?
-    private var chromecaseAudioPrerollBatches: [[Int16]] = []
+    /// 预卷缓冲：会话开头 prerollDelay 秒的音频先攒后灌（见 receiveChromecastAudio 注释）。
+    private var chromecastAudioPrerollOpenedAt: TimeInterval?
+    private var chromecastAudioPrerollBatches: [[Int16]] = []
     /// 豆包从语音键到打开输入流实测 0~0.7s（TRANSCRIPT target_ready retry=false/true 两例）。
     /// 0.5s 覆盖中位情形：开读窗口的丢失从最坏 ~0.4s 压到 ~0.1s，代价是识别出字整体晚 0.5s。
-    private static let chromecaseAudioPrerollDelay: TimeInterval = 0.5
+    private static let chromecastAudioPrerollDelay: TimeInterval = 0.5
 
-    private func beginChromecaseVoice() {
-        guard ChromecaseFeatureIntegration.isPackageIncluded, settings.chromecaseEnabled else {
+    private func beginChromecastVoice() {
+        guard ChromecastFeatureIntegration.isPackageIncluded, settings.chromecastEnabled else {
             return
         }
-        if chromecaseVoiceStopping {
+        if chromecastVoiceStopping {
             // 快速再按：取消排空并续用同一会话，避免尾音被截断。
-            chromecaseVoiceStopOperation &+= 1
-            chromecaseVoiceStopping = false
-            chromecaseVoiceActive = true
-            isChromecaseVoiceActive = true
+            chromecastVoiceStopOperation &+= 1
+            chromecastVoiceStopping = false
+            chromecastVoiceActive = true
+            isChromecastVoiceActive = true
             audioOutput.cancelPendingDrain()
             AppLogger.shared.write(
-                "CHROMECASE VOICE phase=resumed result=continued_session reason=rapid_repress"
+                "CHROMECAST VOICE phase=resumed result=continued_session reason=rapid_repress"
             )
             return
         }
-        guard !chromecaseVoiceActive else { return }
-        chromecaseAudioBatchCount = 0
-        chromecaseAudioSampleCount = 0
-        chromecaseAudioEnqueueFailureCount = 0
-        loggedChromecaseAudioDevice = false
-        chromecaseAudioPrerollOpenedAt = ProcessInfo.processInfo.systemUptime
-        chromecaseAudioPrerollBatches = []
-        guard ensureVirtualAudioOutputReady(reason: "chromecase_voice_start") else {
+        guard !chromecastVoiceActive else { return }
+        chromecastAudioBatchCount = 0
+        chromecastAudioSampleCount = 0
+        chromecastAudioEnqueueFailureCount = 0
+        loggedChromecastAudioDevice = false
+        chromecastAudioPrerollOpenedAt = ProcessInfo.processInfo.systemUptime
+        chromecastAudioPrerollBatches = []
+        guard ensureVirtualAudioOutputReady(reason: "chromecast_voice_start") else {
             AppLogger.shared.write(
-                "CHROMECASE VOICE phase=failed result=audio_output_unavailable route=MiRemoteV_2ch"
+                "CHROMECAST VOICE phase=failed result=audio_output_unavailable route=MiRemoteV_2ch"
             )
             return
         }
-        guard beginChromecaseFunctionKeyDrive() else {
+        guard beginChromecastFunctionKeyDrive() else {
             AppLogger.shared.write(
-                "CHROMECASE VOICE phase=failed result=voice_key_press_failed"
+                "CHROMECAST VOICE phase=failed result=voice_key_press_failed"
             )
             return
         }
-        chromecaseVoiceActive = true
-        isChromecaseVoiceActive = true
+        chromecastVoiceActive = true
+        isChromecastVoiceActive = true
         beginVoiceSessionIfNeeded()
         AppLogger.shared.write(
-            "CHROMECASE VOICE phase=started result=triggered " +
-                "audio_source=chromecase_microphone route=MiRemoteV_2ch " +
-                "mode=\(effectiveChromecaseVoiceMode.rawValue)"
+            "CHROMECAST VOICE phase=started result=triggered " +
+                "audio_source=chromecast_microphone route=MiRemoteV_2ch " +
+                "mode=\(effectiveChromecastVoiceMode.rawValue)"
         )
     }
 
-    private func endChromecaseVoice(reason: ChromecaseVoiceEndReason) {
-        guard chromecaseVoiceActive else { return }
-        chromecaseVoiceActive = false
-        isChromecaseVoiceActive = false
-        if chromecaseVoiceStopping {
+    private func endChromecastVoice(reason: ChromecastVoiceEndReason) {
+        guard chromecastVoiceActive else { return }
+        chromecastVoiceActive = false
+        isChromecastVoiceActive = false
+        if chromecastVoiceStopping {
             AppLogger.shared.write(
-                "CHROMECASE VOICE phase=completed result=deferred_session_cancelled " +
+                "CHROMECAST VOICE phase=completed result=deferred_session_cancelled " +
                     "reason=\(reason.logToken)"
             )
             return
         }
-        chromecaseVoiceStopping = true
-        chromecaseVoiceStopOperation &+= 1
+        chromecastVoiceStopping = true
+        chromecastVoiceStopOperation &+= 1
         // 会话很短时预卷缓冲可能还没到期——先排入播放器，再走自然排空，尾段不丢。
-        flushChromecaseAudioPreroll()
-        let stopOperation = chromecaseVoiceStopOperation
+        flushChromecastAudioPreroll()
+        let stopOperation = chromecastVoiceStopOperation
         let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
         let outputBeforeStop = audioOutput.diagnosticSnapshot(
             deliveryGeneration: deliveryGeneration
         )
         AppLogger.shared.write(
-            "CHROMECASE VOICE playback_stop phase=waiting_for_drain reason=\(reason.logToken) " +
+            "CHROMECAST VOICE playback_stop phase=waiting_for_drain reason=\(reason.logToken) " +
                 "completion=\(reason.isNormal ? "normal" : "forced") " +
                 "pending_buffers=\(outputBeforeStop.pendingBuffers) " +
                 "pending_samples=\(outputBeforeStop.pendingSamples)"
         )
         // 尾包已经在 MIC_CLOSE 之前全部投递完毕，因此这里只做自然排空，绝不 flush。
         audioOutput.endSessionAfterDraining(maximumDelay: nil) { [weak self] in
-            self?.completeChromecaseVoiceStop(
+            self?.completeChromecastVoiceStop(
                 operation: stopOperation,
                 deliveryGeneration: deliveryGeneration,
                 reason: reason
@@ -6158,49 +6158,49 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
     }
 
-    private func completeChromecaseVoiceStop(
+    private func completeChromecastVoiceStop(
         operation: UInt64,
         deliveryGeneration: Int,
-        reason: ChromecaseVoiceEndReason
+        reason: ChromecastVoiceEndReason
     ) {
-        guard chromecaseVoiceStopping, chromecaseVoiceStopOperation == operation else { return }
-        let released = finishChromecaseFunctionKeyDrive()
-        chromecaseVoiceStopping = false
+        guard chromecastVoiceStopping, chromecastVoiceStopOperation == operation else { return }
+        let released = finishChromecastFunctionKeyDrive()
+        chromecastVoiceStopping = false
         endVoiceSessionIfNeeded(flushAudio: false)
         let outputAfterStop = audioOutput.diagnosticSnapshot(
             deliveryGeneration: deliveryGeneration
         )
         AppLogger.shared.write(
-            "CHROMECASE AUDIO playback_stop phase=completed result=drained " +
+            "CHROMECAST AUDIO playback_stop phase=completed result=drained " +
                 "completion=\(reason.isNormal ? "normal" : "forced") reason=\(reason.logToken) " +
                 "pending_before_buffers=\(outputAfterStop.pendingBuffers) " +
                 "played_buffers=\(outputAfterStop.counters.playedBuffers) " +
                 "interrupted_buffers=\(outputAfterStop.counters.interruptedBuffers)"
         )
         AppLogger.shared.write(
-            "CHROMECASE VOICE phase=completed result=\(released ? "stopped" : "release_failed") " +
-                "reason=\(reason.logToken) audio_batches=\(chromecaseAudioBatchCount) " +
-                "audio_samples=\(chromecaseAudioSampleCount) " +
-                "enqueue_failures=\(chromecaseAudioEnqueueFailureCount) route=MiRemoteV_2ch"
+            "CHROMECAST VOICE phase=completed result=\(released ? "stopped" : "release_failed") " +
+                "reason=\(reason.logToken) audio_batches=\(chromecastAudioBatchCount) " +
+                "audio_samples=\(chromecastAudioSampleCount) " +
+                "enqueue_failures=\(chromecastAudioEnqueueFailureCount) route=MiRemoteV_2ch"
         )
     }
 
-    // MARK: - Chromecase 普通按键（键位映射）
+    // MARK: - Chromecast 普通按键（键位映射）
     //
     // 与语音链路是两条独立的通道：语音走 ATVV，按键走 HID。两者各自维护自己的活动状态，
     // 一方结束不会清除另一方的状态。
 
-    private func handleChromecaseControlEvent(_ event: ChromecaseRemoteControlEvent) {
+    private func handleChromecastControlEvent(_ event: ChromecastRemoteControlEvent) {
         let controlID = event.control.canvasControlID
 
         guard event.phase != .cancelled else {
-            resetChromecaseButtonState(reason: event.cancellationReason ?? "unknown")
+            resetChromecastButtonState(reason: event.cancellationReason ?? "unknown")
             return
         }
-        guard settings.chromecaseEnabled else {
+        guard settings.chromecastEnabled else {
             if event.phase == .began {
                 AppLogger.shared.write(
-                    "CHROMECASE ACTION phase=completed result=feature_disabled control=\(controlID)"
+                    "CHROMECAST ACTION phase=completed result=feature_disabled control=\(controlID)"
                 )
             }
             return
@@ -6209,25 +6209,25 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             // 与小米/苹果遥控器同一规则：映射总开关关闭时按键由系统消费，宿主不接管。
             if event.phase == .began {
                 AppLogger.shared.write(
-                    "CHROMECASE ACTION phase=completed result=system_managed control=\(controlID)"
+                    "CHROMECAST ACTION phase=completed result=system_managed control=\(controlID)"
                 )
             }
             return
         }
 
-        let profileID = ensureChromecaseProfile()
+        let profileID = ensureChromecastProfile()
         let isPress = event.phase == .began
         // 系统占用键（left/right/select）：报告 usage 在系统眼里是 Menu Up/Down/Left，macOS 配件服务
         // 直接消费成媒体控制且**不经 CGEvent**（真机实测：事件 tap 两层与 hidutil 都无法拦截）。
         // 按产品决策完全不接管：不武装抑制（无效）、不执行自定义动作，按键归系统。
-        if ChromecaseRemoteControl.isSystemManaged(
+        if ChromecastRemoteControl.isSystemManaged(
             event.control,
-            allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
-            exceptions: settings.chromecaseSystemReservedExceptions
+            allowSystemReservedKeys: settings.chromecastAllowSystemReservedKeys,
+            exceptions: settings.chromecastSystemReservedExceptions
         ) {
             if isPress {
                 AppLogger.shared.write(
-                    "CHROMECASE ACTION phase=completed result=system_reserved control=\(controlID)"
+                    "CHROMECAST ACTION phase=completed result=system_reserved control=\(controlID)"
                 )
             }
             return
@@ -6237,58 +6237,58 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         // 必须在每个边沿上武装事件抑制器，把随之到达的原生事件吞掉。
         if !hidEventSuppressor.isRunning {
             let ready = hidEventSuppressor.start()
-            AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecase")
+            AppLogger.shared.write("HID FILTER ready=\(ready) owner=chromecast")
         }
         hidEventSuppressor.arm(
-            nativeEvents: chromecaseNativeEvents(for: event.control),
+            nativeEvents: chromecastNativeEvents(for: event.control),
             edge: isPress ? .down : .up
         )
         if isPress {
             selectRemoteProfile(profileID)
-            chromecasePressedControls.insert(controlID)
+            chromecastPressedControls.insert(controlID)
             settings.recordButtonPress(
                 control: .remoteButton(event.control.remoteButton),
                 source: .bluetoothRemote
             )
             lastRemoteButtonPress = event.control.remoteButton
         } else {
-            chromecasePressedControls.remove(controlID)
+            chromecastPressedControls.remove(controlID)
         }
-        refreshChromecaseActiveControlIDs()
+        refreshChromecastActiveControlIDs()
 
-        handleChromecaseButton(
+        handleChromecastButton(
             event.control.remoteButton,
             phase: isPress ? .press : .release,
             profileID: profileID
         )
     }
 
-    /// Chromecase 遥控器在 macOS 上产生的原生事件（2026-09-16 正品真机实测，`HID FILTER miss` 日志为证）。
+    /// Chromecast 遥控器在 macOS 上产生的原生事件（2026-09-16 正品真机实测，`HID FILTER miss` 日志为证）。
     ///
     /// 与小米 RC003 的通用表存在差异：**静音键在系统侧是 `systemKey(7)`**（通用表按 RC003 记录为 3），
     /// 沿用通用表时抑制必然 miss、系统音量 HUD 照常出现。其余按键实测与通用表一致：
     /// 音量 = sys0/sys1（抑制命中）、方向/确认键系统侧不产生事件（tap 零记录，无副作用）。
-    private func chromecaseNativeEvents(for control: ChromecaseRemoteControl) -> Set<RemoteNativeEvent> {
+    private func chromecastNativeEvents(for control: ChromecastRemoteControl) -> Set<RemoteNativeEvent> {
         switch control {
         case .mute: return [.systemKey(type: 7)]
         default: return control.remoteButton.nativeEvents
         }
     }
 
-    /// 注册并连接 Chromecase 设备档案。档案按型号识别，不存设备标识。
-    private func ensureChromecaseProfile() -> UUID {
-        // 断链时 disconnectChromecaseProfile 会把档案从「已连接」集合里摘掉；重连后这里必须
+    /// 注册并连接 Chromecast 设备档案。档案按型号识别，不存设备标识。
+    private func ensureChromecastProfile() -> UUID {
+        // 断链时 disconnectChromecastProfile 会把档案从「已连接」集合里摘掉；重连后这里必须
         // 重新加入——否则设备选择器一直走空态、头部回落到小米的「正在查找小米遥控器」
         //（真机 2026-09-19：一次蓝牙断连后按键一切正常，页面却始终显示查找中）。
         // 所以「档案已存在」不能提前 return：成员资格与选中态每次都要确保。
         let profileID: UUID
-        if let existing = chromecaseProfileID {
+        if let existing = chromecastProfileID {
             profileID = existing
         } else {
-            profileID = settings.registerChromecaseRemote()
-            chromecaseProfileID = profileID
+            profileID = settings.registerChromecastRemote()
+            chromecastProfileID = profileID
         }
-        connectedChromecaseProfileIDs.insert(profileID)
+        connectedChromecastProfileIDs.insert(profileID)
         // 连接即选中（与小米链路的 activateRemoteProfile 对齐）：否则按键页停留在上一次
         // 选中的档案（用户看到的是小米遥控器画布），要等「按键映射开启且按下普通键」才会切换。
         if settings.selectedRemoteProfileID != profileID {
@@ -6299,28 +6299,28 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return profileID
     }
 
-    private func refreshChromecaseActiveControlIDs() {
-        activeChromecaseControlIDs = chromecasePressedControls
+    private func refreshChromecastActiveControlIDs() {
+        activeChromecastControlIDs = chromecastPressedControls
     }
 
-    private func resetChromecaseButtonState(reason: String) {
-        guard !chromecasePressedControls.isEmpty
-            || !chromecaseDoubleClickTimers.isEmpty
-            || !chromecaseLongPressTimers.isEmpty
+    private func resetChromecastButtonState(reason: String) {
+        guard !chromecastPressedControls.isEmpty
+            || !chromecastDoubleClickTimers.isEmpty
+            || !chromecastLongPressTimers.isEmpty
         else { return }
-        chromecasePressedControls.removeAll()
-        chromecaseDoubleClickTimers.values.forEach { $0.cancel() }
-        chromecaseDoubleClickTimers.removeAll()
-        chromecaseLongPressTimers.values.forEach { $0.cancel() }
-        chromecaseLongPressTimers.removeAll()
-        chromecaseButtonGestureRecognizer.reset()
-        activeChromecaseControlIDs = []
+        chromecastPressedControls.removeAll()
+        chromecastDoubleClickTimers.values.forEach { $0.cancel() }
+        chromecastDoubleClickTimers.removeAll()
+        chromecastLongPressTimers.values.forEach { $0.cancel() }
+        chromecastLongPressTimers.removeAll()
+        chromecastButtonGestureRecognizer.reset()
+        activeChromecastControlIDs = []
         AppLogger.shared.write(
-            "CHROMECASE CONTROL phase=completed result=state_reset reason=\(reason)"
+            "CHROMECAST CONTROL phase=completed result=state_reset reason=\(reason)"
         )
     }
 
-    private func handleChromecaseButton(
+    private func handleChromecastButton(
         _ button: RemoteButton,
         phase: RemoteButtonPhase,
         profileID: UUID
@@ -6328,7 +6328,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if macroFeature.isEditorActive {
             if phase == .press { macroFeature.noteButtonInteraction(button: button) }
             AppLogger.shared.write(
-                "CHROMECASE BUTTON button=\(button.rawValue) phase=\(phase.rawValue) " +
+                "CHROMECAST BUTTON button=\(button.rawValue) phase=\(phase.rawValue) " +
                     "path=binding_editor_capture"
             )
             return
@@ -6356,8 +6356,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if phase == .press,
            !recognizesDoubleClick,
            !recognizesLongPress,
-           !chromecaseButtonGestureRecognizer.isTracking(button) {
-            _ = performChromecaseConfiguredAction(
+           !chromecastButtonGestureRecognizer.isTracking(button) {
+            _ = performChromecastConfiguredAction(
                 for: button,
                 trigger: .singleClick,
                 profileID: profileID
@@ -6365,31 +6365,31 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             return
         }
 
-        let commands = chromecaseButtonGestureRecognizer.handle(
+        let commands = chromecastButtonGestureRecognizer.handle(
             phase,
             button: button,
             recognizesDoubleClick: recognizesDoubleClick,
             recognizesLongPress: recognizesLongPress
         )
-        _ = processChromecaseGestureCommands(commands, profileID: profileID)
+        _ = processChromecastGestureCommands(commands, profileID: profileID)
     }
 
-    private func processChromecaseGestureCommands(
+    private func processChromecastGestureCommands(
         _ commands: [RemoteButtonGestureRecognizer.Command],
         profileID: UUID
     ) -> Bool {
         for command in commands {
             switch command {
             case let .scheduleDoubleClickTimeout(button):
-                scheduleChromecaseDoubleClickTimeout(for: button, profileID: profileID)
+                scheduleChromecastDoubleClickTimeout(for: button, profileID: profileID)
             case let .cancelDoubleClickTimeout(button):
-                chromecaseDoubleClickTimers.removeValue(forKey: button)?.cancel()
+                chromecastDoubleClickTimers.removeValue(forKey: button)?.cancel()
             case let .scheduleLongPressTimeout(button):
-                scheduleChromecaseLongPressTimeout(for: button, profileID: profileID)
+                scheduleChromecastLongPressTimeout(for: button, profileID: profileID)
             case let .cancelLongPressTimeout(button):
-                chromecaseLongPressTimers.removeValue(forKey: button)?.cancel()
+                chromecastLongPressTimers.removeValue(forKey: button)?.cancel()
             case let .trigger(button, trigger):
-                guard performChromecaseConfiguredAction(
+                guard performChromecastConfiguredAction(
                     for: button,
                     trigger: trigger,
                     profileID: profileID
@@ -6399,41 +6399,41 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         return true
     }
 
-    private func scheduleChromecaseDoubleClickTimeout(
+    private func scheduleChromecastDoubleClickTimeout(
         for button: RemoteButton,
         profileID: UUID
     ) {
-        chromecaseDoubleClickTimers.removeValue(forKey: button)?.cancel()
+        chromecastDoubleClickTimers.removeValue(forKey: button)?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + .milliseconds(300))
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            chromecaseDoubleClickTimers.removeValue(forKey: button)
-            let commands = chromecaseButtonGestureRecognizer.doubleClickTimedOut(button)
-            _ = processChromecaseGestureCommands(commands, profileID: profileID)
+            chromecastDoubleClickTimers.removeValue(forKey: button)
+            let commands = chromecastButtonGestureRecognizer.doubleClickTimedOut(button)
+            _ = processChromecastGestureCommands(commands, profileID: profileID)
         }
-        chromecaseDoubleClickTimers[button] = timer
+        chromecastDoubleClickTimers[button] = timer
         timer.resume()
     }
 
-    private func scheduleChromecaseLongPressTimeout(
+    private func scheduleChromecastLongPressTimeout(
         for button: RemoteButton,
         profileID: UUID
     ) {
-        chromecaseLongPressTimers.removeValue(forKey: button)?.cancel()
+        chromecastLongPressTimers.removeValue(forKey: button)?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + .milliseconds(550))
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            chromecaseLongPressTimers.removeValue(forKey: button)
-            let commands = chromecaseButtonGestureRecognizer.longPressTimedOut(button)
-            _ = processChromecaseGestureCommands(commands, profileID: profileID)
+            chromecastLongPressTimers.removeValue(forKey: button)
+            let commands = chromecastButtonGestureRecognizer.longPressTimedOut(button)
+            _ = processChromecastGestureCommands(commands, profileID: profileID)
         }
-        chromecaseLongPressTimers[button] = timer
+        chromecastLongPressTimers[button] = timer
         timer.resume()
     }
 
-    private func performChromecaseConfiguredAction(
+    private func performChromecastConfiguredAction(
         for button: RemoteButton,
         trigger: ButtonTrigger,
         profileID: UUID
@@ -6444,7 +6444,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             trigger: trigger
         ) {
             AppLogger.shared.write(
-                "CHROMECASE ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                "CHROMECAST ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
                     "action=private_feature"
             )
             return true
@@ -6453,7 +6453,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         if configured.action.isAppInternal {
             let handled = performInternalAction(configured.action)
             AppLogger.shared.write(
-                "CHROMECASE ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                "CHROMECAST ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
                     "action=\(configured.action.rawValue) handled=\(handled)"
             )
             return handled
@@ -6461,29 +6461,29 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         guard KeyboardInjector.isAccessibilityTrusted else {
             _ = KeyboardInjector.requestAccessibilityAccess()
             AppLogger.shared.write(
-                "CHROMECASE ACTION phase=failed result=accessibility_required " +
+                "CHROMECAST ACTION phase=failed result=accessibility_required " +
                     "button=\(button.rawValue) trigger=\(trigger.rawValue)"
             )
             return false
         }
         guard performExternalConfiguredAction(configured) else {
             AppLogger.shared.write(
-                "CHROMECASE ACTION phase=failed result=submission_failed " +
+                "CHROMECAST ACTION phase=failed result=submission_failed " +
                     "button=\(button.rawValue) trigger=\(trigger.rawValue) " +
                     "action=\(configured.action.rawValue)"
             )
             return false
         }
         AppLogger.shared.write(
-            "CHROMECASE ACTION phase=completed result=dispatched " +
+            "CHROMECAST ACTION phase=completed result=dispatched " +
                 "button=\(button.rawValue) trigger=\(trigger.rawValue) " +
                 "action=\(configured.action.rawValue)"
         )
         return true
     }
 
-    private func receiveChromecaseAudio(_ samples: [Int16]) {
-        guard chromecaseVoiceActive || chromecaseVoiceStopping, !samples.isEmpty else { return }
+    private func receiveChromecastAudio(_ samples: [Int16]) {
+        guard chromecastVoiceActive || chromecastVoiceStopping, !samples.isEmpty else { return }
         recordingAssetCoordinator.append(samples: samples)
         publishCurrentVoiceSampleReceiptIfNeeded(sampleCount: samples.count)
 
@@ -6493,15 +6493,15 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         // 时前几个字丢失」。排入 AVAudioPlayerNode 的 buffer 按实时消费，不会倾倒覆盖，
         // 豆包开读时恰好从人声开头读到。
         let uptime = ProcessInfo.processInfo.systemUptime
-        if chromecaseAudioPrerollOpenedAt == nil {
-            chromecaseAudioPrerollOpenedAt = uptime
+        if chromecastAudioPrerollOpenedAt == nil {
+            chromecastAudioPrerollOpenedAt = uptime
         }
-        if chromecaseVoiceActive,
-           uptime - chromecaseAudioPrerollOpenedAt! < Self.chromecaseAudioPrerollDelay {
-            chromecaseAudioPrerollBatches.append(samples)
+        if chromecastVoiceActive,
+           uptime - chromecastAudioPrerollOpenedAt! < Self.chromecastAudioPrerollDelay {
+            chromecastAudioPrerollBatches.append(samples)
             return
         }
-        flushChromecaseAudioPreroll()
+        flushChromecastAudioPreroll()
 
         let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
         let accepted = audioOutput.enqueue(
@@ -6513,13 +6513,13 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             accepted: accepted,
             deliveryGeneration: deliveryGeneration
         )
-        chromecaseAudioBatchCount += 1
-        chromecaseAudioSampleCount += samples.count
-        if !accepted { chromecaseAudioEnqueueFailureCount += 1 }
-        if !loggedChromecaseAudioDevice {
-            loggedChromecaseAudioDevice = true
+        chromecastAudioBatchCount += 1
+        chromecastAudioSampleCount += samples.count
+        if !accepted { chromecastAudioEnqueueFailureCount += 1 }
+        if !loggedChromecastAudioDevice {
+            loggedChromecastAudioDevice = true
             AppLogger.shared.write(
-                "CHROMECASE AUDIO routed source=chromecase_microphone " +
+                "CHROMECAST AUDIO routed source=chromecast_microphone " +
                     "route=virtual_audio device=MiRemoteV_2ch accepted=\(accepted) " +
                     "first_batch_samples=\(samples.count)"
             )
@@ -6528,30 +6528,30 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
     /// 把预卷缓冲一次性排入播放器。AVAudioPlayerNode 按实时消费排队的 buffer，
     /// 因此一次排入不会覆盖环回 ring，豆包读到的是连续实时流。
-    private func flushChromecaseAudioPreroll() {
-        guard !chromecaseAudioPrerollBatches.isEmpty else { return }
-        let batches = chromecaseAudioPrerollBatches
-        chromecaseAudioPrerollBatches = []
+    private func flushChromecastAudioPreroll() {
+        guard !chromecastAudioPrerollBatches.isEmpty else { return }
+        let batches = chromecastAudioPrerollBatches
+        chromecastAudioPrerollBatches = []
         let deliveryGeneration = voiceAudioDeliveryDiagnostic.generation
         var failures = 0
         for batch in batches {
             if !audioOutput.enqueue(samples: batch, deliveryGeneration: deliveryGeneration) {
                 failures += 1
             }
-            chromecaseAudioBatchCount += 1
-            chromecaseAudioSampleCount += batch.count
+            chromecastAudioBatchCount += 1
+            chromecastAudioSampleCount += batch.count
         }
-        chromecaseAudioEnqueueFailureCount += failures
-        if !loggedChromecaseAudioDevice, let first = batches.first {
-            loggedChromecaseAudioDevice = true
+        chromecastAudioEnqueueFailureCount += failures
+        if !loggedChromecastAudioDevice, let first = batches.first {
+            loggedChromecastAudioDevice = true
             AppLogger.shared.write(
-                "CHROMECASE AUDIO routed source=chromecase_microphone " +
+                "CHROMECAST AUDIO routed source=chromecast_microphone " +
                     "route=virtual_audio device=MiRemoteV_2ch accepted=\(failures == 0) " +
                     "first_batch_samples=\(first.count)"
             )
         }
         AppLogger.shared.write(
-            "CHROMECASE AUDIO preroll flushed batches=\(batches.count) " +
+            "CHROMECAST AUDIO preroll flushed batches=\(batches.count) " +
                 "samples=\(batches.reduce(0) { $0 + $1.count }) failures=\(failures)"
         )
     }
