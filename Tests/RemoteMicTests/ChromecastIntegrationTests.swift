@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import RemoteMic
 
-@Suite("Chromecase integration")
-struct ChromecaseIntegrationTests {
+@Suite("Chromecast integration")
+struct ChromecastIntegrationTests {
     // MARK: - 语音键隔离
 
     @Test func voiceKeyLatchKeepsHardwareOwnersIndependent() {
@@ -11,31 +11,31 @@ struct ChromecaseIntegrationTests {
 
         // Siri Remote 先按住。
         #expect(latch.transition(streaming: true, owner: .appleRemote) == .press)
-        // Chromecase 同时按住：不得产生第二次按下，也不得取消 Siri。
-        #expect(latch.transition(streaming: true, owner: .chromecase) == nil)
+        // Chromecast 同时按住：不得产生第二次按下，也不得取消 Siri。
+        #expect(latch.transition(streaming: true, owner: .chromecast) == nil)
         #expect(latch.isHeld)
-        // Siri 松手：Chromecase 仍按住，语音键不得抬起。
+        // Siri 松手：Chromecast 仍按住，语音键不得抬起。
         #expect(latch.transition(streaming: false, owner: .appleRemote) == nil)
         #expect(latch.isHeld)
-        // Chromecase 松手：此时才真正抬起。
-        #expect(latch.transition(streaming: false, owner: .chromecase) == .release)
+        // Chromecast 松手：此时才真正抬起。
+        #expect(latch.transition(streaming: false, owner: .chromecast) == .release)
         #expect(!latch.isHeld)
     }
 
-    @Test func chromecasePressesAndReleasesVoiceKeyOnItsOwn() {
+    @Test func chromecastPressesAndReleasesVoiceKeyOnItsOwn() {
         var latch = VoiceFunctionKeyLatch()
 
-        #expect(latch.transition(streaming: true, owner: .chromecase) == .press)
+        #expect(latch.transition(streaming: true, owner: .chromecast) == .press)
         #expect(latch.isHeld)
-        #expect(latch.transition(streaming: false, owner: .chromecase) == .release)
+        #expect(latch.transition(streaming: false, owner: .chromecast) == .release)
         #expect(!latch.isHeld)
     }
 
-    @Test func chromecaseOwnerIsDistinctFromEveryOtherHardware() {
+    @Test func chromecastOwnerIsDistinctFromEveryOtherHardware() {
         let owners: Set<VoiceFunctionKeyLatch.Owner> = [
             .bluetooth,
             .appleRemote,
-            .chromecase,
+            .chromecast,
             .mobile,
         ]
         #expect(owners.count == 4)
@@ -45,12 +45,12 @@ struct ChromecaseIntegrationTests {
 
     @Test func productDefaultVoiceModeIsToggle() {
         // 需求：toggle 为默认语音模式，hold 保留给用户可选切换。
-        #expect(ChromecaseVoiceMode.productDefault == .toggle)
-        #expect(ChromecaseVoiceMode.allCases == [.toggle, .hold])
+        #expect(ChromecastVoiceMode.productDefault == .toggle)
+        #expect(ChromecastVoiceMode.allCases == [.toggle, .hold])
     }
 
     @Test func everyLinkStatusHasALocalizationKey() {
-        let statuses: [ChromecaseLinkStatus] = [
+        let statuses: [ChromecastLinkStatus] = [
             .unavailable,
             .disabled,
             .searching,
@@ -61,26 +61,26 @@ struct ChromecaseIntegrationTests {
             .disconnected,
         ]
         for status in statuses {
-            #expect(status.localizationKey.hasPrefix("chromecase."))
+            #expect(status.localizationKey.hasPrefix("chromecast."))
         }
-        #expect(ChromecaseLinkStatus.connected(displayName: "x").isConnected)
-        #expect(ChromecaseLinkStatus.connected(displayName: "x").isActive)
-        #expect(!ChromecaseLinkStatus.disabled.isActive)
+        #expect(ChromecastLinkStatus.connected(displayName: "x").isConnected)
+        #expect(ChromecastLinkStatus.connected(displayName: "x").isActive)
+        #expect(!ChromecastLinkStatus.disabled.isActive)
     }
 
     @Test func voiceEndReasonsDistinguishNormalFromForced() {
-        #expect(ChromecaseVoiceEndReason.holdRelease.isNormal)
-        #expect(ChromecaseVoiceEndReason.toggleSecondTap.isNormal)
-        #expect(!ChromecaseVoiceEndReason.hostStop.isNormal)
-        #expect(!ChromecaseVoiceEndReason.cancelled("link_unavailable").isNormal)
+        #expect(ChromecastVoiceEndReason.holdRelease.isNormal)
+        #expect(ChromecastVoiceEndReason.toggleSecondTap.isNormal)
+        #expect(!ChromecastVoiceEndReason.hostStop.isNormal)
+        #expect(!ChromecastVoiceEndReason.cancelled("link_unavailable").isNormal)
     }
 
     // MARK: - 缺包时的退化行为
 
     @Test func integrationIsInertWhenPrivatePackageIsAbsent() {
         // 未编入私有包时，接入层必须完全惰性：不崩、不产生任何回调。
-        guard !ChromecaseFeatureIntegration.isPackageIncluded else { return }
-        let integration = ChromecaseFeatureIntegration()
+        guard !ChromecastFeatureIntegration.isPackageIncluded else { return }
+        let integration = ChromecastFeatureIntegration()
         var eventCount = 0
         integration.onVoiceStart = { eventCount += 1 }
         integration.onVoiceSustain = { eventCount += 1 }
@@ -104,7 +104,7 @@ struct ChromecaseIntegrationTests {
 
     // MARK: - 打包与接线契约
 
-    @Test func chromecasePackageStaysOptionalForHostBuilds() throws {
+    @Test func chromecastPackageStaysOptionalForHostBuilds() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -122,19 +122,19 @@ struct ChromecaseIntegrationTests {
             encoding: .utf8
         )
 
-        #expect(packageSource.contains("SAYALL_CHROMECASE_PACKAGE_PATH"))
-        #expect(packageSource.contains("SAYALL_CHROMECASE_ENABLED"))
-        #expect(packageSource.contains("SayAllChromecase"))
-        #expect(buildSource.contains("SAYALL_CHROMECASE_INCLUDED=false"))
-        #expect(buildSource.contains("SayAllChromecaseIncluded"))
-        #expect(modelSource.contains("#if SAYALL_CHROMECASE_ENABLED"))
-        #expect(modelSource.contains("owner: .chromecase"))
-        #expect(modelSource.contains("receiveChromecaseAudio"))
+        #expect(packageSource.contains("SAYALL_CHROMECAST_PACKAGE_PATH"))
+        #expect(packageSource.contains("SAYALL_CHROMECAST_ENABLED"))
+        #expect(packageSource.contains("SayAllChromecast"))
+        #expect(buildSource.contains("SAYALL_CHROMECAST_INCLUDED=false"))
+        #expect(buildSource.contains("SayAllChromecastIncluded"))
+        #expect(modelSource.contains("#if SAYALL_CHROMECAST_ENABLED"))
+        #expect(modelSource.contains("owner: .chromecast"))
+        #expect(modelSource.contains("receiveChromecastAudio"))
         // 缺失私有包必须是普通的代码路径，不能是构建期 fatalError。
-        #expect(!packageSource.contains("fatalError(\"SAYALL_CHROMECASE"))
+        #expect(!packageSource.contains("fatalError(\"SAYALL_CHROMECAST"))
     }
 
-    @Test func chromecasePanelChangesReachTheRuntimeWithoutRestart() throws {
+    @Test func chromecastPanelChangesReachTheRuntimeWithoutRestart() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -149,18 +149,18 @@ struct ChromecaseIntegrationTests {
         )
 
         // 面板里开关与模式选择必须走同一条「立即作用于运行时」的入口。
-        #expect(settingsView.contains("model.applyChromecaseSettings()"))
+        #expect(settingsView.contains("model.applyChromecastSettings()"))
         // 模式推送必须真的发生在运行入口里，而不是只写偏好；
         // 且推的是「生效模式」——设备自报不支持「按一次」时必须按「按住说话」执行。
-        #expect(modelSource.contains("chromecaseFeature.setVoiceMode(effectiveChromecaseVoiceMode)"))
-        #expect(modelSource.contains("var effectiveChromecaseVoiceMode"))
-        #expect(modelSource.contains("func applyChromecaseSettings()"))
+        #expect(modelSource.contains("chromecastFeature.setVoiceMode(effectiveChromecastVoiceMode)"))
+        #expect(modelSource.contains("var effectiveChromecastVoiceMode"))
+        #expect(modelSource.contains("func applyChromecastSettings()"))
     }
 
     // MARK: - 按键页契约
 
-    @Test func everyChromecaseControlMapsToItsOwnRemoteButton() {
-        let expected: [ChromecaseRemoteControl: RemoteButton] = [
+    @Test func everyChromecastControlMapsToItsOwnRemoteButton() {
+        let expected: [ChromecastRemoteControl: RemoteButton] = [
             .power: .power,
             .up: .up,
             .down: .down,
@@ -176,20 +176,20 @@ struct ChromecaseIntegrationTests {
             .volumeUp: .volumeUp,
             .volumeDown: .volumeDown,
         ]
-        #expect(ChromecaseRemoteControl.allCases.count == expected.count)
-        for control in ChromecaseRemoteControl.allCases {
+        #expect(ChromecastRemoteControl.allCases.count == expected.count)
+        for control in ChromecastRemoteControl.allCases {
             #expect(control.remoteButton == expected[control])
         }
         // 一控一键：两个控件映射到同一个键位会让其中一个的配置永远读不到。
-        #expect(Set(ChromecaseRemoteControl.allCases.map(\.remoteButton)).count == expected.count)
+        #expect(Set(ChromecastRemoteControl.allCases.map(\.remoteButton)).count == expected.count)
     }
 
     // MARK: - 系统占用键豁免
 
     @Test func systemReservedKeysStayWithTheSystemByDefault() {
-        for control in ChromecaseRemoteControl.systemReservedControls {
+        for control in ChromecastRemoteControl.systemReservedControls {
             #expect(
-                ChromecaseRemoteControl.isSystemManaged(
+                ChromecastRemoteControl.isSystemManaged(
                     control,
                     allowSystemReservedKeys: false
                 )
@@ -197,7 +197,7 @@ struct ChromecaseIntegrationTests {
         }
         // 非系统占用键不受开关影响。
         #expect(
-            !ChromecaseRemoteControl.isSystemManaged(
+            !ChromecastRemoteControl.isSystemManaged(
                 .volumeUp,
                 allowSystemReservedKeys: false
             )
@@ -208,18 +208,18 @@ struct ChromecaseIntegrationTests {
         // 按键级豁免：只放开的键由 App 接管，其余仍归系统（三键代价不同：左/右=播放时切歌，
         // OK=任何时候拉起音乐 App，需要能单独取舍）。
         let exceptions: Set<String> = ["left", "right"]
-        #expect(!ChromecaseRemoteControl.isSystemManaged(.left, allowSystemReservedKeys: false, exceptions: exceptions))
-        #expect(!ChromecaseRemoteControl.isSystemManaged(.right, allowSystemReservedKeys: false, exceptions: exceptions))
-        #expect(ChromecaseRemoteControl.isSystemManaged(.select, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(!ChromecastRemoteControl.isSystemManaged(.left, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(!ChromecastRemoteControl.isSystemManaged(.right, allowSystemReservedKeys: false, exceptions: exceptions))
+        #expect(ChromecastRemoteControl.isSystemManaged(.select, allowSystemReservedKeys: false, exceptions: exceptions))
         #expect(
-            ChromecaseRemoteControl.canvasReservedControlIDs(
+            ChromecastRemoteControl.canvasReservedControlIDs(
                 allowSystemReservedKeys: false,
                 exceptions: exceptions
             ) == ["select"]
         )
         // 主开关仍然全放开（两者相加生效）。
         #expect(
-            ChromecaseRemoteControl.canvasReservedControlIDs(
+            ChromecastRemoteControl.canvasReservedControlIDs(
                 allowSystemReservedKeys: true,
                 exceptions: exceptions
             ).isEmpty
@@ -227,9 +227,9 @@ struct ChromecaseIntegrationTests {
     }
 
     @Test func allowSystemReservedKeysReleasesAllThreeForTesting() {
-        for control in ChromecaseRemoteControl.systemReservedControls {
+        for control in ChromecastRemoteControl.systemReservedControls {
             #expect(
-                !ChromecaseRemoteControl.isSystemManaged(
+                !ChromecastRemoteControl.isSystemManaged(
                     control,
                     allowSystemReservedKeys: true
                 )
@@ -237,7 +237,7 @@ struct ChromecaseIntegrationTests {
         }
     }
 
-    @Test func chromecaseOnlyButtonsStayOutOfTheXiaomiLayout() {
+    @Test func chromecastOnlyButtonsStayOutOfTheXiaomiLayout() {
         for button in [RemoteButton.youtube, .netflix, .input] {
             #expect(!RemoteButton.xiaomiCases.contains(button))
         }
@@ -245,25 +245,25 @@ struct ChromecaseIntegrationTests {
         #expect(RemoteButton.xiaomiCases.count == 12)
     }
 
-    @Test func chromecaseModelIsRoutedToItsOwnAdapter() {
-        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.isChromecaseRemote)
-        #expect(!XiaomiRemoteModel.chromecaseVoiceRemote.isAppleSiriRemote)
-        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.usesPrivateAdapter)
+    @Test func chromecastModelIsRoutedToItsOwnAdapter() {
+        #expect(XiaomiRemoteModel.chromecastVoiceRemote.isChromecastRemote)
+        #expect(!XiaomiRemoteModel.chromecastVoiceRemote.isAppleSiriRemote)
+        #expect(XiaomiRemoteModel.chromecastVoiceRemote.usesPrivateAdapter)
         #expect(XiaomiRemoteModel.appleSiriRemoteA2854.usesPrivateAdapter)
         #expect(!XiaomiRemoteModel.rc003.usesPrivateAdapter)
-        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.stableHardwareModelID == "chromecast-voice-remote")
-        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.localizationKey.hasPrefix("remote.device.model."))
+        #expect(XiaomiRemoteModel.chromecastVoiceRemote.stableHardwareModelID == "chromecast-voice-remote")
+        #expect(XiaomiRemoteModel.chromecastVoiceRemote.localizationKey.hasPrefix("remote.device.model."))
     }
 
     /// 该型号不宣告电池能力，界面不得显示一个永远是「未知」的电量位。
-    @Test func chromecaseProfileNeverShowsBattery() {
+    @Test func chromecastProfileNeverShowsBattery() {
         #expect(!RemoteBatteryPresentationPolicy.shouldShowBattery(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             level: 42,
             powerState: .onBattery
         ))
         #expect(!RemoteBatteryPresentationPolicy.shouldShowBattery(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             level: nil,
             powerState: .charging
         ))
@@ -274,26 +274,26 @@ struct ChromecaseIntegrationTests {
         ))
     }
 
-    /// Chromecase 设备档案按型号识别并且可重复注册，否则每次连接都会新建一个档案、丢掉映射。
-    @Test func chromecaseProfileRegistrationIsIdempotent() throws {
-        let suiteName = "RemoteMicTests.ChromecaseProfile.(UUID().uuidString)"
+    /// Chromecast 设备档案按型号识别并且可重复注册，否则每次连接都会新建一个档案、丢掉映射。
+    @Test func chromecastProfileRegistrationIsIdempotent() throws {
+        let suiteName = "RemoteMicTests.ChromecastProfile.(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let settings = AppSettings(defaults: defaults)
 
-        let first = settings.registerChromecaseRemote()
-        let second = settings.registerChromecaseRemote()
+        let first = settings.registerChromecastRemote()
+        let second = settings.registerChromecastRemote()
 
         #expect(first == second)
-        #expect(settings.selectedRemoteProfile?.model == .chromecaseVoiceRemote)
+        #expect(settings.selectedRemoteProfile?.model == .chromecastVoiceRemote)
         let profile = try #require(settings.remoteDeviceProfiles.first(where: { $0.id == first }))
-        #expect(profile.model == .chromecaseVoiceRemote)
-        #expect(settings.remoteDeviceProfiles.filter { $0.model == .chromecaseVoiceRemote }.count == 1)
+        #expect(profile.model == .chromecastVoiceRemote)
+        #expect(settings.remoteDeviceProfiles.filter { $0.model == .chromecastVoiceRemote }.count == 1)
     }
 
     // MARK: - 按键页接线契约
 
-    @Test func mappingPageRoutesChromecaseToItsOwnCanvas() throws {
+    @Test func mappingPageRoutesChromecastToItsOwnCanvas() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -307,21 +307,21 @@ struct ChromecaseIntegrationTests {
             encoding: .utf8
         )
 
-        // 按键页必须按型号分派到 Chromecase 画布，且整块受私有包门禁保护。
-        #expect(settingsView.contains("chromecaseMappingPage"))
-        #expect(settingsView.contains("canImport(SayAllChromecase)"))
+        // 按键页必须按型号分派到 Chromecast 画布，且整块受私有包门禁保护。
+        #expect(settingsView.contains("chromecastMappingPage"))
+        #expect(settingsView.contains("canImport(SayAllChromecast)"))
         // 映射总开关必须真的推给 HID 通道：独占与否决定了按键是被宿主还是被系统消费。
         #expect(modelSource.contains(
-            "chromecaseFeature.setControlMappingEnabled(settings.customMappingEnabled)"
+            "chromecastFeature.setControlMappingEnabled(settings.customMappingEnabled)"
         ))
         // 私有包档案不得被小米 HID 发现链路当成候选。
         #expect(modelSource.contains("!profile.model.usesPrivateAdapter"))
         // 按键事件必须接到执行链路上，而不是只更新界面状态。
-        #expect(modelSource.contains("handleChromecaseControlEvent"))
-        #expect(modelSource.contains("performChromecaseConfiguredAction"))
+        #expect(modelSource.contains("handleChromecastControlEvent"))
+        #expect(modelSource.contains("performChromecastConfiguredAction"))
     }
 
-    @Test func chromecaseNeverCapturesFromTheComputerMicrophone() throws {
+    @Test func chromecastNeverCapturesFromTheComputerMicrophone() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -332,6 +332,6 @@ struct ChromecaseIntegrationTests {
         )
         // 第一版只走遥控器麦克风到 MiRemoteV 2ch，不做混音、不回退电脑麦克风。
         #expect(modelSource.contains("route=MiRemoteV_2ch"))
-        #expect(!modelSource.contains("chromecaseAudioMixer"))
+        #expect(!modelSource.contains("chromecastAudioMixer"))
     }
 }

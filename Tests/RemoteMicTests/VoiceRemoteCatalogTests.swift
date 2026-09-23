@@ -73,7 +73,7 @@ struct VoiceRemoteCatalogTests {
         #expect(VoiceRemoteCatalog.photoResource(for: .unknown) == nil)
         #expect(VoiceRemoteCatalog.photoResource(for: .appleSiriRemoteA2854) == nil)
         #expect(VoiceRemoteCatalog.photoResource(for: .appleSiriRemoteA2540) == nil)
-        #expect(VoiceRemoteCatalog.photoResource(for: .chromecaseVoiceRemote) == nil)
+        #expect(VoiceRemoteCatalog.photoResource(for: .chromecastVoiceRemote) == nil)
     }
 
     @Test func advertisedNamesCoverEveryNameTheBridgeHasEverAdopted() {

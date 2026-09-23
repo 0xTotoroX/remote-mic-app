@@ -7,7 +7,7 @@ import SayAllSiriRemote
 
 /// 苹果遥控器：宿主的能力判定必须与**型号自报**一致。
 ///
-/// 与 Chromecase 那条链路同构——能力只有一个来源遥控器自己的代码；宿主不再维护型号能力表。
+/// 与 Chromecast 那条链路同构——能力只有一个来源遥控器自己的代码；宿主不再维护型号能力表。
 /// 只要任一边漂移（新增/移除能力位、改了型号默认表），这里会失败。
 struct SiriCapabilityContractTests {
     /// 私有包里 A2854 的能力声明（真机可核对的依据：`SayAllSiriRemoteModel.capabilities`）。
@@ -64,7 +64,7 @@ struct SiriCapabilityContractTests {
     // MARK: - 位序安全
 
     @Test func projectionMapsBitsByNameNotByPosition() {
-        // 两条链路的位序不同：苹果遥控器 bit1 = touchSurface，Chromecase bit1 = voiceStream。
+        // 两条链路的位序不同：苹果遥控器 bit1 = touchSurface，Chromecast bit1 = voiceStream。
         // 若哪天改成按 rawValue 复制，这条会失败。
         let siriTouchOnly: SiriRemoteDeclaredCapabilities = [.touchSurface]
         #expect(siriTouchOnly.asDeclaredVoiceCapabilities.contains(.touchSurface))

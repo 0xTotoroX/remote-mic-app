@@ -112,8 +112,8 @@ enum RemoteDeviceNamePolicy {
                 ? ["苹果遥控器 type-c", "apple remote type-c"]
                 : ["苹果遥控器 lightning", "apple remote lightning"]
             return commonNames.contains(lowercased) || modelNames.contains(lowercased)
-        case .chromecaseVoiceRemote:
-            return ["chromecase 遥控器", "chromecase remote"].contains(lowercased)
+        case .chromecastVoiceRemote:
+            return ["chromecast 遥控器", "chromecast remote"].contains(lowercased)
         case .unknown:
             // 小米发现阶段可能先读到名称、后读到型号；沿用已有发现白名单。
             return XiaomiVoiceRemoteNameMatcher.matches(name)
