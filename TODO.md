@@ -206,6 +206,7 @@
     - Vokie 已加入深度适配入口、`vokie://launch` 配置唤起和 `sayall://launch` 回流；回流状态不能替代真实语音门禁。合作方正式下载 URL、shortcut/microphoneId 最终编码、Vokie/ChatterFly 当前版本截图与真实默认值证据仍待确认。
     - 自动化已覆盖默认矩阵、来源转换、Fn 点按、Chromecast 原生 toggle、事务回滚、Package 编译门禁与 Deep Link 解析；仍需完成公开/完整包生产截图、私有 Package 构建、真实第三方工具、iPhone/Watch/Web 模式上报、各硬件真实语音文字与 macOS 14/15/当前系统验收后才能勾选。
     - 详细方案与证据保存在私有资料库 `projects/remote-mic-app/research/onboarding-voice-shortcuts-and-input-method-visibility/v1/ONBOARDING-OPTIMIZATION-PLAN.md`；公开仓只保留行为、兼容边界和验证状态。
+    - Secure Input 仅作为实体遥控器普通按键无响应时的候选诊断；需在真实密码输入/安全键盘场景验证“重新检测”恢复路径，并确认普通按键页不执行用户已有映射。
   - [ ] 在 Onboarding 新手引导中增加“打开 App 并聚焦输入框”的演示动画：清楚展示用户按下已映射的遥控器按键后，无线麦打开或切换到目标 App，并自动把焦点放入可输入文字的区域。动画用于解释这一核心能力，应支持重新播放，并与后续真实按键测试和自定义 App 配置衔接。
   - [ ] 在 Onboarding 的设备选择步骤支持苹果遥控器，并按所选型号显示对应真机图：用户安装时选择了可选 `SiriRemoteComponent.pkg` 时，在“是否有实体遥控器 / 选择控制来源”步骤提供 Siri Remote 选项，并把该步骤固定的 `Resources/RC003-remote-photo.png` 小米遥控器图换成 Siri Remote。
     - 只有安装时选择了可选 Siri Remote 组件（即当前 App 内苹果遥控器能力可用）才显示该选项；未安装组件的用户继续完全看不到，不得出现无法完成的入口，也不得为判断型号提前触发权限或蓝牙扫描。

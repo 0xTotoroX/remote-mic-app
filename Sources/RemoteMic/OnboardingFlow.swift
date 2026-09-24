@@ -354,6 +354,58 @@ enum OnboardingControlSource: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+/// During the ordinary-button check, Onboarding observes fresh input events but must
+/// never execute mappings that the user configured before starting (or rerunning) the flow.
+enum OnboardingControlValidationPolicy {
+    static func suppressConfiguredActions(
+        at step: OnboardingStep,
+        source: OnboardingControlSource
+    ) -> Bool {
+        guard step == .controls else { return false }
+        switch source {
+        case .xiaomiRemote, .siriRemote, .chromecastRemote, .appleCompanion, .webRemote:
+            return true
+        case .unselected:
+            return false
+        }
+    }
+}
+
+enum OnboardingSecureInputPolicy {
+    static let warningDelay: TimeInterval = 3
+
+    static func shouldMonitor(
+        step: OnboardingStep,
+        source: OnboardingControlSource
+    ) -> Bool {
+        guard step == .remote || step == .controls else { return false }
+        switch source {
+        case .xiaomiRemote, .siriRemote, .chromecastRemote:
+            return true
+        case .appleCompanion, .webRemote, .unselected:
+            return false
+        }
+    }
+
+    static func shouldShowWarning(
+        step: OnboardingStep,
+        source: OnboardingControlSource,
+        remoteConnected: Bool,
+        remoteButtonObserved: Bool,
+        secureInputActive: Bool?,
+        waitStartedAtUptime: TimeInterval?,
+        nowUptime: TimeInterval
+    ) -> Bool {
+        guard shouldMonitor(step: step, source: source),
+              remoteConnected,
+              !remoteButtonObserved,
+              secureInputActive == true,
+              let waitStartedAtUptime
+        else { return false }
+        return nowUptime - waitStartedAtUptime >= warningDelay
+    }
+}
+
 enum OnboardingAppleRemoteGeneration: String, Codable, CaseIterable, Identifiable {
     case generation6 = "generation_6"
     case generation7 = "generation_7"

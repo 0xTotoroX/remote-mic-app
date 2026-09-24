@@ -127,6 +127,9 @@ struct OnboardingView: View {
     @State private var shortcutCaptureErrorKey: String?
     @State private var vokieDeepLinkStatus: SayAllDeepLinkStatus?
     @State private var showAlternativeControlSources = false
+    @State private var secureInputActive: Bool?
+    @State private var secureInputWaitStartedAtUptime: TimeInterval?
+    @State private var lastLoggedSecureInputState: Bool?
 
     private let permissionRefreshTimer = Timer.publish(
         every: 1,
@@ -181,9 +184,11 @@ struct OnboardingView: View {
             refreshPermissionStates()
             refreshVoiceToolAvailability()
             prepareForStep(settings.onboardingStep)
+            refreshSecureInputState()
         }
         .onReceive(permissionRefreshTimer) { _ in
             refreshPermissionStates()
+            refreshSecureInputState()
             if settings.onboardingStep == .voiceTool {
                 refreshSystemFunctionKeyUsage()
             }
@@ -1445,6 +1450,10 @@ struct OnboardingView: View {
                 pendingColor: remoteInputDiagnostic.shouldShowVoiceButtonCorrection ? .orange : nil
             )
 
+            if shouldShowSecureInputWarning {
+                secureInputWarningCard
+            }
+
             if !selectedControlConnected {
                 openBluetoothSettingsButton
             }
@@ -1458,6 +1467,62 @@ struct OnboardingView: View {
                 ? "onboarding.remote.button_waiting_detail"
                 : "onboarding.remote.button_detail"
         return localization.text(instructionKey)
+    }
+
+    private var shouldShowSecureInputWarning: Bool {
+        OnboardingSecureInputPolicy.shouldShowWarning(
+            step: settings.onboardingStep,
+            source: settings.onboardingControlSource,
+            remoteConnected: selectedControlConnected,
+            remoteButtonObserved: settings.onboardingStep == .controls
+                ? !testedControlButtons.isEmpty
+                : !observedRemoteButtons.isEmpty,
+            secureInputActive: secureInputActive,
+            waitStartedAtUptime: secureInputWaitStartedAtUptime,
+            nowUptime: ProcessInfo.processInfo.systemUptime
+        )
+    }
+
+    private var secureInputWarningCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "lock.trianglebadge.exclamationmark.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.orange)
+                    .frame(width: 32, height: 32)
+                    .background(Color.orange.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: localization.text("onboarding.secure_input.title"))
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(verbatim: localization.text("onboarding.secure_input.detail"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 10) {
+                onboardingActionButton(id: "secure-input.recheck") {
+                    recheckSecureInput()
+                } label: {
+                    Text(verbatim: localization.text("onboarding.secure_input.recheck"))
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text(verbatim: localization.text("onboarding.secure_input.help"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        }
     }
 
     private var iPhoneRemoteContent: some View {
@@ -1893,6 +1958,10 @@ struct OnboardingView: View {
             Text(verbatim: localization.text(controlsDetailKey))
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+
+            if shouldShowSecureInputWarning {
+                secureInputWarningCard
+            }
 
             if let buttons = displayedControlButtons {
                 LazyVGrid(
@@ -3221,6 +3290,9 @@ struct OnboardingView: View {
         observedRemoteButtons.removeAll()
         remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
         testedControlButtons.removeAll()
+        secureInputActive = nil
+        secureInputWaitStartedAtUptime = nil
+        lastLoggedSecureInputState = nil
         stageCurrentDocumentedPairingPlanIfPossible()
     }
 
@@ -3286,6 +3358,9 @@ struct OnboardingView: View {
         observedRemoteButtons.removeAll()
         remoteInputDiagnostic = FirstUseRemoteInputDiagnostic()
         testedControlButtons.removeAll()
+        secureInputActive = nil
+        secureInputWaitStartedAtUptime = nil
+        lastLoggedSecureInputState = nil
     }
 
     private func refreshSelectedInputMethodStatus() {
@@ -3349,6 +3424,63 @@ struct OnboardingView: View {
         accessibilityGranted = KeyboardInjector.isAccessibilityTrusted
     }
 
+    private func refreshSecureInputState() {
+        guard OnboardingSecureInputPolicy.shouldMonitor(
+            step: settings.onboardingStep,
+            source: settings.onboardingControlSource
+        ) else {
+            secureInputActive = nil
+            secureInputWaitStartedAtUptime = nil
+            lastLoggedSecureInputState = nil
+            return
+        }
+
+        let active = SecureInputMonitor.isEnabled()
+        secureInputActive = active
+        if lastLoggedSecureInputState != active {
+            AppLogger.shared.write(
+                "ONBOARDING SECURE_INPUT phase=state_changed active=\(active)"
+            )
+            lastLoggedSecureInputState = active
+        }
+
+        let currentStepHasObservedButton = settings.onboardingStep == .controls
+            ? !testedControlButtons.isEmpty
+            : !observedRemoteButtons.isEmpty
+        if selectedControlConnected && !currentStepHasObservedButton {
+            if secureInputWaitStartedAtUptime == nil {
+                secureInputWaitStartedAtUptime = ProcessInfo.processInfo.systemUptime
+            }
+        } else {
+            secureInputWaitStartedAtUptime = nil
+        }
+    }
+
+    private func recheckSecureInput() {
+        AppLogger.shared.write("ONBOARDING SECURE_INPUT phase=recovery_requested")
+        secureInputWaitStartedAtUptime = ProcessInfo.processInfo.systemUptime
+        switch settings.onboardingControlSource {
+        case .xiaomiRemote, .siriRemote:
+            model.applyHIDSettings()
+        case .chromecastRemote:
+            prepareSelectedControlConnection()
+        case .appleCompanion, .webRemote, .unselected:
+            break
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            refreshSecureInputState()
+            let buttonReceived = settings.onboardingStep == .controls
+                ? !testedControlButtons.isEmpty
+                : !observedRemoteButtons.isEmpty
+            let result = buttonReceived
+                ? "button_received"
+                : (shouldShowSecureInputWarning ? "retry_required" : "unknown")
+            AppLogger.shared.write(
+                "ONBOARDING SECURE_INPUT phase=recovery_completed result=\(result)"
+            )
+        }
+    }
+
     private func prepareForStep(_ step: OnboardingStep) {
         refreshPermissionStates()
         switch step {
@@ -3370,6 +3502,7 @@ struct OnboardingView: View {
             observedRemoteButtons.removeAll()
             remoteInputDiagnostic = remoteInputDiagnosticOverride ?? FirstUseRemoteInputDiagnostic()
             requestedRemoteConnectionRecovery = false
+            secureInputWaitStartedAtUptime = nil
             prepareSelectedControlConnection()
         case .audio:
             model.refreshAudioDevices()
@@ -3379,10 +3512,17 @@ struct OnboardingView: View {
             resetVoiceTestForRetry()
         case .controls:
             testedControlButtons.removeAll()
+            secureInputWaitStartedAtUptime = nil
         case .complete:
+            secureInputActive = nil
+            secureInputWaitStartedAtUptime = nil
+            lastLoggedSecureInputState = nil
             prepareSelectedControlConnection()
             model.refreshAudioDevices()
         default:
+            secureInputActive = nil
+            secureInputWaitStartedAtUptime = nil
+            lastLoggedSecureInputState = nil
             break
         }
         settings.recordFirstUseEvent(.entered, step: step)

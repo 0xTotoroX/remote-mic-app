@@ -897,6 +897,10 @@
 "onboarding.controls.mobile_slot" = "第 %@ 个不同控制";
 "onboarding.controls.waiting" = "继续按下不同的按键";
 "onboarding.controls.ready" = "常用按键已经可以使用";
+"onboarding.secure_input.title" = "系统安全输入可能影响遥控器按键";
+"onboarding.secure_input.detail" = "请退出正在输入密码或使用安全键盘输入的应用，然后重新检测。";
+"onboarding.secure_input.recheck" = "重新检测";
+"onboarding.secure_input.help" = "如果仍未恢复，请锁定 Mac 后使用密码重新解锁，再重新检测。";
 "onboarding.complete.title" = "无线麦已经准备好了";
 "onboarding.complete.detail" = "现在可以用所选控制方式说话输入，也可以在主面板中调整连接、语音和按键设置。";
 "onboarding.complete.runtime_changed" = "当前环境状态发生了变化";

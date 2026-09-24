@@ -157,6 +157,80 @@ struct OnboardingFlowTests {
         #expect(OnboardingPhase.phase(for: .complete) == .tryIt)
     }
 
+    @Test func ordinaryButtonValidationSuppressesExistingMappingsOnlyOnControlsPage() {
+        for source in [
+            OnboardingControlSource.xiaomiRemote,
+            .siriRemote,
+            .chromecastRemote,
+            .appleCompanion,
+            .webRemote,
+        ] {
+            #expect(OnboardingControlValidationPolicy.suppressConfiguredActions(
+                at: .controls,
+                source: source
+            ))
+            #expect(!OnboardingControlValidationPolicy.suppressConfiguredActions(
+                at: .voiceTest,
+                source: source
+            ))
+        }
+        #expect(!OnboardingControlValidationPolicy.suppressConfiguredActions(
+            at: .controls,
+            source: .unselected
+        ))
+    }
+
+    @Test func secureInputWarningIsLimitedToConnectedPhysicalRemote() {
+        #expect(OnboardingSecureInputPolicy.shouldMonitor(
+            step: .remote,
+            source: .xiaomiRemote
+        ))
+        #expect(OnboardingSecureInputPolicy.shouldMonitor(
+            step: .controls,
+            source: .chromecastRemote
+        ))
+        #expect(!OnboardingSecureInputPolicy.shouldMonitor(
+            step: .controls,
+            source: .appleCompanion
+        ))
+        #expect(!OnboardingSecureInputPolicy.shouldShowWarning(
+            step: .controls,
+            source: .xiaomiRemote,
+            remoteConnected: false,
+            remoteButtonObserved: false,
+            secureInputActive: true,
+            waitStartedAtUptime: 10,
+            nowUptime: 20
+        ))
+        #expect(!OnboardingSecureInputPolicy.shouldShowWarning(
+            step: .controls,
+            source: .xiaomiRemote,
+            remoteConnected: true,
+            remoteButtonObserved: true,
+            secureInputActive: true,
+            waitStartedAtUptime: 10,
+            nowUptime: 20
+        ))
+        #expect(OnboardingSecureInputPolicy.shouldShowWarning(
+            step: .controls,
+            source: .xiaomiRemote,
+            remoteConnected: true,
+            remoteButtonObserved: false,
+            secureInputActive: true,
+            waitStartedAtUptime: 10,
+            nowUptime: 13
+        ))
+        #expect(OnboardingSecureInputPolicy.shouldShowWarning(
+            step: .remote,
+            source: .xiaomiRemote,
+            remoteConnected: true,
+            remoteButtonObserved: false,
+            secureInputActive: true,
+            waitStartedAtUptime: 10,
+            nowUptime: 13
+        ))
+    }
+
     @Test func everyControlMethodRequiresAllThreePermissions() {
         var capabilities = OnboardingCapabilities(
             bluetoothGranted: true,
@@ -802,6 +876,36 @@ struct OnboardingFlowTests {
         #expect(viewSource.contains("onboarding.voice-test.gain"))
         #expect(viewSource.contains("settings.gainDB = min(24, max(0, $0))"))
         #expect(viewSource.contains("ONBOARDING GAIN editing="))
+    }
+
+    @Test func ordinaryButtonDetectionDoesNotExecuteExistingMappings() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let modelSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/BridgeAppModel.swift"),
+            encoding: .utf8
+        )
+        #expect(modelSource.contains("OnboardingControlValidationPolicy.suppressConfiguredActions"))
+        #expect(modelSource.contains("ONBOARDING CONTROLS"))
+        #expect(modelSource.contains("source=apple_remote action=suppressed"))
+        #expect(modelSource.contains("source=chromecast action=suppressed"))
+        #expect(modelSource.contains("performMobileConfiguredAction"))
+    }
+
+    @Test func secureInputWarningUsesOnlyPublicBooleanSignal() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let monitorSource = try String(
+            contentsOf: root.appendingPathComponent("Sources/RemoteMic/SecureInputMonitor.swift"),
+            encoding: .utf8
+        )
+        #expect(monitorSource.contains("IsSecureEventInputEnabled()"))
+        #expect(!monitorSource.contains("IORegistry"))
+        #expect(!monitorSource.contains("processIdentifier"))
     }
 
     @Test @MainActor func markedTranscriptTextCanBeCommittedWithoutChangingItsVisibleText() {

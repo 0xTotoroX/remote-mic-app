@@ -2503,7 +2503,20 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                     "HID BUTTON button=\(button.rawValue) path=binding_editor_capture"
                 )
             }
-            return (resolvedProfileID, !self.macroFeature.isEditorActive)
+            let suppressConfiguredAction = OnboardingControlValidationPolicy
+                .suppressConfiguredActions(
+                    at: self.settings.onboardingStep,
+                    source: self.settings.onboardingControlSource
+                )
+            if suppressConfiguredAction {
+                AppLogger.shared.write(
+                    "ONBOARDING CONTROLS button=\(button.rawValue) action=suppressed"
+                )
+            }
+            return (
+                resolvedProfileID,
+                !self.macroFeature.isEditorActive && !suppressConfiguredAction
+            )
         }
         monitor.onInternalAction = { [weak self] profileID, action in
             guard let self else { return }
@@ -2928,6 +2941,17 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             )
             return
         }
+        let suppressConfiguredAction = OnboardingControlValidationPolicy
+            .suppressConfiguredActions(
+                at: settings.onboardingStep,
+                source: settings.onboardingControlSource
+            )
+        if suppressConfiguredAction, control == .siri {
+            AppLogger.shared.write(
+                "ONBOARDING CONTROLS button=siri source=apple_remote action=suppressed"
+            )
+            return
+        }
         if control == .siri {
             guard let profileID = appleRemoteProfileIDs[event.device] else {
                 AppLogger.shared.write(
@@ -2958,7 +2982,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         if control == .select {
             let nativeEdge: RemoteEventEdge = event.phase == .began ? .down : .up
-            if event.phase == .began,
+            if !suppressConfiguredAction,
+               event.phase == .began,
                siriRemoteCursorFeedback.activateHoveredElementIfAvailable() {
                 appleRemoteHoverClickDevices.insert(event.device)
                 hidEventSuppressor.arm(nativeEvents: control.nativeEvents, edge: nativeEdge)
@@ -2967,7 +2992,8 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 )
                 return
             }
-            if event.phase == .ended,
+            if !suppressConfiguredAction,
+               event.phase == .ended,
                appleRemoteHoverClickDevices.remove(event.device) != nil {
                 hidEventSuppressor.arm(nativeEvents: control.nativeEvents, edge: nativeEdge)
                 AppLogger.shared.write(
@@ -2976,7 +3002,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
                 return
             }
         }
-        guard settings.customMappingEnabled else {
+        guard settings.customMappingEnabled || suppressConfiguredAction else {
             if event.phase == .began {
                 AppLogger.shared.write(
                     "APPLE REMOTE ACTION phase=completed result=system_managed " +
@@ -3049,6 +3075,18 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         }
         appleRemoteActiveButtons[device] = buttons
         refreshAppleRemoteActiveButtons()
+
+        if OnboardingControlValidationPolicy.suppressConfiguredActions(
+            at: settings.onboardingStep,
+            source: settings.onboardingControlSource
+        ) {
+            if phase == .press {
+                AppLogger.shared.write(
+                    "ONBOARDING CONTROLS button=\(button.rawValue) source=apple_remote action=suppressed"
+                )
+            }
+            return
+        }
 
         if appleRemoteAppSwitcherSession.isActive {
             if phase == .release {
@@ -4650,7 +4688,16 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         _ button: RemoteButton,
         source: UsageEventSource
     ) -> Bool {
-        performMobileConfiguredAction(for: button, trigger: .singleClick, source: source)
+        if OnboardingControlValidationPolicy.suppressConfiguredActions(
+            at: settings.onboardingStep,
+            source: settings.onboardingControlSource
+        ) {
+            AppLogger.shared.write(
+                "ONBOARDING CONTROLS button=\(button.rawValue) source=\(source.rawValue) action=suppressed"
+            )
+            return true
+        }
+        return performMobileConfiguredAction(for: button, trigger: .singleClick, source: source)
     }
 
     private func observeMobileButton(_ button: RemoteButton, source: UsageEventSource) {
@@ -4665,6 +4712,17 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         phase: RemoteButtonPhase,
         source: UsageEventSource
     ) -> Bool {
+        if OnboardingControlValidationPolicy.suppressConfiguredActions(
+            at: settings.onboardingStep,
+            source: settings.onboardingControlSource
+        ) {
+            if phase == .press {
+                AppLogger.shared.write(
+                    "ONBOARDING CONTROLS button=\(button.rawValue) source=\(source.rawValue) action=suppressed"
+                )
+            }
+            return true
+        }
         if macroFeature.isEditorActive {
             if phase == .press {
                 macroFeature.noteButtonInteraction(button: button)
@@ -6235,7 +6293,12 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             }
             return
         }
-        guard settings.customMappingEnabled else {
+        let suppressConfiguredAction = OnboardingControlValidationPolicy
+            .suppressConfiguredActions(
+                at: settings.onboardingStep,
+                source: settings.onboardingControlSource
+            )
+        guard settings.customMappingEnabled || suppressConfiguredAction else {
             // 与小米/苹果遥控器同一规则：映射总开关关闭时按键由系统消费，宿主不接管。
             if event.phase == .began {
                 AppLogger.shared.write(
@@ -6247,6 +6310,29 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
 
         let profileID = ensureChromecastProfile()
         let isPress = event.phase == .began
+
+        if suppressConfiguredAction {
+            if isPress {
+                selectRemoteProfile(profileID)
+                settings.recordButtonPress(
+                    control: .remoteButton(event.control.remoteButton),
+                    source: .bluetoothRemote
+                )
+                lastRemoteButtonPress = event.control.remoteButton
+                AppLogger.shared.write(
+                    "ONBOARDING CONTROLS button=\(event.control.remoteButton.rawValue) " +
+                        "source=chromecast action=suppressed"
+                )
+            }
+            if isPress {
+                chromecastPressedControls.insert(controlID)
+            } else {
+                chromecastPressedControls.remove(controlID)
+            }
+            refreshChromecastActiveControlIDs()
+            return
+        }
+
         // 系统占用键（left/right/select）：报告 usage 在系统眼里是 Menu Up/Down/Left，macOS 配件服务
         // 直接消费成媒体控制且**不经 CGEvent**（真机实测：事件 tap 两层与 hidutil 都无法拦截）。
         // 按产品决策完全不接管：不武装抑制（无效）、不执行自定义动作，按键归系统。

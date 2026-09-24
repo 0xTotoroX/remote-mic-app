@@ -1158,7 +1158,7 @@ struct SettingsPageRegressionTests {
         #expect(settings.contains("macroFeature.enrollmentView"))
         #expect(settings.contains("macroFeature.setEditorActive(false)"))
         #expect(settings.contains("if section != .macros"))
-        #expect(model.contains("return (resolvedProfileID, !self.macroFeature.isEditorActive)"))
+        #expect(model.contains("!self.macroFeature.isEditorActive && !suppressConfiguredAction"))
         #expect(model.contains("if macroFeature.isEditorActive"))
         #expect(chinese.contains("输入框"))
         #expect(chinese.contains("MCP / TOML"))
