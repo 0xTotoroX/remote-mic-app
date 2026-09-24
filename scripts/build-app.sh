@@ -432,6 +432,12 @@ plutil -insert SayAllSiriRemoteIncluded -bool "$SAYALL_SIRI_REMOTE_INCLUDED" \
 plutil -remove SayAllChromecaseIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 plutil -insert SayAllChromecaseIncluded -bool "$SAYALL_CHROMECASE_INCLUDED" \
   "$APP_DIR/Contents/Info.plist"
+# Keep the correctly spelled public capability marker alongside the historical
+# internal key so local-package and release verification can read one stable
+# user-facing name without breaking older tooling.
+plutil -remove SayAllChromecastIncluded "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+plutil -insert SayAllChromecastIncluded -bool "$SAYALL_CHROMECASE_INCLUDED" \
+  "$APP_DIR/Contents/Info.plist"
 if [[ "$RELEASE_VARIANT" == "intel" ]]; then
   plutil -replace LSMinimumSystemVersion -string "$RELEASE_MIN_SYSTEM_VERSION" \
     "$APP_DIR/Contents/Info.plist"
