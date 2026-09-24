@@ -78,6 +78,9 @@ enum OnboardingScreenshotRenderer {
         let requestedControlSource = ProcessInfo.processInfo.environment[
             "REMOTE_MIC_ONBOARDING_SCREENSHOT_CONTROL_SOURCE"
         ].flatMap(OnboardingControlSource.init(rawValue:))
+        let requestedAppleRemoteGeneration = ProcessInfo.processInfo.environment[
+            "REMOTE_MIC_ONBOARDING_SCREENSHOT_APPLE_REMOTE_GENERATION"
+        ].flatMap(OnboardingAppleRemoteGeneration.init(rawValue:))
         let systemFunctionKeyAvailable = ProcessInfo.processInfo.environment[
             "REMOTE_MIC_ONBOARDING_SCREENSHOT_SYSTEM_FN_AVAILABLE"
         ].map { $0 != "0" } ?? true
@@ -103,6 +106,11 @@ enum OnboardingScreenshotRenderer {
         }
         settings.setOnboardingVoiceTool(requestedVoiceTool ?? .doubao)
         settings.setOnboardingControlSource(controlSource)
+        if controlSource == .siriRemote {
+            settings.setOnboardingAppleRemoteGeneration(
+                requestedAppleRemoteGeneration ?? .generation7
+            )
+        }
         let screenshotAudioDevices = [
             AudioDeviceInfo(id: 1, uid: DoubaoAudioDevicePolicy.deviceUID, name: "MiRemoteV 2ch"),
             AudioDeviceInfo(id: 2, uid: "BlackHole2ch_UID", name: "BlackHole 2ch"),
@@ -181,8 +189,8 @@ enum OnboardingScreenshotRenderer {
     ) -> [(OnboardingStep, String)] {
         var steps: [OnboardingStep] = [
             .welcome,
-            .voiceTool,
             .remoteAvailability,
+            .voiceTool,
         ]
         steps.append(contentsOf: [
             .permissions,

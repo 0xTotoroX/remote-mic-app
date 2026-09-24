@@ -896,8 +896,8 @@ struct SettingsPageRegressionTests {
         #expect(chinese.contains(#""remote.device.model.rc003" = "小米蓝牙遥控器 2 Pro";"#))
         #expect(english.contains(#""remote.device.model.rc001" = "Xiaomi Bluetooth Remote 2";"#))
         #expect(english.contains(#""remote.device.model.rc003" = "Xiaomi Bluetooth Remote 2 Pro";"#))
-        #expect(chinese.contains(#""remote.device.model.apple_siri_remote_a2854" = "苹果遥控器 Type-C";"#))
-        #expect(chinese.contains(#""remote.device.model.apple_siri_remote_a2540" = "苹果遥控器 Lightning";"#))
+        #expect(chinese.contains(#""remote.device.model.apple_siri_remote_a2854" = "苹果遥控器第 7 代";"#))
+        #expect(chinese.contains(#""remote.device.model.apple_siri_remote_a2540" = "苹果遥控器第 6 代";"#))
 
         let cardStart = try #require(settingsSource.range(of: "private func remoteDeviceCard"))
         let cardEnd = try #require(settingsSource.range(

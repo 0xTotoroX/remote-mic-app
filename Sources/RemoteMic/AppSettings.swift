@@ -331,6 +331,7 @@ final class AppSettings: ObservableObject {
         static let onboardingRemoteAvailability = "onboarding.remoteAvailability"
         static let onboardingControlMethod = "onboarding.controlMethod"
         static let onboardingControlSource = "onboarding.controlSource"
+        static let onboardingAppleRemoteGeneration = "onboarding.appleRemoteGeneration"
         static let onboardingVoiceTool = "onboarding.voiceTool"
         static let onboardingVoiceBindingPreference = "onboarding.voiceBindingPreference"
         static let onboardingPreferredGesture = "onboarding.preferredGesture"
@@ -602,6 +603,15 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published private(set) var onboardingAppleRemoteGeneration: OnboardingAppleRemoteGeneration? {
+        didSet {
+            defaults.set(
+                onboardingAppleRemoteGeneration?.rawValue,
+                forKey: Keys.onboardingAppleRemoteGeneration
+            )
+        }
+    }
+
     @Published private(set) var onboardingVoiceTool: OnboardingVoiceTool {
         didSet { defaults.set(onboardingVoiceTool.rawValue, forKey: Keys.onboardingVoiceTool) }
     }
@@ -859,7 +869,10 @@ final class AppSettings: ObservableObject {
         let persistedOnboardingStep = defaults.string(forKey: Keys.onboardingStep)
             .flatMap(OnboardingStep.init(rawValue:))
             ?? .welcome
-        onboardingStep = persistedOnboardingStep
+        // Older builds persisted a separate control-method page. The new flow owns
+        // both physical and companion choices on the control-source page, so resume
+        // those interrupted sessions there without discarding the selected source.
+        onboardingStep = persistedOnboardingStep.normalized
         let persistedControlMethod = defaults.string(forKey: Keys.onboardingControlMethod)
             .flatMap(OnboardingControlMethod.init(rawValue:))
             ?? (persistedOnboardingStep == .welcome ||
@@ -872,6 +885,9 @@ final class AppSettings: ObservableObject {
         onboardingControlSource = defaults.string(forKey: Keys.onboardingControlSource)
             .flatMap(OnboardingControlSource.init(rawValue:))
             ?? OnboardingControlSource.migrated(from: persistedControlMethod)
+        onboardingAppleRemoteGeneration = defaults.string(
+            forKey: Keys.onboardingAppleRemoteGeneration
+        ).flatMap(OnboardingAppleRemoteGeneration.init(rawValue:))
         onboardingRemoteAvailability = defaults.string(
             forKey: Keys.onboardingRemoteAvailability
         )
@@ -950,8 +966,9 @@ final class AppSettings: ObservableObject {
     }
 
     func setOnboardingStep(_ step: OnboardingStep) {
-        guard !isOnboardingComplete, onboardingStep != step else { return }
-        onboardingStep = step
+        let normalizedStep = step.normalized
+        guard !isOnboardingComplete, onboardingStep != normalizedStep else { return }
+        onboardingStep = normalizedStep
     }
 
     func recordFirstUseEvent(
@@ -1045,6 +1062,13 @@ final class AppSettings: ObservableObject {
             onboardingRemoteAvailability = .unselected
         }
         discardOnboardingVoiceTrial()
+    }
+
+    func setOnboardingAppleRemoteGeneration(_ generation: OnboardingAppleRemoteGeneration?) {
+        onboardingAppleRemoteGeneration = generation
+        if generation != nil, onboardingControlSource != .siriRemote {
+            setOnboardingControlSource(.siriRemote)
+        }
     }
 
     func beginOnboardingVoiceTrial(_ plan: OnboardingVoicePairingPlan) {
@@ -1156,6 +1180,7 @@ final class AppSettings: ObservableObject {
         onboardingRemoteAvailability = .unselected
         onboardingControlMethod = .unselected
         onboardingControlSource = .unselected
+        onboardingAppleRemoteGeneration = nil
         onboardingVoiceBindingPreference = .documentedDefault
         onboardingPreferredGesture = nil
         onboardingStep = .welcome

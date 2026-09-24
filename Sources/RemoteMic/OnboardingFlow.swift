@@ -12,6 +12,17 @@ enum OnboardingStep: String, CaseIterable, Codable {
     case controls
     case complete
 
+    /// The public flow keeps the control-device decision immediately after the welcome page.
+    /// The legacy control-method case remains decodable so an interrupted older flow can resume.
+    static let visibleCases: [Self] = [
+        .welcome, .remoteAvailability, .voiceTool, .permissions, .remote, .audio,
+        .voiceTest, .controls, .complete,
+    ]
+
+    var normalized: Self {
+        self == .controlMethod ? .remoteAvailability : self
+    }
+
     var requiresRuntime: Bool {
         switch self {
         case .welcome, .voiceTool, .remoteAvailability, .controlMethod:
@@ -22,20 +33,25 @@ enum OnboardingStep: String, CaseIterable, Codable {
     }
 
     var previous: OnboardingStep? {
-        guard let index = Self.allCases.firstIndex(of: self), index > 0 else { return nil }
-        return Self.allCases[index - 1]
+        let step = normalized
+        guard let index = Self.visibleCases.firstIndex(of: step), index > 0 else { return nil }
+        return Self.visibleCases[index - 1]
     }
 
     var next: OnboardingStep? {
-        guard let index = Self.allCases.firstIndex(of: self), index + 1 < Self.allCases.count else {
+        let step = normalized
+        guard let index = Self.visibleCases.firstIndex(of: step), index + 1 < Self.visibleCases.count else {
             return nil
         }
-        return Self.allCases[index + 1]
+        return Self.visibleCases[index + 1]
     }
 
     var progress: Double {
-        guard let index = Self.allCases.firstIndex(of: self), Self.allCases.count > 1 else { return 0 }
-        return Double(index) / Double(Self.allCases.count - 1)
+        let step = normalized
+        guard let index = Self.visibleCases.firstIndex(of: step), Self.visibleCases.count > 1 else {
+            return 0
+        }
+        return Double(index) / Double(Self.visibleCases.count - 1)
     }
 }
 
@@ -338,6 +354,22 @@ enum OnboardingControlSource: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum OnboardingAppleRemoteGeneration: String, Codable, CaseIterable, Identifiable {
+    case generation6 = "generation_6"
+    case generation7 = "generation_7"
+
+    var id: String { rawValue }
+
+    var titleKey: String { "onboarding.control_source.apple_remote.\(rawValue).title" }
+
+    var model: XiaomiRemoteModel {
+        switch self {
+        case .generation6: return .appleSiriRemoteA2540
+        case .generation7: return .appleSiriRemoteA2854
+        }
+    }
+}
+
 enum OnboardingBuildCapabilities {
     static var availableControlSources: [OnboardingControlSource] {
         var sources: [OnboardingControlSource] = [.xiaomiRemote]
@@ -365,21 +397,34 @@ struct OnboardingVoicePairingPlan: Equatable {
         tool: OnboardingVoiceTool,
         controlSource: OnboardingControlSource,
         preferredGesture: VoiceGestureMode? = nil,
-        userBinding: VoiceToolUserBinding? = nil
+        userBinding: VoiceToolUserBinding? = nil,
+        forceFunctionKey: Bool = false
     ) -> Self? {
         guard tool != .unselected, controlSource != .unselected else { return nil }
         let profile = VoiceToolAdapterProfile.profile(for: tool)
 
         if let userBinding {
-            guard userBinding.tool == tool,
-                  profile.supportedModes.contains(userBinding.gestureMode),
+            var effectiveBinding = userBinding
+            if forceFunctionKey {
+                effectiveBinding = VoiceToolUserBinding(
+                    tool: userBinding.tool,
+                    shortcut: .function,
+                    gestureMode: userBinding.gestureMode,
+                    source: userBinding.source,
+                    validationState: userBinding.validationState,
+                    verifiedToolVersion: userBinding.verifiedToolVersion,
+                    verifiedAt: userBinding.verifiedAt
+                )
+            }
+            guard effectiveBinding.tool == tool,
+                  profile.supportedModes.contains(effectiveBinding.gestureMode),
                   canDrive(
-                    gesture: userBinding.gestureMode,
-                    shortcut: userBinding.shortcut,
+                    gesture: effectiveBinding.gestureMode,
+                    shortcut: effectiveBinding.shortcut,
                     from: controlSource
                   ) else { return nil }
             return makePlan(
-                binding: userBinding,
+                binding: effectiveBinding,
                 controlSource: controlSource,
                 evidenceState: profile.evidenceState
             )
@@ -391,7 +436,8 @@ struct OnboardingVoicePairingPlan: Equatable {
             preferredGesture: preferredGesture
         )
         for gesture in candidates {
-            guard let shortcut = profile.defaultShortcutByMode[gesture],
+            let shortcut = forceFunctionKey ? VoiceKeyMode.function : profile.defaultShortcutByMode[gesture]
+            guard let shortcut,
                   canDrive(gesture: gesture, shortcut: shortcut, from: controlSource)
             else { continue }
             return makePlan(
@@ -479,9 +525,10 @@ enum OnboardingRemotePhotoKind: Equatable {
     ) -> Self {
         switch source {
         case .xiaomiRemote:
-            // 尚未识别到具体型号时，来源本身已经限定为公开支持的小米 2/2 Pro，
-            // 使用目录中明确声明的共享真机图；一旦识别出未知型号则必须降级占位。
-            if let selectedModel, selectedModel != .unknown {
+            // Only a Xiaomi profile may refine the image. A previously selected
+            // Apple/Chromecast profile must never replace the Xiaomi card artwork.
+            if let selectedModel,
+               selectedModel == .rc001 || selectedModel == .rc003 {
                 guard let resource = VoiceRemoteCatalog.photoResource(for: selectedModel) else {
                     return .placeholder
                 }
