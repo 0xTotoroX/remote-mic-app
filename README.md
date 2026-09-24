@@ -39,6 +39,8 @@
 
 视频作者：[可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
 
+> 同作者制作的小米蓝牙遥控器 2 Pro 3D 打印外壳：[在 MakerWorld 查看](https://makerworld.com.cn/zh/models/2965815-vibegrip-ma-shang-wo-wei-vibe-coding-zuo-de-xiao-m?appSharePlatform=sayall.app)
+
 ## Windows 版本
 
 无线麦 App Windows 版本的第一个预览版已经发布，当前以基本功能为主：

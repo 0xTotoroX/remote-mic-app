@@ -39,6 +39,8 @@
 
 Video by [可乐不甜的跑焦日记](https://space.bilibili.com/327214328)
 
+> 3D-printed Xiaomi Bluetooth Remote 2 Pro shell by the same creator: [View it on MakerWorld](https://makerworld.com.cn/zh/models/2965815-vibegrip-ma-shang-wo-wei-vibe-coding-zuo-de-xiao-m?appSharePlatform=sayall.app)
+
 ## Windows version
 
 The first Windows preview of SayAll is now available, focusing on the essential features:
