@@ -350,6 +350,9 @@
 "connection.web.pairing_code" = "校验码";
 "connection.web.pairing_code_accessibility" = "校验码 %1$@";
 "connection.web.qr_accessibility" = "手机网页版连接二维码";
+"connection.web.mini_program_scan" = "用微信扫一扫，直接打开小程序";
+"connection.web.mini_program_accessibility" = "微信小程序连接码";
+"connection.web.browser_scan" = "用手机浏览器连接网页版，扫这个小二维码";
 "connection.web.awaiting_approval" = "正在等待允许“%1$@”连接。";
 "connection.web.connected" = "网页版已连接";
 "connection.web.connected_device" = "当前设备：%1$@。按键和按住说话已经可用。";
