@@ -1,9 +1,9 @@
-# Chromecase 遥控器（ATVV）实机测试手册
+# Chromecast 遥控器（ATVV）实机测试手册
 
 ## 适用范围
 
 - 日期：2026-09-15。
-- 目标硬件：Chromecase 语音遥控器（ATVV over BLE，广播名含 `Chromecast Remote`）。
+- 目标硬件：Chromecast 语音遥控器（ATVV over BLE，广播名含 `Chromecast Remote`）。
 - 当前状态：宿主接线已完成并通过自动化验证（协议、解码、仲裁、会话策略、语音键隔离）。本手册覆盖的**真机连接、语音链路与安装包验收尚未执行**，未通过前不得声明该硬件正式受支持。
 - 第一版范围：**只做语音**。不含普通按键边沿、触摸面、电池状态；这些能力在代码里明确缺席，不得伪造。
 - 跨平台基础约束见 [`Testing/HardwareCompatibilityContract.md`](HardwareCompatibilityContract.md)；语音完整性门槛见 [`Testing/HardwareVoiceAudioContract.md`](HardwareVoiceAudioContract.md)。本手册不重新定义通用行为，只增加该硬件的实机步骤。
@@ -18,29 +18,29 @@
 | 配置 | Release，Apple Silicon `arm64`，最低 macOS 14.0 |
 | 版本 | 1.9.21（197） |
 | Bundle ID | `com.hd838a.RemoteMic` |
-| 宿主源码基线 | 分支 `codex/chromecase-voice-hardware` 合并 `origin/main`（`bc19f79`）：PR #445 已并入 main（`e46348d`），本次再把 main 的 13 个新提交（Right Option 语音键、未连接设备时灰化状态栏图标、README 视频等）合入。基线 `origin/main` `014d2b2`。 |
-| 私有包基线 | `SayAllChromecase` @ 私有仓 `main`（合并 `origin/main` `1c949ea`「merge Chromecase adapter package」后的 `0e7ec51`）；相对远端 main 的差异仅 3 个文件（`ChromecaseMappingPage` / `ChromecaseHardwareContract` / `ChromecaseRemoteHIDBridge`，+59/−7）。 |
+| 宿主源码基线 | 分支 `codex/chromecast-voice-hardware` 合并 `origin/main`（`bc19f79`）：PR #445 已并入 main（`e46348d`），本次再把 main 的 13 个新提交（Right Option 语音键、未连接设备时灰化状态栏图标、README 视频等）合入。基线 `origin/main` `014d2b2`。 |
+| 私有包基线 | `SayAllChromecast` @ 私有仓 `main`（合并 `origin/main` `1c949ea`「merge Chromecast adapter package」后的 `0e7ec51`）；相对远端 main 的差异仅 3 个文件（`ChromecastMappingPage` / `ChromecastHardwareContract` / `ChromecastRemoteHIDBridge`，+59/−7）。 |
 | 主程序 SHA-256 | `f277b8568cc22ab84b1e1bbb6aa189f7fb79209ab6f9737fe826df30a1694986` |
 | 包体积 | 约 `15 MB` |
 | 签名 | Developer ID Application `L3QHLDRPAY`；`codesign --verify --deep --strict` 已通过 |
-| Info.plist 标记 | `SayAllChromecaseIncluded=true`，其余可选组件均为 `false` |
+| Info.plist 标记 | `SayAllChromecastIncluded=true`，其余可选组件均为 `false` |
 
 ### 隔离性验证（2026-09-16，build 197）
 
-「加 Chromecase 是否影响小米 / Siri Remote」的核查证据（合并 main 后重新出包时执行）：
+「加 Chromecast 是否影响小米 / Siri Remote」的核查证据（合并 main 后重新出包时执行）：
 
 | 项目 | 结果 |
 | --- | --- |
 | 小米 / Siri 源文件改动 | **零改动**——`AppleSiriRemoteAdapter` / `SiriRemoteFeatureIntegration` / `SiriRemoteCursorFeedbackController` / `XiaomiBluetoothBridge` / `HIDRemoteMonitor` / `HIDRemoteScheduler` 均不在 diff 内 |
-| 改动文件清单（相对 `origin/main`，共 8 个） | `Info.plist`、中英 `Localizable.strings`、`BridgeAppModel`（+36，全部在 chromecase 专属分支内）、`ChromecaseFeatureIntegration`（+9）、`SettingsView`（chromecase 卡片移除 + 槽位文案）、`KeyboardEventSuppressor`（+122）、本手册与踩坑文档 |
+| 改动文件清单（相对 `origin/main`，共 8 个） | `Info.plist`、中英 `Localizable.strings`、`BridgeAppModel`（+36，全部在 chromecast 专属分支内）、`ChromecastFeatureIntegration`（+9）、`SettingsView`（chromecast 卡片移除 + 槽位文案）、`KeyboardEventSuppressor`（+122）、本手册与踩坑文档 |
 | `KeyboardEventSuppressor` | **纯追加日志与只读探针**：`handle(type:event:)` 的所有 `return true/false` 判定与 main 逐行一致，未改抑制语义 |
 | 测试 | 宿主 **583 项 / 45 套件全绿**（含 `RC003 hardware Fn mapping`、`Siri Remote cursor feedback`、`Remote buttons`、`Remote hardware input contract`）；私有包 106 项全绿 |
-| 运行时（build 197 启动，实例 pid 95137） | Chromecase 正常（`seized=true`、`ATVV READY frame=240`、`AUDIO READY engine_running=true`）；小米链路照常被扫描并连接（`BLE CONNECTING name=小米蓝牙语音遥控器`、`HID UPDATE RECOVERY applied`），日志行与合并前各版本逐字一致；无新增错误行 |
-| 私有仓影响面 | 相对远端 main 仅 3 个 chromecase 包内文件，未触碰会员中心等其他包/应用 |
+| 运行时（build 197 启动，实例 pid 95137） | Chromecast 正常（`seized=true`、`ATVV READY frame=240`、`AUDIO READY engine_running=true`）；小米链路照常被扫描并连接（`BLE CONNECTING name=小米蓝牙语音遥控器`、`HID UPDATE RECOVERY applied`），日志行与合并前各版本逐字一致；无新增错误行 |
+| 私有仓影响面 | 相对远端 main 仅 3 个 chromecast 包内文件，未触碰会员中心等其他包/应用 |
 
-> **同一台机器上还有一份 `/Applications/SayAll.app`（1.9.21 build 181，无 Chromecase）。**
-> 它的构建号比本测试包更大，但没有 `SayAllChromecaseIncluded` 标记，从启动台或 Spotlight
-> 打开它**不会出现遥控器面板**。测试必须显式打开本表的 `dist/SayAll.app`。
+> **同一台机器上还有一份 `/Applications/SayAll.app`（1.9.21 build 181，无 Chromecast）。**
+> 它的构建号比本测试包更大，但没有 `SayAllChromecastIncluded` 标记，从启动台或 Spotlight
+> 打开它**不会出现该遥控器**（没有 `SayAllChromecastIncluded` 标记）。测试必须显式打开本表的 `dist/SayAll.app`。
 >
 > 版本历史（每一步都对应一次真实缺陷）：
 > - `bc0dac56…`（00:25）：缺少「取回系统已连接设备」的发现路径，遥控器一旦在系统蓝牙里配对上就连不上。
@@ -82,20 +82,20 @@
 >   `ATVV VOICE gesture duration_ms=… action=latch|stop|none mode=…`。详见「根因 #3」。
 >
 > ⚠️ 因此 01:18 那一版记录在案的真机证据（`frame=120`）**实际是小米语音遥控器的协商结果**，
-> 不能当作 Chromecase 已验证。本型号的协商结果是 `frame=247`。
+> 不能当作 Chromecast 已验证。本型号的协商结果是 `frame=247`。
 
 ### 连错设备的教训（2026-09-15）
 
 `AB5E0001-5A21-4F05-BC7D-AF01F617B664` 是**通用 ATVV 服务**，不是本品专有：同一仓库的
 小米语音遥控器用的就是它。因此 `retrieveConnectedPeripherals(withServices:)` 会一次取回
-**两台**遥控器；若把「服务存在」当成型号身份，就会连上错误的设备——面板显示「已连接」，
+**两台**遥控器；若把「服务存在」当成型号身份，就会连上错误的设备——界面显示「已连接」，
 而真遥控器按语音键毫无反应。
 
 区分设备只看 `name=` 与 `frame=`：
 
 | 设备 | 名字 | 协商 frame |
 | --- | --- | --- |
-| Chromecase 语音遥控器（本型号） | `Chromecast Remote` | `247` |
+| Chromecast 语音遥控器（本型号） | `Chromecast Remote` | `247` |
 | 小米蓝牙语音遥控器 | `小米蓝牙语音遥控器` | `120` |
 
 正确的准入规则是**名字匹配优先**，名字存在但对不上就忽略（即使服务存在）；只有在完全没有名字
@@ -105,7 +105,7 @@
 ### 语音流根因：HTT 下补发 `MIC_OPEN`（2026-09-15 01:32 真机）
 
 现象：按语音键后豆包输入法的电平图**有反应但没有波动**；整段收音在日志里是
-`CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0`，录音资产只有 557 字节。
+`CHROMECAST VOICE phase=completed … audio_batches=0 audio_samples=0`，录音资产只有 557 字节。
 
 关键日志（`pid=83434`，一次 1.33 秒的按住）：
 
@@ -118,7 +118,7 @@ ATVV CONTROL source=control opcode=0x04 bytes=4      ← 远端改发 AUDIO_STAR
 ATVV STREAM START reason=0x00 stream=0 codec=2 generation=2
 …（此后 289ms 到松键，AB5E0003 上一个字节都没有）…
 ATVV CONTROL source=control opcode=0x00 bytes=2      ← 远端 AUDIO_STOP(reason=0x02)
-CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0
+CHROMECAST VOICE phase=completed … audio_batches=0 audio_samples=0
 ```
 
 对照 Google *Voice over BLE* 1.0 规范（来源文件 `Google_Voice_over_BLE_spec_v1.0.pdf`；
@@ -165,7 +165,7 @@ CHROMECASE VOICE phase=completed … audio_batches=0 audio_samples=0
 （`reason=0x03 stream=24`）在按键期间就推了音频（首帧延迟 330 ms，`head` 前两帧全零、第 3 帧起有数据）。
 所以**「按住期没有音频」不成立**——那是上一轮只看到 1.3 秒样本得出的错误结论，此处更正。
 
-真正的分界线是 `ChromecaseVoiceArbiter.holdThreshold = 0.55` 秒：
+真正的分界线是 `ChromecastVoiceArbiter.holdThreshold = 0.55` 秒：
 
 ```swift
 case .toggle:
@@ -229,7 +229,7 @@ hold**：
 
 > 「我们通过开关来控制是按住还是按一次了，不需要这个延迟判断。有了这个延迟判断，使用体验太差了。」
 
-这个判断是对的：用户在设置页已经显式选定了模式，**时长不携带任何额外意图信息**——
+这个判断是对的：用户已经显式选定了模式，**时长不携带任何额外意图信息**——
 「按一次」的自然时长在这台遥控器上在 **1.12~5.76 秒**之间跳动，那是人手抖动，不是信号。
 任何阈值都只是把一部分正常操作误判掉，而它的误伤方式（松键即结束）恰好把用户随后说的话全部丢掉，
 症状看起来像「功能没生效」，而不是「判定偏了」。
@@ -263,7 +263,7 @@ case .toggle:
 
 ```
 AUDIO WRITE rejected count=… reason=playback_not_ready state={engine_running=false player_playing=true …}
-CHROMECASE AUDIO routed … accepted=false first_batch_samples=494
+CHROMECAST AUDIO routed … accepted=false first_batch_samples=494
 ```
 
 判据在 `AudioOutput.swift` 的 `VirtualAudioHealthPolicy.isPlaybackReady =
@@ -336,7 +336,7 @@ toggle 语义本身没错（第 1 按开、第 2 按关），但**快速连按�
 ```
 BLE SYSTEM CONNECTED CANDIDATES count=2 names=Chromecast Remote | 小米蓝牙语音遥控器
 BLE SYSTEM CONNECTED ADOPTED model=chromecast-voice-remote
-CHROMECASE CONNECTION state=connecting model=chromecast-voice-remote sequence=1
+CHROMECAST CONNECTION state=connecting model=chromecast-voice-remote sequence=1
 BLE CONNECTING source=connected_peripheral model=chromecast-voice-remote
 BLE CONNECTED model=chromecast-voice-remote
 BLE CHARACTERISTIC uuid=AB5E0002 props=write,writeNoResp
@@ -348,9 +348,9 @@ ATVV CAPABILITIES version=0x0100 codec=2 frame=247
 ATVV CAPABILITIES DETAIL interaction=0x03 remote_mic=true raw=0b0100020300f70100
 ATVV READY version=0x0100 codec=2 interaction=0x03 remote_mic=true frame=247 fallback=false
 BLE LINK maxWriteNoResp=182 maxWriteResp=512
-CHROMECASE CONNECTION state=available model=chromecast-voice-remote sequence=3
-CHROMECASE LINK state=connected(displayName: "Chromecase 语音遥控器")
-CHROMECASE STATUS Chromecase 语音遥控器 已连接
+CHROMECAST CONNECTION state=available model=chromecast-voice-remote sequence=3
+CHROMECAST LINK state=connected(displayName: "Chromecast 语音遥控器")
+CHROMECAST STATUS Chromecast 语音遥控器 已连接
 ```
 
 两条关键事实：
@@ -375,13 +375,13 @@ CHROMECASE STATUS Chromecase 语音遥控器 已连接
 HTT 交互模型）在真实硬件上全部可用。**它不等于语音链路已验收**——用例 2 起的收音、首字、
 尾字与异常路径仍待执行。
 
-> 日志前缀分工：包内只写 `BLE …` 与 `ATVV …`；`CHROMECASE …` 全部由宿主写出。
-> 因此排查协议问题看 `BLE`/`ATVV`，排查宿主接线与语音会话看 `CHROMECASE`。
+> 日志前缀分工：包内只写 `BLE …` 与 `ATVV …`；`CHROMECAST …` 全部由宿主写出。
+> 因此排查协议问题看 `BLE`/`ATVV`，排查宿主接线与语音会话看 `CHROMECAST`。
 
 **当前生效的语音键模式可以在日志里直接读到**，每次开始收音都会带上：
 
 ```
-CHROMECASE VOICE phase=started result=triggered audio_source=chromecase_microphone route=MiRemoteV_2ch mode=toggle
+CHROMECAST VOICE phase=started result=triggered audio_source=chromecast_microphone route=MiRemoteV_2ch mode=toggle
 ```
 
 末段 `mode=` 就是运行时实际采用的模式（`toggle` / `hold`），与界面选择应当一致；不一致即为接线缺陷。
@@ -394,12 +394,12 @@ CHROMECASE VOICE phase=started result=triggered audio_source=chromecase_micropho
 
 ```sh
 cd /Users/andy/MySrc/remote-mic-app-chromecase
-SAYALL_CHROMECASE_PACKAGE_PATH=/Users/andy/MySrc/sayall-private-platform/packages/audio-input-kit/chromecase \
+SAYALL_CHROMECAST_PACKAGE_PATH=/Users/andy/MySrc/sayall-private-platform/packages/audio-input-kit/chromecast \
 CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   ./scripts/build-app.sh
 ```
 
-不带 `SAYALL_CHROMECASE_PACKAGE_PATH` 时，构建产物与未接入该硬件前完全一致（`SayAllChromecaseIncluded=false`，界面不显示该面板）。这是必须回归的约束。
+不带 `SAYALL_CHROMECAST_PACKAGE_PATH` 时，构建产物与未接入该硬件前完全一致（`SayAllChromecastIncluded=false`，界面不出现该型号的任何入口）。这是必须回归的约束。
 
 ⚠️ **`CODE_SIGN_IDENTITY` 必须显式给**：`build-app.sh` 里 `SIGNING_IDENTITY="${CODE_SIGN_IDENTITY:--}"`，
 不传就打成 adhoc 签名，与历史真机包不一致（会引入额外的权限/授权变量）。
@@ -410,29 +410,31 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ```sh
 cd /Users/andy/MySrc/sayall-private-platform
-git worktree add --detach /private/tmp/chromecase-<shortsha> <commit>
+git worktree add --detach /private/tmp/chromecast-<shortsha> <commit>
 cd /Users/andy/MySrc/remote-mic-app-chromecase
-SAYALL_CHROMECASE_PACKAGE_PATH=/private/tmp/chromecase-<shortsha>/packages/audio-input-kit/chromecase \
+SAYALL_CHROMECAST_PACKAGE_PATH=/private/tmp/chromecast-<shortsha>/packages/audio-input-kit/chromecast \
 CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   ./scripts/build-app.sh
 ```
 
 构建完成后用 `strings dist/SayAll.app/Contents/MacOS/RemoteMic | grep -c <并行开发的新类型名>`
-确认产物里**没有**混入那些改动（应为 `0`）。用完 `git worktree remove /private/tmp/chromecase-<shortsha>`。
+确认产物里**没有**混入那些改动（应为 `0`）。用完 `git worktree remove /private/tmp/chromecast-<shortsha>`。
 
 ## 测试前准备
 
 1. 退出其他无线麦SayAll.app 实例，只保留待测包。
-   - 特别注意别打开 `/Applications/SayAll.app`（构建号更大但**不含 Chromecase**）。用
+   - 特别注意别打开 `/Applications/SayAll.app`（构建号更大但**不含 Chromecast**）。用
      `open /Users/andy/MySrc/remote-mic-app-chromecase/dist/SayAll.app` 显式打开本表那份。
 2. 确认已安装 `MiRemoteV 2ch` 音频设备（侧边栏「连接」→「连接与语音」页的「音频输入与兼容」面板应显示已就绪）。本次不安装任何 helper。
 3. 在侧边栏「设置」页的「权限与隐私」区授予蓝牙、输入监控和辅助功能权限，然后完全退出并重新打开 App。
 4. 打开 `~/Library/Logs/RemoteMic/runtime.log`，保留现有文件，不清空、不覆盖。
-   - 建议直接双击 `Testing/启动Chromecase真机测试.command`，它会实时过滤出本手册用到的日志行，并在桌面留一份会话记录。
-5. 进入侧边栏**「连接」**（链接图标，页面标题「连接与语音」），在右列第三块找到「Chromecase 遥控器」面板——总开关在**这一页**，不在「设置」页（「设置」页只有权限、通用、诊断与日志）。
-   - 面板长相见 `Testing/artifacts/chromecase-layout/`（由 App 自带离屏渲染导出，非截图拼贴）：
-     `connection-zh-Hans-light-1400x2000.png` 是「连接与语音」页，`settings-zh-Hans-light-1400x2000.png`
-     是「设置」页——后者没有该面板，正是本条要说明的对照。
+   - 建议直接双击 `Testing/启动Chromecast真机测试.command`，它会实时过滤出本手册用到的日志行，并在桌面留一份会话记录。
+5. 进入侧边栏**「连接」**（链接图标，页面标题「连接与语音」）：**左列的设备面板**显示当前遥控器、照片与三行状态（连接状态 / 语音状态 / 语音快捷），**「重新连接」按钮也在这块面板上**。
+   - ⚠️ 侧边栏**没有**单独的「Chromecast 遥控器」面板，也没有总开关：总开关已按产品要求移除，**恒为常开**；语音键模式**不在这一页**，在「按键映射」页底部（见用例 2）。
+   - 界面长相见 `Testing/artifacts/chromecast-layout/`（由 App 自带离屏渲染导出，非截图拼贴）：
+     `connection-zh-Hans-light-1400x2000.png` 是「连接与语音」页，
+     `mapping-zh-Hans-light-1400x2000.png` 是「按键映射」页——语音键模式在该页底部。两张图都按
+     `REMOTE_MIC_SETTINGS_SCREENSHOT_*`（light / zh-Hans / 1400x2000 / `CHROMECAST=1`）导出。
 6. 确认遥控器可被 App 发现。**这里有两种情况，都必须能连上**：
 
    | 情况 | 遥控器状态 | App 应走的发现路径 |
@@ -458,20 +460,20 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 | 组合 | 期望行为 |
 | --- | --- |
-| 只有 Chromecase | 该面板可见可用；Siri Remote 相关界面与代码路径完全不存在（本包 `SayAllSiriRemoteIncluded=false`）。 |
+| 只有 Chromecast | 该遥控器可被发现、连接与收音；Siri Remote 相关界面与代码路径完全不存在（本包 `SayAllSiriRemoteIncluded=false`）。 |
 | 两个都有 | 两套链路各自独立工作；同时收音时语音键按引用计数保持按下，互不取消。 |
-| 都没有 | `SayAllChromecaseIncluded=false`，该面板不出现，启动、运行、打包与未接入前一致。 |
+| 都没有 | `SayAllChromecastIncluded=false`，界面不出现该型号入口，启动、运行、打包与未接入前一致。 |
 
 ## 实机测试矩阵
 
 ### 用例 1：连接、重连与设备识别
 
 1. 启动 App，等待状态从「正在搜索遥控器」变为「已连接」。
-2. 在面板点「重新连接」。
+2. 在「连接」页左列的设备面板上点「重新连接」。
 3. 关闭再打开遥控器，观察是否自动恢复。
 4. **系统已连接场景**：在「系统设置 → 蓝牙」里把遥控器连上（或先移除再重新配对），回到 App 点「重新连接」。
 
-预期：状态依次经过 `discovering → connecting → available`；重连期间活动收音必须先被结束。日志出现 `CHROMECASE LINK state=` 与 `CHROMECASE CONNECTION state=available`。
+预期：状态依次经过 `discovering → connecting → available`；重连期间活动收音必须先被结束。日志出现 `CHROMECAST LINK state=` 与 `CHROMECAST CONNECTION state=available`。
 
 第 4 步的发现路径必须是 `connected_peripheral`，不是 `scan`：遥控器被系统连上后**不再广播**，扫描不可能发现它。若这里只有 `BLE SCANNING` 而没有 `BLE SYSTEM CONNECTED ADOPTED`，说明该发现路径失效——这正是本用例要盯的回归点。
 
@@ -481,7 +483,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 2：toggle 模式——按一下开始、再按一下结束（默认模式）
 
-确认面板（侧边栏「连接」→「连接与语音」页 →「Chromecase 遥控器」）语音键模式为「按一次说话」。
+确认语音键模式为「按一次说话」：在侧边栏**「按键映射」**页底部（选中本遥控器档案时才出现该区）。
 
 1. **点按**遥控器语音键（按下后立刻松开，**全程短于 2 秒**；真机实测最快约 1.3 秒），
    **松键之后**再说一句话，说完停顿几秒（**先不要**再按）。
@@ -492,7 +494,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 - 第 1 次按下即开始收音，且**不结束**；用户可见"正在收音"状态保持。
 - 第 2 次按下才结束。
 - 日志出现 `ATVV CONTROL source=control opcode=0x04 bytes=4`（本型号是 HTT：远端按下即自行起流），
-  随后才是 `CHROMECASE VOICE phase=started`。
+  随后才是 `CHROMECAST VOICE phase=started`。
 - **每次松键都必须有** `ATVV VOICE gesture duration_ms=… action=…`：第 1 次松键应为 `action=latch`、
   第 2 次为 `action=stop`；`action=debounced` 表示 latch 后 0.6 秒内的连按被忽略（收音保持，
   详见「根因 #5」）。**时长只作记录，不参与判定**（本版已彻底移除时长判定，详见「根因 #3」）。
@@ -504,16 +506,16 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
   `ATVV STREAM START reason=0x00 stream=0 origin=hostRequested`；**从这一刻起**
   `ATVV AUDIO notify count=` 应持续增长，电平图应波动。这就是本用例真正的通过判据。
 - 后续每 4 秒一条 `ATVV MIC_EXTEND stream=0`（把远端的「音频传输超时」顶回去）。
-- 完整序列：`CHROMECASE VOICE phase=started` → `CHROMECASE VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECASE VOICE playback_stop phase=waiting_for_drain` → `CHROMECASE AUDIO playback_stop phase=completed result=drained`。
+- 完整序列：`CHROMECAST VOICE phase=started` → `CHROMECAST VOICE phase=sustain result=no_visible_change`（可能有多次）→ `CHROMECAST VOICE playback_stop phase=waiting_for_drain` → `CHROMECAST AUDIO playback_stop phase=completed result=drained`。
 
-✅ **按多久都可以**：本版已彻底移除按键时长判定——模式由设置页开关决定，时长不再是判据。
+✅ **按多久都可以**：本版已彻底移除按键时长判定——模式由「按键映射」页底部的「语音键模式」决定，时长不再是判据。
 历史上一版用 0.55 秒、下一版用 2.0 秒，两次都在真机上误伤了「按一次」（用户的自然按下时长在
 1.12~5.76 秒之间跳动），详见「根因 #3」。第 1 次按下松键一律进入持续收音，第 2 次一律结束，
 与你按了 1.1 秒还是 5.7 秒无关。
 
 **若按了键却连一条 `ATVV CONTROL` 都没有**，说明远端压根没发出控制帧——此时不要继续测语音，
 把该次日志（含 `BLE CHARACTERISTIC` 与 `BLE SYSTEM CONNECTED CANDIDATES` 两行）整段留证。
-反过来，有 `ATVV CONTROL` 但没有 `CHROMECASE VOICE`，是宿主接线问题；有 `CHROMECASE VOICE` 但
+反过来，有 `ATVV CONTROL` 但没有 `CHROMECAST VOICE`，是宿主接线问题；有 `CHROMECAST VOICE` 但
 `ATVV AUDIO notify` 从不出现，**先看 `ATVV VOICE gesture` 那行的 `action=` 与 `duration_ms=`**：
 `action=stop` 说明这是「关」的那一次（本就不该有音频）；`action=latch` 却没有后续的
 `reason=0x00` 宿主流，才是宿主接线问题。三者必须分清。
@@ -537,7 +539,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 3：hold 模式
 
-把模式切到「按住说话」。切换后**立即生效**，无需重启（面板改动会即时同步到运行时）。
+把模式切到「按住说话」（「按键映射」页底部）。切换后**立即生效**，无需重启（改动会即时同步到运行时）。
 
 1. 按住语音键说话，中途松开。
 
@@ -597,7 +599,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 1. 让它进入广播范围。
 
-预期：在**扫描阶段**就被判为不支持并拒绝连接，面板显示「该样机不受支持」及原因；日志为 `state=unavailable`。不得静默升采样，也不得把它当成受支持型号。
+预期：在**扫描阶段**就被判为不支持并拒绝连接；日志为 `state=unavailable` 并给出拒绝原因。不得静默升采样，也不得把它当成受支持型号连上（界面不得把它显示成已识别的型号）。
 
 失败判定：连接成功但没有声音；或出现升采样后的可用音频。
 
@@ -611,10 +613,10 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 
 ### 用例 9：与 Siri Remote 并存（仅当包同时包含两者）
 
-本测试包只包含 Chromecase。要验证并存，需同时带 `SAYALL_SIRI_REMOTE_PACKAGE_PATH` 构建（另需 `libopus` 与 Developer ID 签名）。
+本测试包只包含 Chromecast。要验证并存，需同时带 `SAYALL_SIRI_REMOTE_PACKAGE_PATH` 构建（另需 `libopus` 与 Developer ID 签名）。
 
 1. 两个遥控器都连接。
-2. 用 Chromecase 开始持续收音，期间按下 Siri 键。
+2. 用 Chromecast 开始持续收音，期间按下 Siri 键。
 3. 先松开其中一个，再松开另一个。
 
 预期：语音键按引用计数保持按下，只有最后一个 owner 释放时才真正抬起；两路音频各自路由到 `MiRemoteV 2ch`；任何一方结束都不会取消另一方。
@@ -624,26 +626,26 @@ CODE_SIGN_IDENTITY="Developer ID Application: lei qian (L3QHLDRPAY)" \
 ### 用例 10：打包可选性回归
 
 **注意：这一步会在同一个 `dist/` 里重建 App，覆盖上面的真机测试包。请在跑完用例 1–9 之后再执行；**
-或者先 `cp -R dist/SayAll.app /tmp/SayAll-chromecase.app` 留一份。
+或者先 `cp -R dist/SayAll.app /tmp/SayAll-chromecast.app` 留一份。
 
 ```sh
 cd /Users/andy/MySrc/remote-mic-app-chromecase
-env -u SAYALL_CHROMECASE_PACKAGE_PATH -u SAYALL_ENABLE_SIRI_REMOTE \
-  SAYALL_CHROMECASE_PACKAGE_PATH= ./scripts/build-app.sh
-plutil -extract SayAllChromecaseIncluded raw -o - "dist/SayAll.app/Contents/Info.plist"
+env -u SAYALL_CHROMECAST_PACKAGE_PATH -u SAYALL_ENABLE_SIRI_REMOTE \
+  SAYALL_CHROMECAST_PACKAGE_PATH= ./scripts/build-app.sh
+plutil -extract SayAllChromecastIncluded raw -o - "dist/SayAll.app/Contents/Info.plist"
 ```
 
-预期：未提供私有包时构建仍然成功，输出 `false`，App 正常启动，设置页连接页不出现 Chromecase 面板。
+预期：未提供私有包时构建仍然成功，输出 `false`，App 正常启动，界面不出现该型号的任何入口。
 
 若要同时确认"没有私有仓库权限"的场景，应在一个只有公开仓库访问权限的账号或干净机器上完成
 resolve、测试与 Release 构建；本机已持有私有包路径，不能替代该验证。
 
-失败判定：构建报错，或缺少私有包时启动异常、设置页出现空面板。
+失败判定：构建报错，或缺少私有包时启动异常、界面出现该型号的空壳入口。
 
 ### 用例 11：普通按键与键位映射页（新增能力，未上真机）
 
 前置：侧边栏「按键映射」总开关**打开**（默认关闭；只有打开时本遥控器才会被独占）。
-遥控器连接后按键页应自动出现「Chromecase 遥控器」档案并可选中。
+遥控器连接后按键页应自动出现「Chromecast 遥控器」档案并可选中。
 
 1. 逐个按下 14 个普通按键（电源、方向×4、确认、返回、Home、静音、YouTube、NETFLIX、信源、音量±）。
 2. 给「确认」键配一个可观察的动作（例如自定义快捷键），再按一次确认。
@@ -652,41 +654,41 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 5. 按下期间观察按键页：被按下的键卡片应点亮橙色。
 
 预期：
-- 第 1 步每个键都出现 `CHROMECASE ACTION phase=completed result=dispatched button=…`，且 `button=`
+- 第 1 步每个键都出现 `CHROMECAST ACTION phase=completed result=dispatched button=…`，且 `button=`
   与遥控器上物理键位一一对应（出现错位就是 usage 表错了，不是映射错了）。
 - 第 2 步执行配置的动作；第 3 步只执行双击动作，不额外触发单击。
-- 第 4 步日志为 `CHROMECASE ACTION phase=completed result=system_managed control=…`，且按键**回到系统行为**
+- 第 4 步日志为 `CHROMECAST ACTION phase=completed result=system_managed control=…`，且按键**回到系统行为**
   （例如确认键会触发系统默认动作）——这证明独占只在映射开启时发生。
-- 第 5 步对应卡片进入 `activeChromecaseControlIDs`。
+- 第 5 步对应卡片进入 `activeChromecastControlIDs`。
 
 **已知边界（本工作项不覆盖）**：这颗遥控器不发自动重复包，宿主也没有为它实现**按键重复**（长按方向键连续滚动），
 与小米遥控器链路不同；若需要，应作为独立工作项补，并在本手册新增用例。
 
 失败判定：按了没有任何日志（区分「报告没到」与「usage 认错」：前者没有
-`CHROMECASE CONTROL` 行，后者有行但 `button=` 与物理键不符）；或映射关闭时按键仍被宿主独占。
+`CHROMECAST CONTROL` 行，后者有行但 `button=` 与物理键不符）；或映射关闭时按键仍被宿主独占。
 
 ## 日志关键行
 
 | 阶段 | 关键字 |
 | --- | --- |
-| 链路 | `CHROMECASE LINK state=`、`CHROMECASE CONNECTION state=` |
+| 链路 | `CHROMECAST LINK state=`、`CHROMECAST CONNECTION state=` |
 | 发现（扫描） | `BLE SCANNING`、`BLE CONNECTING source=scan` |
 | 发现（系统已连接） | `BLE SYSTEM CONNECTED ADOPTED model=`、`BLE CONNECTING source=connected_peripheral` |
 | 发现（扫描未匹配，诊断用） | `BLE DISCOVERED UNMATCHED name=` |
 | 链路单包容量（MTU 代理） | `BLE LINK maxWriteNoResp=` |
 | 能力协商原文 | `ATVV CAPABILITIES DETAIL interaction=`、`ATVV READY … interaction=… remote_mic=…` |
 | 远端是否在推音频（最关键） | `ATVV AUDIO notify count=… bytes=… total=… head=…`；被丢弃时为 `ATVV AUDIO dropped_phase=` |
-| 开始收音 | `CHROMECASE VOICE phase=started` |
-| 持续收音（不得有用户可见动作） | `CHROMECASE VOICE phase=sustain result=no_visible_change` |
-| 音频路由 | `CHROMECASE AUDIO routed source=chromecase_microphone route=virtual_audio device=MiRemoteV_2ch` |
-| 结束与排空 | `CHROMECASE VOICE playback_stop phase=waiting_for_drain`、`CHROMECASE AUDIO playback_stop phase=completed result=drained` |
+| 开始收音 | `CHROMECAST VOICE phase=started` |
+| 持续收音（不得有用户可见动作） | `CHROMECAST VOICE phase=sustain result=no_visible_change` |
+| 音频路由 | `CHROMECAST AUDIO routed source=chromecast_microphone route=virtual_audio device=MiRemoteV_2ch` |
+| 结束与排空 | `CHROMECAST VOICE playback_stop phase=waiting_for_drain`、`CHROMECAST AUDIO playback_stop phase=completed result=drained` |
 | 结束原因 | `completion=normal`（hold 松键 / 第二次点按）、`completion=forced`（断连、取消、宿主关闭） |
 | 手势动作（最关键） | `ATVV VOICE gesture duration_ms=… action=latch\|stop\|debounced\|none mode=…` |
 | 包内协议 | `ATVV MIC_OPEN written`（含 `bytes=`）、`ATVV MIC_OPEN skipped reason=remote_initiated_stream`、`ATVV MIC_CLOSE written` / `skipped`、`ATVV MIC_EXTEND stream=`、`ATVV STREAM START/STOP`（含 `origin=`）、`VOICE INTENT` |
 
 判读要点：`ATVV VOICE gesture` 的 `action=` 决定后面一切——`latch` = 本次松键开始了持续收音
 （后面就该有音频），`stop` = 本次是「关」，`none` = 无匹配手势。`duration_ms` 只记录用户按了多久，
-**不参与判定**：`action` 完全由模式开关决定。
+**不参与判定**：`action` 完全由「语音键模式」决定。
 
 `ATVV MIC_OPEN written` 与 `ATVV AUDIO notify` 是两条互相独立的证据：前者只说明宿主发了命令，
 后者才是远端真的在推流。**toggle 的通过路径是：`action=latch` → `ATVV MIC_OPEN written bytes=0c00`
@@ -717,8 +719,8 @@ resolve、测试与 Release 构建；本机已持有私有包路径，不能替�
 | 7 8 kHz 样机拒绝 | 未执行 | 无样机；准入判定已由包内单元测试覆盖（`.rejectUnsupported`），但**不替代真机**。 |
 | 8 快速连续点按 | 未执行 | |
 | 9 与 Siri Remote 并存 | 未执行 | 本包不含 Siri Remote（`SayAllSiriRemoteIncluded=false`）。 |
-| 10 打包可选性回归 | 部分通过 | 不带私有包：`swift build` 通过、项目自检 44/44 通过。**未执行**的是完整 `build-app.sh` 无包出包与 `plutil` 读取 `SayAllChromecaseIncluded=false`，以及无私有仓库权限账号的验证。 |
-| 11 普通按键与键位映射 | 未执行 | 离线渲染已确认按键页版式与连线锚点（见 `Testing/artifacts/chromecase-mapping/`）；**真机按下生效未验证**。 |
+| 10 打包可选性回归 | 部分通过 | 不带私有包：`swift build` 通过、项目自检 44/44 通过。**未执行**的是完整 `build-app.sh` 无包出包与 `plutil` 读取 `SayAllChromecastIncluded=false`，以及无私有仓库权限账号的验证。 |
+| 11 普通按键与键位映射 | 未执行 | 离线渲染已确认按键页版式与连线锚点（见 `Testing/artifacts/chromecast-mapping/`）；**真机按下生效未验证**。 |
 
 **结论必须分开记录**：自动化测试结论、真机结论、安装包验收结论不能互相替代。本手册只覆盖真机部分。
 本轮自动化结论（本次改动后）：包内 104 项 XCTest 全绿；宿主项目自检 44 项、SwiftPM 574 项全绿（带包与不带包两种配置）。

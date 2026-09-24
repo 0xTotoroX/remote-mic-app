@@ -9,7 +9,7 @@ import Foundation
 //
 //   遥控器            长按收音  按一次收音  触摸面
 //   小米 RC001/RC003    ✅        ❌        ❌
-//   Chromecase          ✅        ✅        ❌
+//   Chromecast          ✅        ✅        ❌
 //   Apple Siri Remote   ✅      未测试      ✅
 //
 //   输入工具          长按收音  长按默认键  按一次收音  按一次默认键
@@ -21,9 +21,9 @@ import Foundation
 //
 // 由此得到的搭配规则：
 // 1. 「语音键模拟 Fn 点按」只在**不会按一次收音**的遥控器上才有意义（它把「按住」模拟成「点按」，
-//    用来驱动只认点按的工具）。Chromecase 自己能按一次收音，页面不得出现该开关。
+//    用来驱动只认点按的工具）。Chromecast 自己能按一次收音，页面不得出现该开关。
 // 2. 触摸面类设置（滑动/光标）只有具备触摸面的遥控器才显示。
-// 3. Chromecase 的语音键驱动方式由它自己的语音模式决定，不读上面的开关。
+// 3. Chromecast 的语音键驱动方式由它自己的语音模式决定，不读上面的开关。
 
 extension XiaomiRemoteModel {
     /// **型号默认值**：是否支持「按一次收音」（按一下开始、再按一下结束）。
@@ -31,7 +31,7 @@ extension XiaomiRemoteModel {
     /// 只在「链路还没自报能力」时回退使用：运行中的判定一律走 `RemoteVoiceCapabilities.resolve`，
     /// 它优先采用设备自报的能力位。这里的值与私有包的型号声明等价，由跨仓一致性测试锁定。
     var supportsToggleVoiceRecording: Bool {
-        isChromecaseRemote
+        isChromecastRemote
     }
 
     /// **型号默认值**：是否有触摸面（滑动 / 光标）。同上，仅在缺少自报能力时回退使用。
@@ -61,7 +61,7 @@ struct RemoteVoiceCapabilities: Equatable {
     ///   - declared: 链路自报的能力位；未连接、型号不支持或设备未自报时为空集合。
     static func resolve(
         model: XiaomiRemoteModel?,
-        declared: ChromecaseDeclaredCapabilities = []
+        declared: ChromecastDeclaredCapabilities = []
     ) -> RemoteVoiceCapabilities {
         guard let model else {
             // 型号都认不出来时，不得假装它支持任何能力。

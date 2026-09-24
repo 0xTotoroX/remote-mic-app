@@ -28,11 +28,11 @@ struct SiriRemoteDeclaredCapabilities: OptionSet, Equatable {
 extension SiriRemoteDeclaredCapabilities {
     /// 投影到宿主通用的能力位集合。
     ///
-    /// **必须逐个具名映射**：苹果遥控器链路（`RemoteHardwareCapability`）与 Chromecase 链路
-    /// （`ChromecaseCapabilityFlags`）的位序不同，按 `rawValue` 直接复制会把「触摸面」读成
+    /// **必须逐个具名映射**：苹果遥控器链路（`RemoteHardwareCapability`）与 Chromecast 链路
+    /// （`ChromecastCapabilityFlags`）的位序不同，按 `rawValue` 直接复制会把「触摸面」读成
     /// 「语音流」这类错值。将来任一侧新增能力位，这里会因为漏写而容易被 review 发现。
-    var asDeclaredVoiceCapabilities: ChromecaseDeclaredCapabilities {
-        var common: ChromecaseDeclaredCapabilities = []
+    var asDeclaredVoiceCapabilities: ChromecastDeclaredCapabilities {
+        var common: ChromecastDeclaredCapabilities = []
         if contains(.controlEdges) { common.insert(.controlEdges) }
         if contains(.touchSurface) { common.insert(.touchSurface) }
         if contains(.voiceStream) { common.insert(.voiceStream) }

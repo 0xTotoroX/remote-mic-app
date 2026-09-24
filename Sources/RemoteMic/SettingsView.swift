@@ -4,8 +4,8 @@ import Combine
 import CoreBluetooth
 import SayAllMacRemoteCore
 import SayAllMacRemoteUI
-#if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-import SayAllChromecase
+#if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+import SayAllChromecast
 #endif
 #if SAYALL_SIRI_REMOTE_ENABLED && canImport(SayAllSiriRemote)
 import SayAllSiriRemote
@@ -114,8 +114,8 @@ enum RemoteBatteryPresentationPolicy {
         level: Int?,
         powerState: RemotePowerState?
     ) -> Bool {
-        // Chromecase 不宣告电池能力，界面不得显示永远是「未知」的电量位。
-        guard !model.isChromecaseRemote else { return false }
+        // Chromecast 不宣告电池能力，界面不得显示永远是「未知」的电量位。
+        guard !model.isChromecastRemote else { return false }
         guard model.isAppleSiriRemote else { return true }
         guard level == nil else { return true }
         return powerState == .charging || powerState == .externalPower
@@ -373,6 +373,55 @@ struct VersionTapRevealCounter {
     }
 }
 
+private struct StatisticsColumnsLayout: Layout {
+    private let spacing: CGFloat = 14
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+
+        let width = proposal.width ?? 0
+        let availableWidth = max(0, width - spacing)
+        let rankingWidth = max(360, availableWidth * 0.42)
+        let rightWidth = max(0, availableWidth - rankingWidth)
+        let leftSize = subviews[0].sizeThatFits(
+            ProposedViewSize(width: rankingWidth, height: nil)
+        )
+        let rightSize = subviews[1].sizeThatFits(
+            ProposedViewSize(width: rightWidth, height: nil)
+        )
+        return CGSize(width: width, height: max(leftSize.height, rightSize.height))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+
+        let availableWidth = max(0, bounds.width - spacing)
+        let rankingWidth = max(360, availableWidth * 0.42)
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: rankingWidth, height: bounds.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX + rankingWidth + spacing, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(
+                width: max(0, availableWidth - rankingWidth),
+                height: bounds.height
+            )
+        )
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: BridgeAppModel
     @ObservedObject var settings: AppSettings
@@ -393,7 +442,7 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSection
     @State private var selectedRemoteButton: RemoteButton = .ok
     @State private var selectedSiriRemoteControlID = "select"
-    @State private var selectedChromecaseControlID = "select"
+    @State private var selectedChromecastControlID = "select"
     @State private var isMappingSelectionLocked = true
     @State private var selectedStatisticsDate: Date?
     @State private var mappingEditingTarget: ShortcutEditingTarget?
@@ -700,7 +749,6 @@ struct SettingsView: View {
                 sidebarButton(.statistics)
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
@@ -807,9 +855,9 @@ struct SettingsView: View {
                 #else
                 mappingPage
                 #endif
-            } else if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
-                #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-                chromecaseMappingPage
+            } else if settings.selectedRemoteProfile?.model.isChromecastRemote == true {
+                #if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+                chromecastMappingPage
                 #else
                 mappingPage
                 #endif
@@ -877,7 +925,7 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         audioSettingsPanel
                         audioCompatibilityPanel
-                        // Chromecase 连接卡片已按产品要求移除：启用开关默认常开，
+                        // Chromecast 连接卡片已按产品要求移除：启用开关默认常开，
                         // 语音键模式在按键页底部，状态见侧边栏「连接」的设备列表。
                         phoneConnectionsPanel
                     }
@@ -887,26 +935,26 @@ struct SettingsView: View {
         }
     }
 
-    #if SAYALL_CHROMECASE_ENABLED
-    /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecase 档案的按键页显示）；
+    #if SAYALL_CHROMECAST_ENABLED
+    /// 语音键模式选择器。挂在按键页靠下的位置（仅 Chromecast 档案的按键页显示）；
     /// 从连接设置页迁移过来，避免同一控件出现在两处。
-    private var chromecaseVoiceModeSection: some View {
+    private var chromecastVoiceModeSection: some View {
         // 选项只列设备**自报**支持的模式：自报不支持「按一次说话」时，这个选项根本不出现。
         let capabilities = model.selectedRemoteVoiceCapabilities
-        let offeredModes = ChromecaseVoiceMode.allCases.filter { mode in
+        let offeredModes = ChromecastVoiceMode.allCases.filter { mode in
             mode != .toggle || capabilities.supportsToggleVoiceRecording
         }
         return VStack(alignment: .leading, spacing: 10) {
             Divider()
 
-            Text("chromecase.mode.title")
+            Text("chromecast.mode.title")
                 .font(.system(size: 13, weight: .medium))
 
             Picker("", selection: Binding(
-                get: { model.effectiveChromecaseVoiceMode },
+                get: { model.effectiveChromecastVoiceMode },
                 set: { newValue in
-                    settings.chromecaseVoiceMode = newValue
-                    model.applyChromecaseSettings()
+                    settings.chromecastVoiceMode = newValue
+                    model.applyChromecastSettings()
                 }
             )) {
                 ForEach(offeredModes) { mode in
@@ -915,9 +963,9 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .disabled(!settings.chromecaseEnabled)
+            .disabled(!settings.chromecastEnabled)
 
-            Text(LocalizedStringKey(model.effectiveChromecaseVoiceMode.detailLocalizationKey))
+            Text(LocalizedStringKey(model.effectiveChromecastVoiceMode.detailLocalizationKey))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1159,9 +1207,9 @@ struct SettingsView: View {
             UnrecognizedRemotePhoto()
                 .frame(width: 82, height: 166)
             #endif
-        } else if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
-            #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-            ChromecaseConnectionPhoto()
+        } else if settings.selectedRemoteProfile?.model.isChromecastRemote == true {
+            #if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+            ChromecastConnectionPhoto()
             #else
             UnrecognizedRemotePhoto()
                 .frame(width: 82, height: 166)
@@ -1374,25 +1422,25 @@ struct SettingsView: View {
     }
     #endif
 
-    #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-    /// Chromecase 按键页。
+    #if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+    /// Chromecast 按键页。
     ///
     /// 与小米/苹果按键页共用同一个页面框架（页头、设备选择器、动作编辑器、页脚），
     /// 只有中间的遥控器画布由私有包提供，因此三种遥控器的页面功能完全一致。
-    private var chromecaseMappingPage: some View {
+    private var chromecastMappingPage: some View {
         hardwareMappingPage {
-            ChromecaseMappingCanvas(
-                selectedControlID: $selectedChromecaseControlID,
-                activeControlIDs: model.activeChromecaseControlIDs,
-                voiceActive: model.isChromecaseVoiceActive,
-                labels: ChromecaseMappingCanvas.Labels(
-                    voiceTitle: localization.text("chromecase.mapping.voice.title"),
-                    voiceFixed: localization.text("chromecase.mapping.voice.fixed"),
-                    voiceDetail: localization.text("chromecase.mapping.voice.detail"),
-                    missingPhoto: localization.text("chromecase.mapping.photo.missing")
+            ChromecastMappingCanvas(
+                selectedControlID: $selectedChromecastControlID,
+                activeControlIDs: model.activeChromecastControlIDs,
+                voiceActive: model.isChromecastVoiceActive,
+                labels: ChromecastMappingCanvas.Labels(
+                    voiceTitle: localization.text("chromecast.mapping.voice.title"),
+                    voiceFixed: localization.text("chromecast.mapping.voice.fixed"),
+                    voiceDetail: localization.text("chromecast.mapping.voice.detail"),
+                    missingPhoto: localization.text("chromecast.mapping.photo.missing")
                 ),
                 buttonTitle: { controlID in
-                    chromecaseButton(for: controlID)?.displayName(using: localization)
+                    chromecastButton(for: controlID)?.displayName(using: localization)
                         ?? controlID
                 },
                 triggerTitle: { triggerID in
@@ -1400,28 +1448,28 @@ struct SettingsView: View {
                         ?? triggerID
                 },
                 actionSummary: { controlID, triggerID in
-                    guard let button = chromecaseButton(for: controlID),
+                    guard let button = chromecastButton(for: controlID),
                           let trigger = ButtonTrigger(rawValue: triggerID)
                     else { return localization.text("action.disabled") }
                     // 系统占用键（left/right/select）不在本 App 的映射范围内：单击槽位展示该键
                     // 在系统侧的实际行为，其余槽位无动作。行为由 macOS 配件服务（BT-AACP）产生，
-                    // 详见 Testing/ChromecaseVoicePitfalls.md。
-                    if let control = ChromecaseRemoteControl(rawValue: controlID),
-                       ChromecaseRemoteControl.isSystemManaged(
+                    // 详见 Testing/ChromecastVoicePitfalls.md。
+                    if let control = ChromecastRemoteControl(rawValue: controlID),
+                       ChromecastRemoteControl.isSystemManaged(
                            control,
-                           allowSystemReservedKeys: settings.chromecaseAllowSystemReservedKeys,
-                           exceptions: settings.chromecaseSystemReservedExceptions
+                           allowSystemReservedKeys: settings.chromecastAllowSystemReservedKeys,
+                           exceptions: settings.chromecastSystemReservedExceptions
                        ) {
                         guard trigger == .singleClick else { return "—" }
-                        return localization.text("chromecase.mapping.system.\(controlID)")
+                        return localization.text("chromecast.mapping.system.\(controlID)")
                     }
                     return mappingActionSummary(for: button, trigger: trigger)
                 },
                 onEdit: { controlID, triggerID in
-                    guard let button = chromecaseButton(for: controlID),
+                    guard let button = chromecastButton(for: controlID),
                           let trigger = ButtonTrigger(rawValue: triggerID)
                     else { return }
-                    selectedChromecaseControlID = controlID
+                    selectedChromecastControlID = controlID
                     selectedRemoteButton = button
                     mappingActionFilter = .all
                     isPresetApplicationActionsExpanded = false
@@ -1430,12 +1478,17 @@ struct SettingsView: View {
                         trigger: trigger
                     )
                 },
+                // 置灰表 = 默认表去掉已放开的键（主开关全放开 / 按键级豁免）。
+                systemReservedControlIDs: ChromecastRemoteControl.canvasReservedControlIDs(
+                    allowSystemReservedKeys: settings.chromecastAllowSystemReservedKeys,
+                    exceptions: settings.chromecastSystemReservedExceptions
+                )
             )
         }
     }
 
-    private func chromecaseButton(for controlID: String) -> RemoteButton? {
-        ChromecaseRemoteControl(rawValue: controlID)?.remoteButton
+    private func chromecastButton(for controlID: String) -> RemoteButton? {
+        ChromecastRemoteControl(rawValue: controlID)?.remoteButton
     }
     #endif
 
@@ -1514,11 +1567,11 @@ struct SettingsView: View {
                                     .id("mapping-action-editor")
                             }
 
-                            #if SAYALL_CHROMECASE_ENABLED
-                            // 语音键模式仅 Chromecase 遥控器有（该遥控器是唯一支持「按一次说话」的），
+                            #if SAYALL_CHROMECAST_ENABLED
+                            // 语音键模式仅 Chromecast 遥控器有（该遥控器是唯一支持「按一次说话」的），
                             // 放在按键页靠下的位置，方便随时切换手感。
-                            if settings.selectedRemoteProfile?.model.isChromecaseRemote == true {
-                                chromecaseVoiceModeSection
+                            if settings.selectedRemoteProfile?.model.isChromecastRemote == true {
+                                chromecastVoiceModeSection
                             }
                             #endif
 
@@ -1713,7 +1766,7 @@ struct SettingsView: View {
                 Divider()
                 mappingVoiceKeyModeControl
                 // 「语音键模拟 Fn 点按」只对「不会按一次收音」的遥控器有意义：
-                // 它把按住模拟成点按，用来驱动只认点按的工具。Chromecase 自己能按一次收音，
+                // 它把按住模拟成点按，用来驱动只认点按的工具。Chromecast 自己能按一次收音，
                 // 驱动方式由语音模式直接决定，页面不出现该开关（见能力矩阵文档）。
                 if VoiceFunctionKeyTapApplicability.isApplicable(capabilities: capabilities) {
                     Divider()
@@ -2849,20 +2902,13 @@ struct SettingsView: View {
             CompatibilityGlassContainer(spacing: 14) {
                 VStack(spacing: 14) {
                     statisticsSummaryGrid
-                    GeometryReader { proxy in
-                        let availableWidth = max(0, proxy.size.width - 14)
-                        let rankingWidth = max(360, availableWidth * 0.42)
-                        HStack(alignment: .top, spacing: 14) {
-                            statisticsRankingPanel
-                                .frame(width: rankingWidth, alignment: .top)
-                            VStack(spacing: 14) {
-                                statisticsCalendarPanel
-                                statisticsVoiceSessionRankingPanel
-                            }
-                                .frame(width: max(0, availableWidth - rankingWidth), alignment: .top)
+                    StatisticsColumnsLayout {
+                        statisticsRankingPanel
+                        VStack(spacing: 14) {
+                            statisticsCalendarPanel
+                            statisticsVoiceSessionRankingPanel
                         }
                     }
-                    .frame(minHeight: 648)
                 }
             }
         }

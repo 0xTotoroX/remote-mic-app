@@ -376,7 +376,7 @@ enum OnboardingBuildCapabilities {
         #if SAYALL_SIRI_REMOTE_ENABLED
         sources.append(.siriRemote)
         #endif
-        #if SAYALL_CHROMECASE_ENABLED
+        #if SAYALL_CHROMECAST_ENABLED
         sources.append(.chromecastRemote)
         #endif
         #if SAYALL_MAC_REMOTE_ENABLED
@@ -390,7 +390,7 @@ struct OnboardingVoicePairingPlan: Equatable {
     let binding: VoiceToolUserBinding
     let controlSource: OnboardingControlSource
     let fnTapModeEnabled: Bool
-    let chromecastVoiceMode: ChromecaseVoiceMode?
+    let chromecastVoiceMode: ChromecastVoiceMode?
     let evidenceState: VoiceToolEvidenceState
 
     static func resolve(
@@ -497,7 +497,7 @@ struct OnboardingVoicePairingPlan: Equatable {
         let fnTap = binding.gestureMode == .toggle &&
             binding.shortcut == .function &&
             !controlSource.supportedGestureModes.contains(.toggle)
-        let chromecastMode: ChromecaseVoiceMode? = controlSource == .chromecastRemote
+        let chromecastMode: ChromecastVoiceMode? = controlSource == .chromecastRemote
             ? (binding.gestureMode == .toggle ? .toggle : .hold)
             : nil
         return Self(

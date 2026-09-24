@@ -200,7 +200,7 @@ struct OnboardingVoicePairingPlanTests {
     }
 
     @Test func publicBuildOnlyOffersXiaomiRemote() {
-        #if SAYALL_SIRI_REMOTE_ENABLED || SAYALL_CHROMECASE_ENABLED || SAYALL_MAC_REMOTE_ENABLED
+        #if SAYALL_SIRI_REMOTE_ENABLED || SAYALL_CHROMECAST_ENABLED || SAYALL_MAC_REMOTE_ENABLED
         #expect(OnboardingBuildCapabilities.availableControlSources.contains(.xiaomiRemote))
         #else
         #expect(OnboardingBuildCapabilities.availableControlSources == [.xiaomiRemote])

@@ -10,8 +10,8 @@ import SwiftUI
 import SayAllSiriRemote
 #endif
 
-#if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-import SayAllChromecase
+#if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+import SayAllChromecast
 #endif
 
 private struct OnboardingInputMethodGuideStep: Identifiable {
@@ -2247,8 +2247,8 @@ struct OnboardingView: View {
             remotePhotoPlaceholder
             #endif
         case .chromecastRemote:
-            #if SAYALL_CHROMECASE_ENABLED && canImport(SayAllChromecase)
-            ChromecaseConnectionPhoto()
+            #if SAYALL_CHROMECAST_ENABLED && canImport(SayAllChromecast)
+            ChromecastConnectionPhoto()
                 .scaleEffect(1.8)
                 .frame(width: 190, height: 360)
             #else
@@ -3901,9 +3901,9 @@ struct OnboardingView: View {
         case .siriRemote:
             model.applyHIDSettings()
         case .chromecastRemote:
-            #if SAYALL_CHROMECASE_ENABLED
-            model.applyChromecaseSettings()
-            model.reconnectChromecase()
+            #if SAYALL_CHROMECAST_ENABLED
+            model.applyChromecastSettings()
+            model.reconnectChromecast()
             #endif
         case .appleCompanion:
             model.enablePhoneRemoteConnection()
@@ -3967,7 +3967,7 @@ struct OnboardingView: View {
             guard let generation = settings.onboardingAppleRemoteGeneration else { return true }
             return model == generation.model
         case .chromecastRemote:
-            return model.isChromecaseRemote
+            return model.isChromecastRemote
         case .appleCompanion, .webRemote, .unselected:
             return false
         }
@@ -4037,8 +4037,8 @@ struct OnboardingView: View {
 
     private func applyChromecastModeIfNeeded(_ plan: OnboardingVoicePairingPlan) {
         guard plan.chromecastVoiceMode != nil else { return }
-        #if SAYALL_CHROMECASE_ENABLED
-        model.applyChromecaseSettings()
+        #if SAYALL_CHROMECAST_ENABLED
+        model.applyChromecastSettings()
         #endif
     }
 

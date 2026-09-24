@@ -163,7 +163,7 @@ If Doubao Input Method cannot see an ordinary virtual microphone, install **MiRe
 
 ### Choosing the right mode for your remote and voice tool
 
-Remotes differ in how they record: the Xiaomi remote only records while held; the Chromecase voice remote also supports "tap once to start, tap once more to stop"; the Siri Remote adds a touch surface. Voice tools differ too: some record while a key is held, others toggle on a tap. Mismatched pairs show up as "pressing once to stop does not end recording" or "recording ends right after it starts".
+Remotes differ in how they record: the Xiaomi remote only records while held; the Chromecast voice remote also supports "tap once to start, tap once more to stop"; the Siri Remote adds a touch surface. Voice tools differ too: some record while a key is held, others toggle on a tap. Mismatched pairs show up as "pressing once to stop does not end recording" or "recording ends right after it starts".
 
 The capabilities of every remote and voice tool, and the mode each combination needs (including whether **Simulate Fn Tap on Voice Key** should be on), are listed in the [Remote and Voice Tool Capability Matrix](remote/遥控器与输入工具能力矩阵.md) (in Chinese).
 

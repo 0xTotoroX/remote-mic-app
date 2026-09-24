@@ -8,14 +8,14 @@ import Testing
 struct VoiceInputCapabilityMatrixTests {
     // MARK: - 遥控器
 
-    @Test func onlyChromecaseSupportsTapOnceRecording() {
+    @Test func onlyChromecastSupportsTapOnceRecording() {
         // 小米 RC001/RC003 只能按住收音；Apple Siri Remote 的「按一次」尚未测试，
         // 因此一律按「不支持」处理，不得对外显示该能力。
         #expect(!XiaomiRemoteModel.rc003.supportsToggleVoiceRecording)
         #expect(!XiaomiRemoteModel.rc001.supportsToggleVoiceRecording)
         #expect(!XiaomiRemoteModel.appleSiriRemoteA2854.supportsToggleVoiceRecording)
         #expect(!XiaomiRemoteModel.appleSiriRemoteA2540.supportsToggleVoiceRecording)
-        #expect(XiaomiRemoteModel.chromecaseVoiceRemote.supportsToggleVoiceRecording)
+        #expect(XiaomiRemoteModel.chromecastVoiceRemote.supportsToggleVoiceRecording)
     }
 
     @Test func onlyAppleSiriRemoteHasATouchSurface() {
@@ -23,7 +23,7 @@ struct VoiceInputCapabilityMatrixTests {
         #expect(XiaomiRemoteModel.appleSiriRemoteA2540.supportsTouchSurface)
         #expect(!XiaomiRemoteModel.rc001.supportsTouchSurface)
         #expect(!XiaomiRemoteModel.rc003.supportsTouchSurface)
-        #expect(!XiaomiRemoteModel.chromecaseVoiceRemote.supportsTouchSurface)
+        #expect(!XiaomiRemoteModel.chromecastVoiceRemote.supportsTouchSurface)
     }
 
     // MARK: - 输入工具
@@ -40,9 +40,9 @@ struct VoiceInputCapabilityMatrixTests {
 
     @Test func declaredCapabilitiesWinOverTheModelTable() {
         // 自报说「不支持按一次、但有触摸面」时，判定必须听设备的——型号默认表只用于兜底。
-        let declared: ChromecaseDeclaredCapabilities = [.controlEdges, .voiceStream, .touchSurface]
+        let declared: ChromecastDeclaredCapabilities = [.controlEdges, .voiceStream, .touchSurface]
         let resolved = RemoteVoiceCapabilities.resolve(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             declared: declared
         )
         #expect(!resolved.supportsToggleVoiceRecording)
@@ -58,11 +58,11 @@ struct VoiceInputCapabilityMatrixTests {
     }
 
     @Test func declaredCapabilitiesOfThisModelMatchTheMatrix() {
-        let declared: ChromecaseDeclaredCapabilities = [
+        let declared: ChromecastDeclaredCapabilities = [
             .controlEdges, .voiceStream, .toggleVoiceGesture,
         ]
         let resolved = RemoteVoiceCapabilities.resolve(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             declared: declared
         )
         #expect(resolved.supportsToggleVoiceRecording)
@@ -73,9 +73,9 @@ struct VoiceInputCapabilityMatrixTests {
 
     @Test func fallsBackToTheModelTableWhenNothingIsDeclared() {
         // 未连接、或设备未自报：用型号默认表。
-        let chromecase = RemoteVoiceCapabilities.resolve(model: .chromecaseVoiceRemote, declared: [])
-        #expect(chromecase.supportsToggleVoiceRecording)
-        #expect(!chromecase.supportsTouchSurface)
+        let chromecast = RemoteVoiceCapabilities.resolve(model: .chromecastVoiceRemote, declared: [])
+        #expect(chromecast.supportsToggleVoiceRecording)
+        #expect(!chromecast.supportsTouchSurface)
 
         let siri = RemoteVoiceCapabilities.resolve(model: .appleSiriRemoteA2854, declared: [])
         #expect(siri.supportsTouchSurface)
@@ -97,7 +97,7 @@ struct VoiceInputCapabilityMatrixTests {
 
     @Test func fnTapSwitchIsNotOfferedForTapOnceRemotes() {
         let resolved = RemoteVoiceCapabilities.resolve(
-            model: .chromecaseVoiceRemote,
+            model: .chromecastVoiceRemote,
             declared: []
         )
         #expect(!VoiceFunctionKeyTapApplicability.isApplicable(capabilities: resolved))
@@ -125,10 +125,10 @@ struct VoiceInputCapabilityMatrixTests {
                 pageRequestsControl: true
             )
         )
-        let chromecase = RemoteVoiceCapabilities.resolve(model: .chromecaseVoiceRemote, declared: [])
+        let chromecast = RemoteVoiceCapabilities.resolve(model: .chromecastVoiceRemote, declared: [])
         #expect(
             !TouchSurfaceControlApplicability.isApplicable(
-                capabilities: chromecase,
+                capabilities: chromecast,
                 pageRequestsControl: true
             )
         )
