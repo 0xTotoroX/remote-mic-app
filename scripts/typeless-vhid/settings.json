@@ -28,8 +28,8 @@
       "modifierFlagsRawValue": 1572864
     },
     "home": {
-      "keyCode": 20,
-      "keyLabel": "3",
+      "keyCode": 126,
+      "keyLabel": "↑",
       "modifierFlagsRawValue": 262144
     },
     "left": {
@@ -38,9 +38,9 @@
       "modifierFlagsRawValue": 0
     },
     "menu": {
-      "keyCode": 17,
-      "keyLabel": "T",
-      "modifierFlagsRawValue": 786432
+      "keyCode": 20,
+      "keyLabel": "3",
+      "modifierFlagsRawValue": 262144
     },
     "ok": {
       "keyCode": 9,
@@ -81,16 +81,6 @@
         }
       }
     },
-    "home": {
-      "doubleClick": {
-        "action": "customShortcut",
-        "shortcut": {
-          "keyCode": 18,
-          "keyLabel": "1",
-          "modifierFlagsRawValue": 262144
-        }
-      }
-    },
     "left": {
       "longPress": {
         "action": "customShortcut",
@@ -98,6 +88,16 @@
           "keyCode": 86,
           "keyLabel": "Numpad4",
           "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "menu": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 18,
+          "keyLabel": "1",
+          "modifierFlagsRawValue": 262144
         }
       }
     },
@@ -121,6 +121,16 @@
           "keyCode": 88,
           "keyLabel": "Numpad6",
           "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "tv": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 17,
+          "keyLabel": "T",
+          "modifierFlagsRawValue": 786432
         }
       }
     },
