@@ -9,7 +9,7 @@
 1. 保留 `/Applications/SayAll.app` 正式版，退出它，再启动独立标识的测试版 `dist/SayAllTypelessTest.app`。
 2. 从 pqrs 官方发布包安装并启用 Karabiner VirtualHIDDevice，核对 `systemextensionsctl list` 为 `[activated enabled]`。官方 daemon 和受限桥必须运行；`/var/run/sayall-vhid-bridge.sock` 应仅允许当前用户连接。
 3. 通过 Typeless 可见设置页核对三个快捷键分别为左 Control + 左 Option + V/T/Q。准备一个空白的 TextEdit 文稿并聚焦输入区；测试时不在用户正在编辑的文稿中操作。
-4. 测试版应显示实体遥控器已连接，并拥有输入监控与辅助功能权限。确认三键单击映射为 `⌃⌥V`、`⌃⌥T`、`⌃⌥Q`，双击未设置；确定键可保留本文末节的 Global Speed 长按绑定。
+4. 测试版应显示实体遥控器已连接，并拥有输入监控与辅助功能权限。确认三键单击映射为 `⌃⌥V`、`⌃⌥T`、`⌃⌥Q`，确定键双击为 Return，并可保留本文末节的 Global Speed 长按绑定。
 
 ## 分步验收
 
@@ -64,7 +64,7 @@
 
 ## Global Speed 长按输入保护（个人测试包）
 
-候选构建 228.3：137 项相关自动化测试通过，release 构建及独立测试包签名校验通过。测试包已启动，界面确认遥控器连接和原按键配置保留；下面的实体遥控器场景等待用户验收。
+候选构建 228.3：137 项相关自动化测试通过，release 构建及独立测试包签名校验通过。测试包已启动，界面确认遥控器连接和原按键配置保留；实体遥控器验收范围见本节末尾。
 
 - 绑定及源码边界见 [实验设置说明](../scripts/typeless-vhid/README.md#global-speed-长按配置)。保护入口是实体 HID 的配置动作分发；仅测试 Bundle ID 启用。
 - 自动化：覆盖五键精确范围、单击/双击及正式包不受影响、网页/输入框/可编辑祖先/浏览器工具栏/未知焦点，以及 HID 长按被跳过后松手不补单击、后续短按及允许的长按正常发送。模拟焦点不能替代真实 Chrome AX 验收。
@@ -73,4 +73,4 @@
 - 关闭自定义映射时规则不执行。AX 无响应/无权限/角色未知时应跳过，不能降级成无条件发送；恢复权限及网页焦点后应恢复视频动作。
 - 失败判定：受保护输入区出现数字、被拦截长按补发单击、普通单击失效，或正常视频网页持续无法发送。
 - 日志沿用 [运行日志手册](RuntimeLogging.md)，`HID ACTION result=skipped scope=global_speed reason=...` 表示策略跳过，不是权限过期；`not_chrome`、`editable`、`outside_web_content`、`unknown`、`focus_changed` 区分原因。普通发送日志不证明扩展已改变视频。
-- 真机验收状态：本次新保护尚待用户复测，不能用之前的双击成功替代。
+- 真机验收状态：用户在 2026-09-25 对 228.3 复测回复“我测试了，是 OK 的”，确认本轮询问的 Codex 长按无数字、Chrome 视频恢复 1×和 Typeless 单击场景。其他输入控件、全屏及权限异常矩阵仍未逐项验收。

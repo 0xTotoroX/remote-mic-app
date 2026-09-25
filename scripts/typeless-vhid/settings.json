@@ -2,9 +2,9 @@
   "applicationLanguage": "system",
   "buttonApplicationProfileIDs": {},
   "buttonBindings": {
-    "back": "returnKey",
+    "back": "deleteBackward",
     "down": "customShortcut",
-    "home": "deleteBackward",
+    "home": "customShortcut",
     "left": "arrowLeft",
     "menu": "customShortcut",
     "mute": "volumeMute",
@@ -26,6 +26,11 @@
       "keyCode": 124,
       "keyLabel": "→",
       "modifierFlagsRawValue": 1572864
+    },
+    "home": {
+      "keyCode": 20,
+      "keyLabel": "3",
+      "modifierFlagsRawValue": 262144
     },
     "left": {
       "keyCode": 123,
@@ -76,6 +81,16 @@
         }
       }
     },
+    "home": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 18,
+          "keyLabel": "1",
+          "modifierFlagsRawValue": 262144
+        }
+      }
+    },
     "left": {
       "longPress": {
         "action": "customShortcut",
@@ -87,6 +102,9 @@
       }
     },
     "ok": {
+      "doubleClick": {
+        "action": "returnKey"
+      },
       "longPress": {
         "action": "customShortcut",
         "shortcut": {
