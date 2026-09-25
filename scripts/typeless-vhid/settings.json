@@ -119,6 +119,6 @@
   },
   "selectedAudioDeviceUID": "",
   "showDockIcon": true,
-  "voiceFnTapModeEnabled": true,
+  "voiceFnTapModeEnabled": false,
   "voiceKeyMode": "fn"
 }

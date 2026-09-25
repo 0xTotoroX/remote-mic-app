@@ -33,6 +33,8 @@ App 侧桥接和原生按键中和仅在 Bundle ID `com.hd838a.RemoteMic.Typeles
 2. 在仓库根目录运行 `python3 scripts/typeless-vhid/save-settings.py /path/to/export.json`。脚本清空音频设备标识并稳定排序，便于 Git 比较；新增字段或自定义应用路径需先审查。
 3. 检查 `git diff -- scripts/typeless-vhid/settings.json`，确认变化与本次设置一致，再提交并推送到个人 Fork 的实验分支。
 
+当前语音键快照为 Fn/地球键，并关闭「语音键模拟 Fn 点按」，保留此前为微信输入法按住说话做的准备。微信输入法内部的快捷键录入与文字上屏尚待验收；此设置快照不表示对接已经完成。
+
 Git 保存的是每次导出、提交并推送的快照，不会自动监视 App 中的每次点击。脚本不会读取其他 App 设置，也不会直接修改运行中的无线麦或自动提交。个人设备信息与完整原始 plist 继续仅在本地备份中保留。
 
 ## Global Speed 长按配置
