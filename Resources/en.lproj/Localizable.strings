@@ -179,8 +179,8 @@
 "action.system_volume_down" = "System Volume -";
 "action.system_mute" = "Mute System Audio";
 "action.play_pause" = "Play / Pause";
-"action.previous_command_left" = "Previous (⌘←)";
-"action.next_command_right" = "Next (⌘→)";
+"action.previous_command_left" = "Previous Track (System Media)";
+"action.next_command_right" = "Next Track (System Media)";
 "action.custom_shortcut" = "Custom Shortcut";
 "action.focus_input" = "Focus Input Field";
 "action.open_custom_application" = "Open Custom App";

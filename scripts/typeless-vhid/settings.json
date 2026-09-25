@@ -14,8 +14,8 @@
     "right": "arrowRight",
     "tv": "customShortcut",
     "up": "customShortcut",
-    "volume_down": "nextCommandRight",
-    "volume_up": "previousCommandLeft"
+    "volume_down": "volumeDown",
+    "volume_up": "volumeUp"
   },
   "buttonRapidPressEnabled": {
     "down": true,
@@ -132,6 +132,16 @@
           "keyLabel": "Numpad8",
           "modifierFlagsRawValue": 0
         }
+      }
+    },
+    "volume_down": {
+      "doubleClick": {
+        "action": "nextCommandRight"
+      }
+    },
+    "volume_up": {
+      "doubleClick": {
+        "action": "previousCommandLeft"
       }
     }
   },

@@ -1423,8 +1423,6 @@ struct RemoteButtonsTests {
             (.commandFind, 3, .maskCommand),
             (.commandSave, 1, .maskCommand),
             (.commandDelete, 51, .maskCommand),
-            (.previousCommandLeft, 123, .maskCommand),
-            (.nextCommandRight, 124, .maskCommand),
         ]
 
         for (action, keyCode, modifiers) in expected {
@@ -1436,6 +1434,23 @@ struct RemoteButtonsTests {
             ))
             #expect(posted?.0 == keyCode)
             #expect(posted?.1 == modifiers)
+        }
+    }
+
+    @Test func mediaActionsUseSystemEventsWithoutForegroundKeyboardShortcuts() throws {
+        let actions: [(ButtonAction, Int32)] = [(.playPause, 16), (.previousCommandLeft, 18), (.nextCommandRight, 17)]
+        for (action, type) in actions {
+            var posted: [Int32] = []
+            #expect(KeyboardInjector.send(action, accessibilityTrusted: { true },
+                keyPoster: { _, _ in Issue.record("Media actions must not send ordinary keys") },
+                systemKeyPoster: { posted.append($0) }))
+            #expect(posted == [type])
+            posted.removeAll()
+            #expect(!KeyboardInjector.send(action, accessibilityTrusted: { false },
+                systemKeyPoster: { posted.append($0) }))
+            #expect(posted.isEmpty)
+            let saved = try JSONEncoder().encode(action)
+            #expect(try JSONDecoder().decode(ButtonAction.self, from: saved) == action)
         }
     }
 

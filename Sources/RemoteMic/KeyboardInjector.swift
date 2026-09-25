@@ -21,6 +21,7 @@ enum KeyboardInjector {
     typealias KeyPoster = (CGKeyCode, CGEventFlags) -> Void
     typealias KeyStatePoster = (CGKeyCode, Bool, CGEventFlags) -> Bool
     typealias ScrollPoster = (Int32) -> Void
+    typealias SystemKeyPoster = (Int32) -> Void
 
     struct ApplicationVisibilitySnapshot: Equatable {
         let bundleIdentifier: String
@@ -269,7 +270,8 @@ enum KeyboardInjector {
         keyPoster: KeyPoster = { postKey(code: $0, flags: $1) },
         modifierPoster: KeyStatePoster = postModifierState,
         virtualHIDSender: (CustomKeyboardShortcut) -> Bool? = VirtualHIDShortcutBridge.enqueueIfSupported,
-        scrollPoster: ScrollPoster = { postScrollWheel(lines: $0) }
+        scrollPoster: ScrollPoster = { postScrollWheel(lines: $0) },
+        systemKeyPoster: SystemKeyPoster = postSystemKey
     ) -> Bool {
         guard action != .disabled else { return true }
         if action.isAppInternal {
@@ -371,12 +373,12 @@ enum KeyboardInjector {
             postSystemKey(type: 1)
         case .volumeMute:
             postSystemKey(type: 7)
-        case .playPause:
-            postSystemKey(type: 16)
-        case .previousCommandLeft:
-            keyPoster(123, .maskCommand)
-        case .nextCommandRight:
-            keyPoster(124, .maskCommand)
+        case .playPause, .previousCommandLeft, .nextCommandRight:
+            let type: Int32 = action == .playPause ? 16 : (action == .previousCommandLeft ? 18 : 17)
+            systemKeyPoster(type)
+            AppLogger.shared.write(
+                "MEDIA ACTION action=\(action.rawValue) phase=posted receiver=unknown"
+            )
         case .customShortcut:
             if let shortcut {
                 let eventFlags = shortcut.cgEventFlags

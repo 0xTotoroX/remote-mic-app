@@ -179,8 +179,8 @@
 "action.system_volume_down" = "系统音量 -";
 "action.system_mute" = "系统静音";
 "action.play_pause" = "播放 / 暂停";
-"action.previous_command_left" = "上一首（⌘←）";
-"action.next_command_right" = "下一首（⌘→）";
+"action.previous_command_left" = "上一首（系统媒体）";
+"action.next_command_right" = "下一首（系统媒体）";
 "action.custom_shortcut" = "自定义快捷键";
 "action.focus_input" = "聚焦输入框";
 "action.open_custom_application" = "打开自定义 APP";
