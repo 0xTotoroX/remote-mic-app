@@ -72,6 +72,7 @@ final class HIDRemoteMonitor {
     private let scheduler: HIDRemoteScheduling
     private let runtimePermissions: () -> Bool
     private let actionPerformer: (RemoteButton, ButtonTrigger, ConfiguredButtonAction) -> Bool
+    private let actionSkipReason: (RemoteButton, ButtonTrigger, ConfiguredButtonAction) -> String?
     private let appSwitcherSession: KeyboardInjector.AppSwitcherSession
     private let overrideActionPerformer: (UUID?, RemoteButton, ButtonTrigger) -> Bool
     private let hasOverrideBinding: (UUID?, RemoteButton, ButtonTrigger) -> Bool
@@ -123,6 +124,9 @@ final class HIDRemoteMonitor {
             ButtonTrigger,
             ConfiguredButtonAction
         ) -> Bool)? = nil,
+        actionSkipReason: @escaping (RemoteButton, ButtonTrigger, ConfiguredButtonAction) -> String? = {
+            GlobalSpeedShortcutGuard.skipReason(button: $0, trigger: $1, configured: $2)
+        },
         overrideActionPerformer: @escaping (UUID?, RemoteButton, ButtonTrigger) -> Bool = {
             _, _, _ in false
         },
@@ -159,6 +163,7 @@ final class HIDRemoteMonitor {
             )
         }
         self.overrideActionPerformer = overrideActionPerformer
+        self.actionSkipReason = actionSkipReason
         self.hasOverrideBinding = hasOverrideBinding
         self.frontmostBundleIdentifier = frontmostBundleIdentifier
         self.diagnosticLogger = diagnosticLogger
@@ -1103,6 +1108,13 @@ final class HIDRemoteMonitor {
             onInternalAction?(profileID, configured.action)
             AppLogger.shared.write(
                 "HID BUTTON button=\(button.rawValue) trigger=\(trigger.rawValue) action=\(configured.action.rawValue)"
+            )
+            return true
+        }
+        if let reason = actionSkipReason(button, trigger, configured) {
+            diagnosticLogger(
+                "HID ACTION button=\(button.rawValue) trigger=\(trigger.rawValue) " +
+                    "result=skipped scope=global_speed reason=\(reason)"
             )
             return true
         }

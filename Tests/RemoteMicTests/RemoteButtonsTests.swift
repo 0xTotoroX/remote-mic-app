@@ -6,6 +6,51 @@ import Testing
 
 @Suite("Remote buttons")
 struct RemoteButtonsTests {
+    @Test func skippedVideoHoldDoesNotInjectOrFallBackAndShortPressStillWorks() throws {
+        let suiteName = "RemoteButtonsTests.videoScope.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+        settings.customMappingEnabled = true
+        settings.setAction(.customShortcut, for: .ok)
+        settings.setShortcut(CustomKeyboardShortcut(keyCode: 9, modifierFlags: [.control, .option], keyLabel: "V"), for: .ok)
+        settings.setAction(.customShortcut, for: .ok, trigger: .longPress)
+        settings.setShortcut(CustomKeyboardShortcut(keyCode: 87, modifierFlags: [], keyLabel: "Numpad5"), for: .ok, trigger: .longPress)
+        let profileID = try #require(settings.selectedRemoteProfileID)
+        let scheduler = RemoteButtonsTestScheduler()
+        var performed: [ButtonTrigger] = []
+        var logs: [String] = []
+        var inWebContent = false
+        let monitor = HIDRemoteMonitor(
+            settings: settings, profileID: profileID, ownsEventSuppressor: false,
+            scheduler: scheduler, runtimePermissions: { true },
+            actionPerformer: { _, trigger, _ in performed.append(trigger); return true },
+            actionSkipReason: { button, trigger, configured in
+                GlobalSpeedShortcutGuard.applies(button: button, trigger: trigger, configured: configured)
+                    && !inWebContent ? "editable" : nil
+            },
+            diagnosticLogger: { logs.append($0) }
+        )
+        monitor.connectSimulatedDevice(fingerprint: "video-scope", profileID: profileID)
+        let down = Data([UInt8(RemoteButton.ok.hidUsage), 0, 0, 0, 0, 0])
+        let up = Data(repeating: 0, count: 6)
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        scheduler.advance(toMilliseconds: 600)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        #expect(performed.isEmpty)
+        #expect(logs.filter { $0.contains("result=skipped") }.count == 1)
+        scheduler.advance(toMilliseconds: 2000)
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        #expect(performed == [.singleClick])
+        scheduler.advance(toMilliseconds: 4000)
+        inWebContent = true
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        scheduler.advance(toMilliseconds: 4600)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        #expect(performed == [.singleClick, .longPress])
+    }
+
     @Test func exclusiveHIDAccessUsesASeparateUserFacingFailure() {
         #expect(HIDRemoteMonitor.deviceOpenFailureMessageKey(
             result: kIOReturnExclusiveAccess,
