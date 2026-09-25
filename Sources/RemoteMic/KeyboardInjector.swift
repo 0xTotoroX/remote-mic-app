@@ -267,7 +267,8 @@ enum KeyboardInjector {
         frontmostComposerFocuser: (@escaping (Bool) -> Void) -> Bool = focusFrontmostComposer,
         accessibilityTrusted: () -> Bool = { isAccessibilityTrusted },
         keyPoster: KeyPoster = { postKey(code: $0, flags: $1) },
-        keyStatePoster: KeyStatePoster = postKeyState,
+        modifierPoster: KeyStatePoster = postModifierState,
+        virtualHIDSender: (CustomKeyboardShortcut) -> Bool? = VirtualHIDShortcutBridge.enqueueIfSupported,
         scrollPoster: ScrollPoster = { postScrollWheel(lines: $0) }
     ) -> Bool {
         guard action != .disabled else { return true }
@@ -380,13 +381,16 @@ enum KeyboardInjector {
             if let shortcut {
                 let eventFlags = shortcut.cgEventFlags
                 if shortcut.standaloneModifier != nil {
-                    let pressed = keyStatePoster(
+                    let pressed = modifierPoster(
                         CGKeyCode(shortcut.keyCode),
                         true,
                         eventFlags
                     )
-                    let released = keyStatePoster(CGKeyCode(shortcut.keyCode), false, [])
-                    let submitted = pressed && released
+                    let submitted = pressed && modifierPoster(
+                        CGKeyCode(shortcut.keyCode),
+                        false,
+                        []
+                    )
                     AppLogger.shared.write(
                         "SHORTCUT ACTION submitted key_code=\(shortcut.keyCode) " +
                             "modifier_flags=\(eventFlags.rawValue) standalone=true " +
@@ -394,11 +398,22 @@ enum KeyboardInjector {
                     )
                     return submitted
                 }
-                keyPoster(CGKeyCode(shortcut.keyCode), eventFlags)
+                if let bridged = virtualHIDSender(shortcut) {
+                    // Accepted means queued, not delivered to the target app.
+                    // Never replay an uncertain HID submission through CGEvent.
+                    return bridged
+                }
+                let submitted = postShortcut(
+                    shortcut,
+                    keyPoster: keyPoster,
+                    modifierPoster: modifierPoster
+                )
                 AppLogger.shared.write(
                     "SHORTCUT ACTION submitted key_code=\(shortcut.keyCode) " +
-                        "modifier_flags=\(eventFlags.rawValue) standalone=false"
+                        "modifier_flags=\(eventFlags.rawValue) standalone=false " +
+                        "success=\(submitted)"
                 )
+                return submitted
             }
         case .focusInput:
             break
@@ -1812,6 +1827,77 @@ enum KeyboardInjector {
         up.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
+    }
+
+    private static func postShortcut(
+        _ shortcut: CustomKeyboardShortcut,
+        keyPoster: KeyPoster,
+        modifierPoster: KeyStatePoster
+    ) -> Bool {
+        let modifiers: [(NSEvent.ModifierFlags, CGKeyCode, CGEventFlags)] = [
+            (.control, 59, [.maskControl, CGEventFlags(rawValue: 0x01)]),
+            (.option, 58, [.maskAlternate, CGEventFlags(rawValue: 0x20)]),
+            (.shift, 56, [.maskShift, CGEventFlags(rawValue: 0x02)]),
+            (.command, 55, [.maskCommand, CGEventFlags(rawValue: 0x08)]),
+            (.function, 63, .maskSecondaryFn),
+        ]
+        var pressed: [(CGKeyCode, CGEventFlags)] = []
+        var flags: CGEventFlags = []
+        var submitted = true
+        for (modifier, keyCode, mask) in modifiers where shortcut.modifierFlags.contains(modifier) {
+            flags.insert(mask)
+            if !modifierPoster(keyCode, true, flags) {
+                flags.remove(mask)
+                submitted = false
+                break
+            }
+            pressed.append((keyCode, mask))
+        }
+        if submitted {
+            keyPoster(CGKeyCode(shortcut.keyCode), flags)
+        }
+        for (keyCode, mask) in pressed.reversed() {
+            flags.remove(mask)
+            submitted = modifierPoster(keyCode, false, flags) && submitted
+        }
+        return submitted
+    }
+
+    static func modifierEvent(
+        code: CGKeyCode,
+        isDown: Bool,
+        flags: CGEventFlags
+    ) -> CGEvent? {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: isDown)
+        else { return nil }
+        event.type = .flagsChanged
+        let sideMask: CGEventFlags = switch code {
+        case 59: CGEventFlags(rawValue: 0x01)
+        case 58: CGEventFlags(rawValue: 0x20)
+        case 56: CGEventFlags(rawValue: 0x02)
+        case 55: CGEventFlags(rawValue: 0x08)
+        case 62: CGEventFlags(rawValue: 0x2000)
+        case 61: CGEventFlags(rawValue: 0x40)
+        case 60: CGEventFlags(rawValue: 0x04)
+        case 54: CGEventFlags(rawValue: 0x10)
+        default: []
+        }
+        event.flags = isDown ? flags.union(sideMask) : flags
+        event.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
+        return event
+    }
+
+    static func postModifierState(
+        code: CGKeyCode,
+        isDown: Bool,
+        flags: CGEventFlags
+    ) -> Bool {
+        guard let event = modifierEvent(code: code, isDown: isDown, flags: flags) else {
+            return false
+        }
+        event.post(tap: .cghidEventTap)
+        return true
     }
 
     static func postKeyState(

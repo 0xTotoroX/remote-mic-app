@@ -982,7 +982,7 @@ struct RemoteButtonsTests {
             shortcut: rightOption,
             accessibilityTrusted: { true },
             keyPoster: { postedKeys.append(($0, $1)) },
-            keyStatePoster: {
+            modifierPoster: {
                 postedStates.append(($0, $1, $2))
                 return true
             }
@@ -996,6 +996,15 @@ struct RemoteButtonsTests {
         #expect(postedStates[1].0 == 61)
         #expect(!postedStates[1].1)
         #expect(postedStates[1].2.isEmpty)
+
+        let event = try #require(KeyboardInjector.modifierEvent(
+            code: 61,
+            isDown: true,
+            flags: .maskAlternate
+        ))
+        #expect(event.type == .flagsChanged)
+        #expect(event.getIntegerValueField(.keyboardEventKeycode) == 61)
+        #expect(event.flags == [.maskAlternate, CGEventFlags(rawValue: 0x40)])
     }
 
     @Test func appSwitcherSessionKeepsCommandHeldAcrossTabSelections() {
@@ -1216,15 +1225,37 @@ struct RemoteButtonsTests {
             keyLabel: "K"
         )
         var posted: (CGKeyCode, CGEventFlags)?
+        var modifierEvents: [(CGKeyCode, Bool, CGEventFlags)] = []
+        var eventOrder: [String] = []
 
         #expect(KeyboardInjector.send(
             .customShortcut,
             shortcut: shortcut,
             accessibilityTrusted: { true },
-            keyPoster: { posted = ($0, $1) }
+            keyPoster: {
+                posted = ($0, $1)
+                eventOrder.append("key")
+            },
+            modifierPoster: { code, isDown, flags in
+                modifierEvents.append((code, isDown, flags))
+                eventOrder.append("\(code)-\(isDown)")
+                return true
+            }
         ))
         #expect(posted?.0 == 40)
-        #expect(posted?.1 == [.maskControl, .maskAlternate])
+        #expect(posted?.1 == [
+            .maskControl, .maskAlternate,
+            CGEventFlags(rawValue: 0x01), CGEventFlags(rawValue: 0x20),
+        ])
+        #expect(modifierEvents.map(\.0) == [59, 58, 58, 59])
+        #expect(modifierEvents.map(\.1) == [true, true, false, false])
+        #expect(modifierEvents.map(\.2) == [
+            [.maskControl, CGEventFlags(rawValue: 0x01)],
+            [.maskControl, .maskAlternate, CGEventFlags(rawValue: 0x01), CGEventFlags(rawValue: 0x20)],
+            [.maskControl, CGEventFlags(rawValue: 0x01)],
+            [],
+        ])
+        #expect(eventOrder == ["59-true", "58-true", "key", "58-false", "59-false"])
 
         let singleKey = CustomKeyboardShortcut(
             keyCode: 49,
@@ -1236,19 +1267,100 @@ struct RemoteButtonsTests {
             .customShortcut,
             shortcut: singleKey,
             accessibilityTrusted: { true },
-            keyPoster: { posted = ($0, $1) }
+            keyPoster: { posted = ($0, $1) },
+            modifierPoster: {
+                modifierEvents.append(($0, $1, $2))
+                return true
+            }
         ))
         #expect(posted?.0 == 49)
         #expect(posted?.1.isEmpty == true)
+        #expect(modifierEvents.count == 4)
 
         posted = nil
         #expect(!KeyboardInjector.send(
             .customShortcut,
             shortcut: shortcut,
             accessibilityTrusted: { false },
-            keyPoster: { posted = ($0, $1) }
+            keyPoster: { posted = ($0, $1) },
+            modifierPoster: { _, _, _ in true }
         ))
         #expect(posted == nil)
+    }
+
+    @Test func customShortcutReleasesPressedModifiersWhenNextModifierFails() {
+        let shortcut = CustomKeyboardShortcut(
+            keyCode: 9,
+            modifierFlags: [.control, .option],
+            keyLabel: "V"
+        )
+        var keys: [CGKeyCode] = []
+        var modifiers: [(CGKeyCode, Bool, CGEventFlags)] = []
+
+        #expect(!KeyboardInjector.send(
+            .customShortcut,
+            shortcut: shortcut,
+            accessibilityTrusted: { true },
+            keyPoster: { code, _ in keys.append(code) },
+            modifierPoster: { code, isDown, flags in
+                modifiers.append((code, isDown, flags))
+                return !(code == 58 && isDown)
+            },
+            virtualHIDSender: { _ in nil }
+        ))
+        #expect(keys.isEmpty)
+        #expect(modifiers.map(\.0) == [59, 58, 59])
+        #expect(modifiers.map(\.1) == [true, true, false])
+        #expect(modifiers.last?.2.isEmpty == true)
+    }
+
+    @Test func typelessVirtualHIDRouteAcceptsOnlyThreeControlOptionLetters() {
+        let commands: [(UInt16, UInt8)] = [(9, 118), (17, 116), (12, 113)]
+        for (keyCode, expectedCommand) in commands {
+            let shortcut = CustomKeyboardShortcut(
+                keyCode: keyCode,
+                modifierFlags: [.control, .option],
+                keyLabel: "Key"
+            )
+            #expect(VirtualHIDShortcutBridge.command(for: shortcut) == expectedCommand)
+            var postedCGEvent = false
+            var bridgedShortcut: CustomKeyboardShortcut?
+            #expect(KeyboardInjector.send(
+                .customShortcut,
+                shortcut: shortcut,
+                accessibilityTrusted: { true },
+                keyPoster: { _, _ in postedCGEvent = true },
+                virtualHIDSender: { candidate in
+                    bridgedShortcut = candidate
+                    return true
+                }
+            ))
+            #expect(bridgedShortcut == shortcut)
+            #expect(!postedCGEvent)
+        }
+
+        #expect(VirtualHIDShortcutBridge.command(for: CustomKeyboardShortcut(
+            keyCode: 9,
+            modifierFlags: [.command, .option],
+            keyLabel: "V"
+        )) == nil)
+        #expect(VirtualHIDShortcutBridge.command(for: CustomKeyboardShortcut(
+            keyCode: 40,
+            modifierFlags: [.control, .option],
+            keyLabel: "K"
+        )) == nil)
+    }
+
+    @Test func failedVirtualHIDSubmissionDoesNotReplayThroughCGEvent() {
+        var postedCGEvent = false
+        #expect(!KeyboardInjector.send(
+            .customShortcut,
+            shortcut: CustomKeyboardShortcut(keyCode: 9, modifierFlags: [.control, .option], keyLabel: "V"),
+            accessibilityTrusted: { true },
+            keyPoster: { _, _ in postedCGEvent = true },
+            virtualHIDSender: { _ in false }
+        ))
+        #expect(!postedCGEvent)
     }
 
     @Test func fixedCompoundShortcutsPostExpectedKeyCodesAndModifiers() {
@@ -3179,6 +3291,36 @@ struct RemoteButtonsTests {
 
         suppressor.arm(button: .up, edge: .up)
         #expect(suppressor.handle(type: .keyUp, event: up))
+        #expect(!suppressor.handle(type: .keyDown, event: down))
+    }
+
+    @Test func nativeReleaseBeforeSessionDispatchPreservesBothEdges() throws {
+        let suppressor = KeyboardEventSuppressor()
+        let down = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: true))
+        let up = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: false))
+
+        // HID callbacks can deliver both edges before the session event tap runs.
+        suppressor.arm(button: .ok, edge: .down)
+        suppressor.arm(button: .ok, edge: .up)
+        #expect(suppressor.handle(type: .keyDown, event: down))
+        #expect(suppressor.handle(type: .keyUp, event: up))
+        // Consumed reservations must not swallow the next physical Return.
+        #expect(!suppressor.handle(type: .keyDown, event: down))
+        #expect(!suppressor.handle(type: .keyUp, event: up))
+    }
+
+    @Test func nativeQueuedClickPairsAreSuppressedExactlyOnce() throws {
+        let suppressor = KeyboardEventSuppressor()
+        let down = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: true))
+        let up = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 36, keyDown: false))
+        for _ in 0..<2 {
+            suppressor.arm(button: .ok, edge: .down)
+            suppressor.arm(button: .ok, edge: .up)
+        }
+        for _ in 0..<2 {
+            #expect(suppressor.handle(type: .keyDown, event: down))
+            #expect(suppressor.handle(type: .keyUp, event: up))
+        }
         #expect(!suppressor.handle(type: .keyDown, event: down))
     }
 

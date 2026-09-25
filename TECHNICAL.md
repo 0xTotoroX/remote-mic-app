@@ -29,6 +29,8 @@
 | `KeyboardEventSuppressor.swift` | 兼容模式下对同一遥控器原生系统事件的短时抑制 |
 | `KeyboardInjector.swift` | 键盘、媒体键和预置应用启动动作 |
 | `RemoteVoiceFunctionMapper.swift` | RC003 语音键 F5 的 Fn 映射或 Command 模式中和，并在退出时恢复 |
+| `RemoteShortcutNativeMapper.swift` | 单台 RC003 的三键虚拟 HID 候选：中和原生按键并按所有权恢复，只在独立测试包启用 |
+| `VirtualHIDShortcutBridge.swift` | 独立测试包的 V/T/Q 串行本地桥请求；回执不代表目标 App 接收 |
 | `AppSettings.swift` | 音频设备、增益、HID 开关、按键映射和外设标识持久化 |
 
 ## 国际化

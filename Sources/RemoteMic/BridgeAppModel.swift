@@ -496,6 +496,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     })
     private let webRemoteClient = WebRemoteRelayClient()
     private let voiceFunctionMapper = RemoteVoiceFunctionMapper()
+    private let shortcutNativeMapper = RemoteShortcutNativeMapper()
     private lazy var preferredInputSourceMonitor = PreferredInputSourceMonitor(
         voiceTool: { [weak self] in
             self?.settings.onboardingVoiceTool ?? .unselected
@@ -1219,6 +1220,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         } else {
             audioOutput.stop()
         }
+        shortcutNativeMapper.restore()
         voiceFunctionMapper.restore()
         if let terminationObserver {
             NotificationCenter.default.removeObserver(terminationObserver)
@@ -1665,6 +1667,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
         phoneRemoteServer.updateButtonTitles(titles)
         watchBluetoothServer.updateButtonTitles(titles)
         webRemoteClient.updateButtonTitles(titles)
+        applyShortcutNativeMapping()
     }
 
     func refreshAudioDevices() {
@@ -2245,6 +2248,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             powerKeySuppressed = applyVoiceFunctionMapping(neutralizeVoiceKey: false)
         }
         startHIDMonitors(powerKeySuppressed: powerKeySuppressed)
+        applyShortcutNativeMapping()
 #if SAYALL_SIRI_REMOTE_ENABLED
         if started {
             siriRemoteFeature.restart(customMappingEnabled: settings.customMappingEnabled)
@@ -5722,6 +5726,20 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
             )
         }
         return !settings.customMappingEnabled || voiceFunctionMapper.isPowerKeySuppressed
+    }
+
+    private func applyShortcutNativeMapping() {
+        guard VirtualHIDShortcutBridge.isTestBuild else { return }
+        let permissions = HIDPermissionSnapshot.current
+        let enabled = started && settings.customMappingEnabled &&
+            permissions.inputMonitoringGranted && permissions.accessibilityGranted
+        let buttons = Set(RemoteShortcutNativeMapper.sources.keys.filter { button in
+            guard enabled, settings.action(for: button) == .customShortcut,
+                  let shortcut = settings.shortcut(for: button)
+            else { return false }
+            return VirtualHIDShortcutBridge.command(for: shortcut) != nil
+        })
+        shortcutNativeMapper.apply(buttons: buttons)
     }
 
     @discardableResult

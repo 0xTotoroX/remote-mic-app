@@ -115,11 +115,8 @@ final class KeyboardEventSuppressor {
                     expiresAt: now + 0.18
                 ))
             case .up:
-                if let pendingDownIndex = pendingEvents.firstIndex(where: {
-                    $0.event == nativeEvent && $0.edge == .down
-                }) {
-                    pendingEvents.remove(at: pendingDownIndex)
-                }
+                // HID release can arrive before the session event tap receives
+                // the corresponding down. Preserve both one-shot reservations.
                 let remaining = (heldEventCounts[nativeEvent] ?? 0) - 1
                 if remaining > 0 {
                     heldEventCounts[nativeEvent] = remaining
