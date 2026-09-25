@@ -67,7 +67,7 @@
   "openMainWindowAtLaunch": true,
   "secondaryButtonBindings": {
     "down": {
-      "doubleClick": {
+      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 84,
@@ -77,7 +77,7 @@
       }
     },
     "left": {
-      "doubleClick": {
+      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 86,
@@ -87,7 +87,7 @@
       }
     },
     "ok": {
-      "doubleClick": {
+      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 87,
@@ -97,7 +97,7 @@
       }
     },
     "right": {
-      "doubleClick": {
+      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 88,
@@ -107,7 +107,7 @@
       }
     },
     "up": {
-      "doubleClick": {
+      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 91,
