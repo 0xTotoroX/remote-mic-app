@@ -20,3 +20,17 @@ xcrun clang++ -std=c++23 -O2 -pthread \
 App 侧桥接和原生按键中和仅在 Bundle ID `com.hd838a.RemoteMic.TypelessTest` 启用。正常构建的正式标识不会启用该路径。制作独立测试包时，将 `dist/SayAll.app` 复制为 `dist/SayAllTypelessTest.app`，修改副本标识和显示名称，并重新 ad-hoc 签名；已保存的 228.2 App 包是本次测试的精确二进制，重新构建结果不保证字节相同。
 
 配置与验收边界见 [测试记录](../../Testing/TypelessVirtualHIDShortcuts.md)。完整三模式、文字上屏和稳定性尚未验收；此提交是可恢复的实验检查点，不是发布版本。
+
+## 跟随分支保存设置
+
+[`settings.json`](settings.json) 是测试版通过「设置 → 个性化配置 → 导出配置」生成的当前选中遥控器配置快照，使用 App 原生格式。保存按键映射、自定义快捷键、双击/长按、连续快速按、语音键、增益和通用偏好。设备唯一标识已清空；统计、诊断和系统授权不在此原生导出格式中。此快照不会追踪全部设备档案。
+
+恢复时启动测试版、选中目标遥控器，通过「导入配置」选择 `settings.json`，然后重新选择本机音频设备。导入会替换当前个性化配置，若已有配置需保留，先导出一份。Typeless 的三组快捷键仍需在 Typeless 中配置，macOS 权限仍需独立授权。
+
+后续修改功能或测试配置时，同步执行以下步骤，将配置与对应源码保存在同一分支：
+
+1. 在测试版中选中正在使用的遥控器，通过「导出配置」保存到仓库外的临时 JSON。
+2. 在仓库根目录运行 `python3 scripts/typeless-vhid/save-settings.py /path/to/export.json`。脚本清空音频设备标识并稳定排序，便于 Git 比较；新增字段或自定义应用路径需先审查。
+3. 检查 `git diff -- scripts/typeless-vhid/settings.json`，确认变化与本次设置一致，再提交并推送到个人 Fork 的实验分支。
+
+Git 保存的是每次导出、提交并推送的快照，不会自动监视 App 中的每次点击。脚本不会读取其他 App 设置，也不会直接修改运行中的无线麦或自动提交。个人设备信息与完整原始 plist 继续仅在本地备份中保留。

@@ -1,0 +1,73 @@
+{
+  "applicationLanguage": "system",
+  "buttonApplicationProfileIDs": {},
+  "buttonBindings": {
+    "back": "returnKey",
+    "down": "customShortcut",
+    "home": "deleteBackward",
+    "left": "arrowLeft",
+    "menu": "customShortcut",
+    "mute": "volumeMute",
+    "ok": "customShortcut",
+    "play_pause": "playPause",
+    "power": "escape",
+    "right": "arrowRight",
+    "tv": "customShortcut",
+    "up": "customShortcut",
+    "volume_down": "volumeDown",
+    "volume_up": "volumeUp"
+  },
+  "buttonRapidPressEnabled": {
+    "down": true,
+    "up": true
+  },
+  "buttonShortcuts": {
+    "down": {
+      "keyCode": 124,
+      "keyLabel": "→",
+      "modifierFlagsRawValue": 1572864
+    },
+    "left": {
+      "keyCode": 123,
+      "keyLabel": "←",
+      "modifierFlagsRawValue": 0
+    },
+    "menu": {
+      "keyCode": 17,
+      "keyLabel": "T",
+      "modifierFlagsRawValue": 786432
+    },
+    "ok": {
+      "keyCode": 9,
+      "keyLabel": "V",
+      "modifierFlagsRawValue": 786432
+    },
+    "right": {
+      "keyCode": 124,
+      "keyLabel": "→",
+      "modifierFlagsRawValue": 0
+    },
+    "tv": {
+      "keyCode": 12,
+      "keyLabel": "Q",
+      "modifierFlagsRawValue": 786432
+    },
+    "up": {
+      "keyCode": 123,
+      "keyLabel": "←",
+      "modifierFlagsRawValue": 1572864
+    }
+  },
+  "checksForPreReleaseUpdates": false,
+  "customApplicationProfiles": [],
+  "customMappingEnabled": true,
+  "experimentalContinuousRecordingEnabled": false,
+  "formatVersion": 1,
+  "gainDB": 10,
+  "openMainWindowAtLaunch": true,
+  "secondaryButtonBindings": {},
+  "selectedAudioDeviceUID": "",
+  "showDockIcon": true,
+  "voiceFnTapModeEnabled": true,
+  "voiceKeyMode": "fn"
+}
