@@ -14,8 +14,8 @@
     "right": "arrowRight",
     "tv": "customShortcut",
     "up": "customShortcut",
-    "volume_down": "volumeDown",
-    "volume_up": "volumeUp"
+    "volume_down": "nextCommandRight",
+    "volume_up": "previousCommandLeft"
   },
   "buttonRapidPressEnabled": {
     "down": true,
