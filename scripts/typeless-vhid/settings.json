@@ -137,11 +137,17 @@
     "volume_down": {
       "doubleClick": {
         "action": "nextCommandRight"
+      },
+      "longPress": {
+        "action": "volumeMute"
       }
     },
     "volume_up": {
       "doubleClick": {
         "action": "previousCommandLeft"
+      },
+      "longPress": {
+        "action": "playPause"
       }
     }
   },
