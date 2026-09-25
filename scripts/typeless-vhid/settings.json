@@ -103,15 +103,15 @@
     },
     "ok": {
       "doubleClick": {
-        "action": "returnKey"
-      },
-      "longPress": {
         "action": "customShortcut",
         "shortcut": {
           "keyCode": 87,
           "keyLabel": "Numpad5",
           "modifierFlagsRawValue": 0
         }
+      },
+      "longPress": {
+        "action": "returnKey"
       }
     },
     "right": {

@@ -6,6 +6,46 @@ import Testing
 
 @Suite("Remote buttons")
 struct RemoteButtonsTests {
+    @Test func confirmVideoDoubleClickIsConsumedOutsideChromeAndReturnHoldStillWorks() throws {
+        let suiteName = "RemoteButtonsTests.confirmSwap.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+        settings.customMappingEnabled = true
+        settings.setAction(.customShortcut, for: .ok, trigger: .doubleClick)
+        settings.setShortcut(CustomKeyboardShortcut(keyCode: 87, modifierFlags: [], keyLabel: "Numpad5"), for: .ok, trigger: .doubleClick)
+        settings.setAction(.returnKey, for: .ok, trigger: .longPress)
+        let profileID = try #require(settings.selectedRemoteProfileID)
+        let scheduler = RemoteButtonsTestScheduler()
+        var performed: [ButtonAction] = []
+        var logs: [String] = []
+        let monitor = HIDRemoteMonitor(
+            settings: settings, profileID: profileID, ownsEventSuppressor: false,
+            scheduler: scheduler, runtimePermissions: { true },
+            actionPerformer: { _, _, action in performed.append(action.action); return true },
+            actionSkipReason: { button, trigger, configured in
+                GlobalSpeedShortcutGuard.skipReason(button: button, trigger: trigger,
+                    configured: configured, isTestBuild: true, frontmost: { nil })
+            }, diagnosticLogger: { logs.append($0) }
+        )
+        monitor.connectSimulatedDevice(fingerprint: "confirm-swap", profileID: profileID)
+        let down = Data([UInt8(RemoteButton.ok.hidUsage), 0, 0, 0, 0, 0])
+        let up = Data(repeating: 0, count: 6)
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        scheduler.advance(toMilliseconds: 100)
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        scheduler.advance(toMilliseconds: 2000)
+        #expect(performed.isEmpty)
+        #expect(logs.contains { $0.contains("trigger=doubleClick result=skipped") })
+        monitor.handleSimulatedReport(reportID: 1, data: down)
+        scheduler.advance(toMilliseconds: 2600)
+        monitor.handleSimulatedReport(reportID: 1, data: up)
+        scheduler.advance(toMilliseconds: 4000)
+        #expect(performed == [.returnKey])
+    }
+
     @Test func skippedVideoHoldDoesNotInjectOrFallBackAndShortPressStillWorks() throws {
         let suiteName = "RemoteButtonsTests.videoScope.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

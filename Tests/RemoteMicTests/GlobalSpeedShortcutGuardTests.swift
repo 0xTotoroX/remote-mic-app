@@ -10,7 +10,7 @@ struct GlobalSpeedShortcutGuardTests {
         let chrome = GlobalSpeedShortcutGuard.Application(pid: 42, bundleIdentifier: "com.google.Chrome")
         let other = GlobalSpeedShortcutGuard.Application(pid: 43, bundleIdentifier: "test.other")
         for state in [GlobalSpeedShortcutGuard.Focus.webContent, .editable, .outsideWebContent, .unknown] {
-            let result = GlobalSpeedShortcutGuard.skipReason(button: .ok, trigger: .longPress,
+            let result = GlobalSpeedShortcutGuard.skipReason(button: .ok, trigger: .doubleClick,
                 configured: configured, isTestBuild: true, frontmost: { chrome }, focus: { _ in state })
             #expect(result == (state == .webContent ? nil : state.rawValue))
         }
@@ -24,14 +24,13 @@ struct GlobalSpeedShortcutGuardTests {
             focus: { _ in .webContent }) == "focus_changed")
     }
 
-    @Test func protectsExactlyTheFiveVideoHolds() {
+    @Test func protectsVideoHoldsAndConfirmDoubleClick() {
         for (button, key) in [(RemoteButton.up, UInt16(91)), (.down, 84), (.left, 86), (.right, 88), (.ok, 87)] {
             let configured = ConfiguredButtonAction(action: .customShortcut,
                 shortcut: CustomKeyboardShortcut(keyCode: key, modifierFlags: [], keyLabel: "Numpad"))
             #expect(GlobalSpeedShortcutGuard.applies(button: button, trigger: .longPress, configured: configured))
-            for trigger in [ButtonTrigger.singleClick, .doubleClick] {
-                #expect(!GlobalSpeedShortcutGuard.applies(button: button, trigger: trigger, configured: configured))
-            }
+            #expect(!GlobalSpeedShortcutGuard.applies(button: button, trigger: .singleClick, configured: configured))
+            #expect(GlobalSpeedShortcutGuard.applies(button: button, trigger: .doubleClick, configured: configured) == (button == .ok))
             #expect(!GlobalSpeedShortcutGuard.applies(button: .tv, trigger: .longPress, configured: configured))
             #expect(GlobalSpeedShortcutGuard.skipReason(button: button, trigger: .longPress,
                 configured: configured, isTestBuild: true, frontmost: { nil }) == "not_chrome")

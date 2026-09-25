@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// Scope the personal test build's five video bindings without changing ordinary shortcuts.
+/// Scope the personal test build's video bindings without changing ordinary shortcuts.
 enum GlobalSpeedShortcutGuard {
     enum Focus: String {
         case webContent = "web_content"
@@ -24,7 +24,8 @@ enum GlobalSpeedShortcutGuard {
         button: RemoteButton, trigger: ButtonTrigger, configured: ConfiguredButtonAction
     ) -> Bool {
         let keys: [RemoteButton: UInt16] = [.up: 91, .down: 84, .left: 86, .right: 88, .ok: 87]
-        guard trigger == .longPress, configured.action == .customShortcut,
+        let videoGesture = trigger == .longPress || (button == .ok && trigger == .doubleClick)
+        guard videoGesture, configured.action == .customShortcut,
               let shortcut = configured.shortcut, shortcut.modifierFlags.isEmpty
         else { return false }
         return keys[button] == shortcut.keyCode
