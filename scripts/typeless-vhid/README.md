@@ -30,7 +30,7 @@ App 侧桥接和原生按键中和仅在 Bundle ID `com.hd838a.RemoteMic.Typeles
 后续修改功能或测试配置时，同步执行以下步骤，将配置与对应源码保存在同一分支：
 
 1. 在测试版中选中正在使用的遥控器，通过「导出配置」保存到仓库外的临时 JSON。
-2. 在仓库根目录运行 `python3 scripts/typeless-vhid/save-settings.py /path/to/export.json`。脚本清空音频设备标识并稳定排序，便于 Git 比较；新增字段或自定义应用路径需先审查。
+2. 在仓库根目录运行 `python3 scripts/typeless-vhid/save-settings.py /path/to/export.json`。脚本清空音频设备标识并稳定排序，便于 Git 比较；新增字段或自定义应用路径需先审查。目前仅放行已审查的系统调度中心与本机 ChatGPT.app 的“只打开 APP”配置，其他应用、聚焦快捷键和记录的输入框仍拒绝导出到公开快照。
 3. 检查 `git diff -- scripts/typeless-vhid/settings.json`，确认变化与本次设置一致，再提交并推送到个人 Fork 的实验分支。
 
 当前语音键快照为 Fn/地球键，并关闭「语音键模拟 Fn 点按」，保留此前为微信输入法按住说话做的准备。微信输入法内部的快捷键录入与文字上屏尚待验收；此设置快照不表示对接已经完成。
@@ -66,14 +66,15 @@ Git 保存的是每次导出、提交并推送的快照，不会自动监视 App
 | 确定键双击 | Numpad5，Chrome 非输入网页恢复 1× |
 | 确定键长按 | Return |
 | 返回键单击 | Delete（退格） |
-| 主页键单击 | Ctrl+↑，Mac 调度中心 |
+| 主页键单击 | 打开系统调度中心 APP |
 | 主页键双击 | 未设置 |
+| 主页键长按 | 打开本机 ChatGPT.app |
 | 菜单键单击 | Ctrl+3，切至 Codex |
 | 菜单键双击 | Ctrl+1，切至 Chat |
 | TV 键单击 | Ctrl+Option+Q，Typeless 随便问 |
 | TV 键双击 | Ctrl+Option+T，Typeless 翻译 |
 
-模式快捷键来源：[官方快捷键说明](https://learn.chatgpt.com/docs/reference/commands)，其规则是按界面顺序使用 Control+1/2/3 切换 Chat、Work、Codex。需要目标应用在前台；这不是全局唤起应用的动作。若本机排列或自定义快捷键不同，应核对并调整。菜单键、TV 键与确定键单击均有约 300 毫秒的双击判定等待；主页键已清除双击绑定。Ctrl+3/Ctrl+1 此前在主页键上获用户确认，此次移至菜单键，翻译移至 TV 键双击；新配置已通过原生导入并在 UI 核对，迁移后的实体按键效果待确认。调度中心采用 [Apple 官方快捷键 Control+上箭头](https://support.apple.com/zh-cn/guide/mac-pro/apd2345fc25d/mac)，若系统曾自定义该快捷键，需要对应调整。
+模式快捷键来源：[官方快捷键说明](https://learn.chatgpt.com/docs/reference/commands)，其规则是按界面顺序使用 Control+1/2/3 切换 Chat、Work、Codex。需要目标应用在前台；这不是全局唤起应用的动作。若本机排列或自定义快捷键不同，应核对并调整。菜单键、TV 键与确定键单击均有约 300 毫秒的双击判定等待；主页键已清除双击绑定。Ctrl+3/Ctrl+1 此前在主页键上获用户确认，此次移至菜单键，翻译移至 TV 键双击；新配置已通过原生导入并在 UI 核对，迁移后的实体按键效果待确认。原 Ctrl+↑ 模拟事件未打开调度中心，现改用既有“打开自定义 APP → 只打开 APP”，目标为 `/System/Applications/Mission Control.app`。2026-09-25 用户已确认实体主页键能打开窗口总览；事件失败原因尚未完全定位。主页键新增长按后，短按在松键时执行，约 550 毫秒长按打开 `/Applications/ChatGPT.app`，松开不再补发调度中心。该路径在本机原生导出中的标识为 `com.openai.codex`，动作仅打开/激活此应用，不自动切换其内部模式；长按实机效果待确认。
 
 音量＋/－单击分别调高/调低系统音量，双击分别为「上一首（系统媒体）」和「下一首（系统媒体）」。切歌采用上游 [PR #428](https://github.com/HD838A/remote-mic-app/pull/428) 的媒体事件修复思路，使用系统媒体事件 18/17，保留历史动作标识以兼容配置，不再向前台发送 Command+方向键。系统决定当前媒体接收者，不保证固定控制 Apple Music。增加双击后单击需等待约 300 毫秒，按住音量连发停用；实机后台切歌效果待验证。
 

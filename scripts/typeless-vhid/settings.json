@@ -1,10 +1,12 @@
 {
   "applicationLanguage": "system",
-  "buttonApplicationProfileIDs": {},
+  "buttonApplicationProfileIDs": {
+    "home": "5685915B-84F9-4866-8ED5-BF53E41940BD"
+  },
   "buttonBindings": {
     "back": "deleteBackward",
     "down": "customShortcut",
-    "home": "customShortcut",
+    "home": "openCustomApplication",
     "left": "arrowLeft",
     "menu": "customShortcut",
     "mute": "volumeMute",
@@ -64,7 +66,22 @@
     }
   },
   "checksForPreReleaseUpdates": false,
-  "customApplicationProfiles": [],
+  "customApplicationProfiles": [
+    {
+      "applicationPath": "/System/Applications/Mission Control.app",
+      "bundleIdentifier": "com.apple.exposelauncher",
+      "displayName": "调度中心",
+      "focusStrategy": "none",
+      "id": "5685915B-84F9-4866-8ED5-BF53E41940BD"
+    },
+    {
+      "applicationPath": "/Applications/ChatGPT.app",
+      "bundleIdentifier": "com.openai.codex",
+      "displayName": "ChatGPT",
+      "focusStrategy": "none",
+      "id": "E684A07C-680B-451C-A082-6ED585C11BB6"
+    }
+  ],
   "customMappingEnabled": true,
   "experimentalContinuousRecordingEnabled": false,
   "formatVersion": 1,
@@ -79,6 +96,12 @@
           "keyLabel": "Numpad2",
           "modifierFlagsRawValue": 0
         }
+      }
+    },
+    "home": {
+      "longPress": {
+        "action": "openCustomApplication",
+        "applicationProfileID": "E684A07C-680B-451C-A082-6ED585C11BB6"
       }
     },
     "left": {
