@@ -65,7 +65,58 @@
   "formatVersion": 1,
   "gainDB": 10,
   "openMainWindowAtLaunch": true,
-  "secondaryButtonBindings": {},
+  "secondaryButtonBindings": {
+    "down": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 84,
+          "keyLabel": "Numpad2",
+          "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "left": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 86,
+          "keyLabel": "Numpad4",
+          "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "ok": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 87,
+          "keyLabel": "Numpad5",
+          "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "right": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 88,
+          "keyLabel": "Numpad6",
+          "modifierFlagsRawValue": 0
+        }
+      }
+    },
+    "up": {
+      "doubleClick": {
+        "action": "customShortcut",
+        "shortcut": {
+          "keyCode": 91,
+          "keyLabel": "Numpad8",
+          "modifierFlagsRawValue": 0
+        }
+      }
+    }
+  },
   "selectedAudioDeviceUID": "",
   "showDockIcon": true,
   "voiceFnTapModeEnabled": true,
