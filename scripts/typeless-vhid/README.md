@@ -15,7 +15,31 @@ xcrun clang++ -std=c++23 -O2 -pthread \
 
 桥需要管理员权限，与官方 daemon 配合运行。唯一参数为允许连接的非 root 用户 UID；使用 `/var/run/sayall-vhid-bridge.sock`，权限 `0600`，并检查连接方 UID。只接受 `v`、`t`、`q`，发送固定的左 Control + 左 Option + V/T/Q。回执只表示提交虚拟键盘报告，不代表 Typeless 已执行。
 
-这是原样保存的临时样机：缺少正式服务生命周期、客户端读超时和完整异常退出处理，不应作为长期 root 服务发布。恢复时需单独核对官方驱动、daemon、管理员授权及 App 权限；源码备份不能恢复系统授权。
+这是个人测试样机，不是正式发布的特权辅助程序。App 客户端已有读写超时，桥服务端仍缺少连接读超时和完整异常退出处理；不能据个人开机启动配置宣称其已适合正式分发。恢复时需单独核对官方驱动、daemon、管理员授权及 App 权限；源码备份不能恢复系统授权。
+
+## 本机开机恢复
+
+[`manage-autostart.sh`](manage-autostart.sh) 管理两项个人测试 LaunchDaemon：`com.sayall.typeless-test.vhid-daemon` 与 `com.sayall.typeless-test.bridge`。它复用已安装、root 所有且不可由普通用户改写的官方 daemon 和 `/usr/local/libexec/sayall-vhid-bridge-test`，不下载或编译程序，不改变系统授权，不读取 Typeless 私有设置。
+
+在仓库根目录通过 Mac 终端执行（首次需管理员验证）：
+
+```sh
+sudo /bin/bash scripts/typeless-vhid/manage-autostart.sh install "$(id -u)"
+/bin/bash scripts/typeless-vhid/manage-autostart.sh status
+```
+
+启动项放在 `/Library/LaunchDaemons/`，使用 `RunAtLoad`、`KeepAlive` 和 10 秒重试节流；官方 daemon 按 [pqrs 说明](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice#run-karabiner-virtualhiddevice-daemon-via-launchd) 使用 Interactive 进程类型。桥仅允许安装时指定的本机 UID 连接；换用户或迁移电脑必须重新核对 UID。服务在开机时启动，可能早于登录；本脚本不添加 App 登录项，仍需无线麦测试版和 Typeless 正在运行。
+
+查看状态时，两项应有 `state = running` 和 PID，桥 socket 应属于指定用户、权限 `srw-------`。这只证明服务运行；必须再用实体遥控器验证 Typeless 启动与结束，以及之后真实重启恢复，不能用启动项存在代替验收。
+
+停用和恢复：
+
+```sh
+sudo /bin/bash scripts/typeless-vhid/manage-autostart.sh disable
+# 再运行 install 可重新启用。
+```
+
+停用仅停止这两项并禁止其开机启动，保留 plist、二进制、官方驱动和按键配置。脚本拒绝覆盖内容不同的已有启动项，也拒绝为已有手动运行进程启动副本；这种情况先明确进程归属，再恢复。若安装中途失败，用 status 查看实际结果，必要时 disable 回到停用状态。这套开机恢复仍是 App 外部部署，尚未内置到无线麦界面。
 
 App 侧桥接和原生按键中和仅在 Bundle ID `com.hd838a.RemoteMic.TypelessTest` 启用。正常构建的正式标识不会启用该路径。制作独立测试包时，将 `dist/SayAll.app` 复制为 `dist/SayAllTypelessTest.app`，修改副本标识和显示名称，并重新 ad-hoc 签名；已保存的 228.2 App 包是本次测试的精确二进制，重新构建结果不保证字节相同。
 
